@@ -1,0 +1,72 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* GLOBAL RESET */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  /* MENGUBAH BACKGROUND GELAP MENJADI ABU-ABU MUDA SHOPEE */
+  background-color: #f5f5f5; 
+  color: #0F172A; 
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer utilities {
+  /* Shopee Search Bar & Card Shadow */
+  .shopee-shadow {
+    box-shadow: 0 1px 1px 0 rgba(0,0,0,.05);
+  }
+
+  /* Hilangkan Scrollbar */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* KARTU PRODUK SHOPEE (PUTIH BERSIH) */
+.card-hover {
+  transition: transform 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  @apply border-orange-500/50;
+}
+
+/* Custom Scroll horizontal untuk kategori */
+.scroll-x {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Animasi sederhana */
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Menyesuaikan warna seleksi teks ke Orange Shopee */
+::selection {
+  background: #ea580c;
+  color: white;
+}
