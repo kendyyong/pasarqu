@@ -1,258 +1,261 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useMarket } from '../../contexts/MarketContext';
-import { useToast } from '../../contexts/ToastContext';
-import { useAuth } from '../../contexts/AuthContext';
-import { supabase } from '../../lib/supabaseClient';
-// IMPORT UTILITAS GEO
-import { calculateDistance, calculateShippingFee, formatDistanceText } from '../../utils/geo';
-import { 
-  CreditCard, Truck, Store, X, 
-  ChevronRight, MapPin, Wallet, Receipt,
-  ShieldCheck, Loader2
-} from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import {
+  X,
+  MapPin,
+  ChevronRight,
+  Truck,
+  Wallet,
+  ShieldCheck,
+  Info,
+} from "lucide-react";
+import { useMarket } from "../../contexts/MarketContext";
+import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabaseClient";
 
 interface CheckoutProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export const CheckoutPaymentPage: React.FC<CheckoutProps> = ({ isOpen, onClose }) => {
-  const navigate = useNavigate();
-  const { cart, clearCart, selectedMarket } = useMarket();
-  const { showToast } = useToast();
+export const CheckoutPaymentPage: React.FC<CheckoutProps> = ({
+  isOpen,
+  onClose,
+}) => {
+  const { cart, selectedMarket } = useMarket();
   const { user } = useAuth();
-  
-  const [deliveryMethod, setDeliveryMethod] = useState<'KURIR' | 'AMBIL_SENDIRI'>('KURIR');
-  const [paymentMethod, setPaymentMethod] = useState<'COD' | 'ONLINE'>('COD');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("COD");
 
-  // STATE DATA
-  const [distance, setDistance] = useState<number>(0);
-  const [autoOngkir, setAutoOngkir] = useState<number>(0);
-  const [userProfile, setUserProfile] = useState<any>(null);
+  // State tambahan untuk menampung data profile (alamat & hp)
+  const [profile, setProfile] = useState<any>(null);
 
-  // 1. AMBIL DATA PROFIL
+  // Ambil data profile lengkap dari database
   useEffect(() => {
-    if (isOpen && user?.id) {
-      const fetchProfile = async () => {
-        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        if (data) setUserProfile(data);
-      };
-      fetchProfile();
-    }
-  }, [isOpen, user]);
+    const fetchProfile = async () => {
+      if (user?.id) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("phone_number, address, name")
+          .eq("id", user.id)
+          .single();
+        if (data) setProfile(data);
+      }
+    };
+    if (isOpen) fetchProfile();
+  }, [user, isOpen]);
 
-  // 2. HITUNG ONGKIR
-  useEffect(() => {
-    if (deliveryMethod === 'KURIR' && userProfile && selectedMarket) {
-      const d = calculateDistance(
-        userProfile.latitude || 0, 
-        userProfile.longitude || 0,
-        selectedMarket.latitude || 0,
-        selectedMarket.longitude || 0
-      );
-      const finalDist = d > 0 ? d : 1.5; 
-      
-      setDistance(finalDist);
-      setAutoOngkir(calculateShippingFee(finalDist));
-    } else {
-      setAutoOngkir(0);
-    }
-  }, [deliveryMethod, userProfile, selectedMarket]);
+  // PERBAIKAN: Helper aman untuk struktur CartItem Bapak
+  const getPrice = (item: any) => item.product?.price || item.price || 0;
+  const getName = (item: any) =>
+    item.product?.name || item.product_name || item.name || "Produk";
+  const getImage = (item: any) =>
+    item.product?.image_url || item.image_url || null;
+
+  const subtotal = cart.reduce(
+    (sum, item) => sum + getPrice(item) * item.quantity,
+    0,
+  );
+  const shippingFee = 10000;
+  const appFee = 2000;
+  const total = subtotal + shippingFee + appFee;
 
   if (!isOpen) return null;
 
-  // HITUNG TOTAL
-  const totalBelanja = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const biayaLayanan = 1000; 
-  const ongkir = deliveryMethod === 'KURIR' ? autoOngkir : 0; 
-  const totalBayar = totalBelanja + ongkir + biayaLayanan;
-
-  const handleFinishOrder = async () => {
-    setIsProcessing(true);
-    
-    // SIMULASI PROSES ORDER
-    setTimeout(() => {
-      if (deliveryMethod === 'KURIR') {
-        showToast("Pesanan Berhasil! Kurir akan segera meluncur.", "success");
-      } else {
-        const pinAmbil = Math.floor(1000 + Math.random() * 9000); 
-        showToast(`Pesanan Berhasil! PIN Ambil: ${pinAmbil}`, "success");
-      }
-      
-      setIsProcessing(false);
-      clearCart();
-      onClose(); 
-      navigate('/customer-dashboard');
-    }, 2000);
-  };
-
   return (
-    <div className="fixed inset-0 z-[2000] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm">
-      
-      {/* CARD UTAMA */}
-      <div className="bg-[#F5F5F5] w-full max-w-md h-[95vh] md:h-auto md:max-h-[90vh] md:rounded-[20px] rounded-t-[20px] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
-        
-        {/* HEADER (TOSCA) */}
-        <div className="bg-white p-4 flex items-center justify-between border-b border-slate-200 shadow-sm z-10">
-           <h2 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
-             <ShieldCheck size={18} className="text-teal-600"/> Checkout Aman
-           </h2>
-           <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-full text-slate-400">
-             <X size={20} />
-           </button>
-        </div>
+    <div className="fixed inset-0 z-[3000] flex items-center justify-center px-0 md:px-4 animate-in fade-in duration-300">
+      {/* OVERLAY */}
+      <div
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
 
-        {/* CONTENT SCROLLABLE */}
-        <div className="flex-1 overflow-y-auto pb-24">
-           
-           {/* 1. ALAMAT PENGIRIMAN (Airmail Style tetap dipertahankan karena standar logistik) */}
-           <div className="bg-white p-4 relative mb-2">
-              <div className="flex items-start gap-3">
-                  <MapPin size={18} className="text-teal-600 mt-0.5 shrink-0" />
-                  <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-bold text-slate-800">{userProfile?.name || 'Penerima'}</span>
-                          <span className="text-xs text-slate-500">| {userProfile?.phone_number || '-'}</span>
-                      </div>
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                          {userProfile?.address || "Alamat belum diatur. Silakan edit profil."}
-                      </p>
-                  </div>
-                  <ChevronRight size={16} className="text-slate-300 mt-2"/>
-              </div>
-              {/* Garis Airmail (Merah Biru - Standar Pos) */}
-              <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-[repeating-linear-gradient(45deg,#ff5a5a,#ff5a5a_10px,transparent_10px,transparent_20px,#3b82f6_20px,#3b82f6_30px,transparent_30px,transparent_40px)]"></div>
-           </div>
-
-           {/* 2. DAFTAR PRODUK */}
-           <div className="bg-white p-4 mb-2">
-              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100">
-                  <Store size={14} className="text-slate-800"/>
-                  <span className="text-xs font-bold text-slate-800">{selectedMarket?.name || 'Toko Pilihan'}</span>
-              </div>
-              
-              <div className="space-y-4">
-                  {cart.map((item, idx) => (
-                      <div key={idx} className="flex gap-3">
-                          <img src={item.image_url} alt={item.name} className="w-14 h-14 object-cover rounded border border-slate-100 bg-slate-50" />
-                          <div className="flex-1">
-                              <h4 className="text-xs font-medium text-slate-800 line-clamp-1 mb-1">{item.name}</h4>
-                              <div className="flex justify-between items-center">
-                                  <span className="text-xs text-slate-500">x{item.quantity}</span>
-                                  <span className="text-xs font-bold text-slate-800">Rp{(item.price * item.quantity).toLocaleString()}</span>
-                              </div>
-                          </div>
-                      </div>
-                  ))}
-              </div>
-           </div>
-
-           {/* 3. OPSI PENGIRIMAN (TOSCA THEME) */}
-           <div className="bg-white p-4 mb-2">
-              <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-xs font-bold text-teal-600 uppercase tracking-widest flex items-center gap-1">
-                      <Truck size={14}/> Opsi Pengiriman
-                  </h3>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2">
-                  <SelectionBox 
-                      active={deliveryMethod === 'KURIR'} 
-                      onClick={()=>setDeliveryMethod('KURIR')}
-                      label="Reguler (Kurir)"
-                      subLabel={`Rp${autoOngkir.toLocaleString()}`}
-                  />
-                  <SelectionBox 
-                      active={deliveryMethod === 'AMBIL_SENDIRI'} 
-                      onClick={()=>setDeliveryMethod('AMBIL_SENDIRI')}
-                      label="Ambil Sendiri"
-                      subLabel="Rp0 (Gratis)"
-                  />
-              </div>
-              {deliveryMethod === 'KURIR' && (
-                  <p className="text-[10px] text-slate-400 mt-2 text-right">Estimasi tiba: Hari ini (Jarak {formatDistanceText(distance)})</p>
-              )}
-           </div>
-
-           {/* 4. METODE PEMBAYARAN (TOSCA THEME) */}
-           <div className="bg-white p-4 mb-2">
-              <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-xs font-bold text-teal-600 uppercase tracking-widest flex items-center gap-1">
-                      <Wallet size={14}/> Metode Pembayaran
-                  </h3>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                  <SelectionBox 
-                      active={paymentMethod === 'COD'} 
-                      onClick={()=>setPaymentMethod('COD')}
-                      label="COD"
-                      subLabel="Bayar di Tempat"
-                  />
-                  <SelectionBox 
-                      active={paymentMethod === 'ONLINE'} 
-                      onClick={()=>setPaymentMethod('ONLINE')}
-                      label="Transfer / QRIS"
-                      subLabel="Verifikasi Otomatis"
-                  />
-              </div>
-           </div>
-
-           {/* 5. RINCIAN PEMBAYARAN (TOSCA ACCENT) */}
-           <div className="bg-white p-4 mb-4">
-              <h3 className="text-xs font-bold text-slate-800 mb-3 flex items-center gap-1"><Receipt size={14}/> Rincian Pembayaran</h3>
-              <div className="space-y-2">
-                  <RowSummary label="Subtotal Produk" value={totalBelanja} />
-                  <RowSummary label="Subtotal Pengiriman" value={ongkir} />
-                  <RowSummary label="Biaya Layanan" value={biayaLayanan} />
-                  <div className="pt-3 border-t border-dashed border-slate-200 flex justify-between items-center">
-                      <span className="text-sm font-bold text-slate-800">Total Pembayaran</span>
-                      <span className="text-lg font-black text-teal-600 tracking-tight">Rp{totalBayar.toLocaleString()}</span>
-                  </div>
-              </div>
-           </div>
-
-        </div>
-
-        {/* BOTTOM BAR (FIXED) - BACKGROUND PUTIH, TOMBOL TOSCA */}
-        <div className="bg-white border-t border-slate-200 p-0 flex shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
-            <div className="flex-1 flex flex-col justify-center items-end px-4">
-                <span className="text-[10px] text-slate-500">Total Tagihan</span>
-                <span className="text-base font-black text-teal-600">Rp{totalBayar.toLocaleString()}</span>
-            </div>
-            <button 
-                onClick={handleFinishOrder}
-                disabled={isProcessing}
-                className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-4 font-bold text-sm uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+      {/* MODAL CONTAINER */}
+      <div className="relative w-full max-w-lg bg-[#f5f5f5] h-full md:h-[90vh] md:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col">
+        {/* HEADER */}
+        <div className="bg-white p-5 flex items-center justify-between border-b border-slate-100 shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-slate-100 rounded-full transition-colors"
             >
-                {isProcessing ? <Loader2 className="animate-spin" size={18}/> : "Buat Pesanan"}
+              <X size={24} className="text-slate-600" />
             </button>
+            <h1 className="font-black text-lg uppercase tracking-tight text-slate-800">
+              Checkout
+            </h1>
+          </div>
+          <div className="flex items-center gap-1.5 bg-teal-50 px-3 py-1.5 rounded-full border border-teal-100">
+            <ShieldCheck size={16} className="text-teal-600" />
+            <span className="text-[10px] font-black text-teal-700 uppercase tracking-tighter">
+              Checkout Aman
+            </span>
+          </div>
         </div>
 
+        {/* CONTENT */}
+        <div className="flex-1 overflow-y-auto space-y-2.5 pb-24">
+          {/* SECTION 1: ALAMAT PENGIRIMAN */}
+          <div className="bg-white p-4 flex gap-3 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 flex">
+              {[...Array(12)].map((_, i) => (
+                <div
+                  key={i}
+                  className={`flex-1 ${i % 2 === 0 ? "bg-rose-500" : "bg-blue-500"} skew-x-[-45deg]`}
+                />
+              ))}
+            </div>
+            <MapPin className="text-rose-500 mt-1 shrink-0" size={20} />
+            <div className="flex-1">
+              <h3 className="text-sm font-bold text-slate-800 mb-1">
+                Alamat Pengiriman
+              </h3>
+              {/* PERBAIKAN: Menggunakan data dari state profile */}
+              <p className="text-xs font-bold text-slate-900">
+                {profile?.name || user?.email?.split("@")[0]} |{" "}
+                {profile?.phone_number || "HP belum diatur"}
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                {profile?.address ||
+                  "Alamat belum diatur. Silakan lengkapi di profil."}
+              </p>
+            </div>
+            <ChevronRight size={18} className="text-slate-300 self-center" />
+          </div>
+
+          {/* SECTION 2: DETAIL PRODUK */}
+          <div className="bg-white p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <ShieldCheck className="text-teal-600" size={16} />
+              <span className="text-xs font-black uppercase text-slate-700">
+                {selectedMarket?.name || "Pasarqu Indonesia"}
+              </span>
+            </div>
+
+            {cart.map((item) => (
+              <div key={item.id} className="flex gap-3 mb-4 last:mb-0">
+                <div className="w-16 h-16 bg-slate-100 rounded-lg overflow-hidden border border-slate-50">
+                  {getImage(item) ? (
+                    <img
+                      src={getImage(item)}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-slate-200 text-slate-400 text-[8px]">
+                      No Image
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-xs font-bold text-slate-800 line-clamp-1">
+                    {getName(item)}
+                  </h4>
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="text-xs font-bold text-slate-900">
+                      Rp {getPrice(item).toLocaleString()}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold">
+                      x{item.quantity}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* SECTION 3: OPSI PENGIRIMAN */}
+          <div className="bg-teal-50/50 p-4 border-y border-teal-100/50 flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <Truck size={18} className="text-teal-600" />
+              <div>
+                <p className="text-xs font-bold text-slate-800 uppercase tracking-tighter">
+                  Opsi Pengiriman
+                </p>
+                <p className="text-[10px] text-teal-600 font-bold uppercase">
+                  Kurir Pasarqu (Reguler)
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-black text-slate-900">
+                  Rp {shippingFee.toLocaleString()}
+                </span>
+                <ChevronRight size={16} className="text-slate-400" />
+              </div>
+              <p className="text-[9px] text-slate-400">
+                Estimasi Tiba: Hari Ini
+              </p>
+            </div>
+          </div>
+
+          {/* SECTION 4: METODE PEMBAYARAN */}
+          <div className="bg-white p-4 flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <Wallet size={18} className="text-orange-500" />
+              <span className="text-xs font-bold text-slate-700">
+                Metode Pembayaran
+              </span>
+            </div>
+            <div className="flex items-center gap-1 cursor-pointer">
+              <span className="text-xs font-black text-slate-900 uppercase">
+                {paymentMethod}
+              </span>
+              <ChevronRight size={18} className="text-slate-300" />
+            </div>
+          </div>
+
+          {/* SECTION 5: RINCIAN PEMBAYARAN */}
+          <div className="bg-white p-4 space-y-2.5">
+            <div className="flex items-center gap-2 mb-1">
+              <Info size={14} className="text-slate-400" />
+              <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                Rincian Pembayaran
+              </h3>
+            </div>
+            <div className="flex justify-between text-xs font-medium text-slate-500">
+              <span>Subtotal untuk Produk</span>
+              <span className="text-slate-900">
+                Rp {subtotal.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs font-medium text-slate-500">
+              <span>Total Ongkos Kirim</span>
+              <span className="text-slate-900">
+                Rp {shippingFee.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs font-medium text-slate-500">
+              <span>Biaya Layanan</span>
+              <span className="text-slate-900">
+                Rp {appFee.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+              <span className="text-sm font-black text-slate-800">
+                Total Pembayaran
+              </span>
+              <span className="text-lg font-black text-orange-500">
+                Rp {total.toLocaleString()}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* BOTTOM ACTION BAR */}
+        <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-100 p-4 flex items-center justify-between shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+          <div className="text-right flex-1 px-4">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+              Total Pembayaran
+            </p>
+            <p className="text-lg font-black text-orange-600">
+              Rp {total.toLocaleString()}
+            </p>
+          </div>
+          <button className="bg-orange-500 hover:bg-orange-600 active:scale-95 transition-all text-white px-10 py-3.5 rounded-xl font-black text-sm uppercase tracking-widest shadow-xl shadow-orange-500/20">
+            Buat Pesanan
+          </button>
+        </div>
       </div>
     </div>
   );
 };
-
-// Helper Components
-const SelectionBox = ({ active, onClick, label, subLabel }: any) => (
-    <div 
-        onClick={onClick}
-        className={`p-2.5 rounded border cursor-pointer transition-all ${
-            active 
-            ? 'border-teal-500 bg-teal-50 text-teal-800 ring-1 ring-teal-500' // ACTIVE STATE: HIJAU TOSCA
-            : 'border-slate-200 bg-white text-slate-500 hover:border-teal-300'
-        }`}
-    >
-        <div className="text-[11px] font-bold">{label}</div>
-        <div className="text-[10px] opacity-80">{subLabel}</div>
-    </div>
-);
-
-const RowSummary = ({ label, value }: any) => (
-    <div className="flex justify-between items-center text-[11px] text-slate-500">
-        <span>{label}</span>
-        <span>Rp{value.toLocaleString()}</span>
-    </div>
-);

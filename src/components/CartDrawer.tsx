@@ -1,12 +1,14 @@
-import React from 'react';
-import { X, Trash2, Plus, Minus, ShoppingCart, ChevronRight, ArrowRight, Ticket } from 'lucide-react'; // Ikon Ticket sudah ditambahkan di sini
-import { CartItem } from '../types';
+import React, { useEffect, useState } from "react";
+import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { CartItem } from "../types";
 
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   cart: CartItem[];
-  onUpdateQty: (id: string, delta: number) => void;
+  onUpdateQty: (id: string, qty: number) => void;
   onRemove: (id: string) => void;
   onCheckout: () => void;
 }
@@ -17,125 +19,201 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   cart,
   onUpdateQty,
   onRemove,
-  onCheckout
+  onCheckout,
 }) => {
-  if (!isOpen) return null;
+  const navigate = useNavigate();
+  const [isAnimating, setIsAnimating] = useState(false);
 
-  const totalHarga = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  // Helper aman untuk mengambil data produk
+  const getPrice = (item: any) => item.product?.price || item.price || 0;
+  const getName = (item: any) =>
+    item.product?.name || item.product_name || item.name || "Produk";
+  const getImage = (item: any) =>
+    item.product?.image_url || item.image_url || null;
+
+  const totalAmount = cart.reduce(
+    (sum, item) => sum + getPrice(item) * item.quantity,
+    0,
+  );
+
+  useEffect(() => {
+    if (isOpen) setIsAnimating(true);
+    else setTimeout(() => setIsAnimating(false), 300);
+  }, [isOpen]);
+
+  // Handler untuk input ketik manual
+  const handleInputChange = (id: string, value: string) => {
+    // Hanya izinkan angka
+    const cleanValue = value.replace(/[^0-9]/g, "");
+    const numValue = Number(cleanValue);
+
+    // Jika input kosong, biarkan kosong sementara (agar user bisa hapus semua angka dulu)
+    if (cleanValue === "") {
+      onUpdateQty(id, 0); // Di context akan terfilter/tetap 0
+      return;
+    }
+
+    onUpdateQty(id, numValue);
+  };
+
+  if (!isOpen && !isAnimating) return null;
 
   return (
-    <div className="fixed inset-0 z-[3000] flex items-end justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-300 p-0 md:p-4">
-      {/* TINGGI OTOMATIS: Menggunakan h-auto agar mengecil jika barang sedikit */}
-      <div className="bg-[#f8fafc] w-full max-w-[500px] h-auto max-h-[85vh] flex flex-col rounded-t-[2.5rem] md:rounded-[2.5rem] shadow-2xl animate-in slide-in-from-bottom duration-400 overflow-hidden border-t border-white/20">
-        
-        {/* HEADER KERANJANG */}
-        <div className="bg-teal-600 p-5 flex justify-between items-center shrink-0 text-white">
+    <div
+      className={`fixed inset-0 z-[2000] flex items-center justify-center px-4 transition-all duration-300 ${isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+    >
+      {/* OVERLAY */}
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* POPUP CARD */}
+      <div
+        className={`relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] transition-all duration-300 ease-out transform ${isOpen ? "translate-y-0 opacity-100 scale-100" : "translate-y-[100%] opacity-0 scale-95"}`}
+      >
+        {/* HEADER */}
+        <div className="bg-teal-600 p-6 flex justify-between items-center text-white shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-white/20 rounded-xl">
-              <ShoppingCart size={18} />
+              <ShoppingBag size={20} />
             </div>
-            <div className="text-left">
-              <h2 className="text-sm font-black uppercase tracking-widest">Keranjang</h2>
-              <p className="text-[10px] font-bold opacity-80 uppercase tracking-tighter">
-                {cart.length} Item Pasarqu
+            <div>
+              <h2 className="font-black text-lg uppercase tracking-wide">
+                Keranjang
+              </h2>
+              <p className="text-[10px] text-teal-100 font-medium">
+                {cart.length} Item terpilih
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-all">
-            <X size={18} />
+          <button
+            onClick={onClose}
+            className="p-2 bg-black/10 hover:bg-black/20 rounded-full transition-colors"
+          >
+            <X size={20} />
           </button>
         </div>
 
-        {/* LIST PRODUK */}
-        <div className="overflow-y-auto p-4 space-y-3 no-scrollbar bg-white/50">
+        {/* ISI KERANJANG */}
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
           {cart.length === 0 ? (
-            <div className="py-12 flex flex-col items-center justify-center text-center">
-              <div className="p-6 bg-slate-50 rounded-full text-teal-100 mb-4">
-                <ShoppingCart size={48} strokeWidth={1.5}/>
-              </div>
-              <p className="text-xs font-black uppercase tracking-widest text-slate-400">Belum ada barang</p>
-              <button 
+            <div className="h-full flex flex-col items-center justify-center py-10">
+              <ShoppingBag size={40} className="text-slate-300 mb-4" />
+              <p className="font-black text-slate-400 text-lg">
+                Keranjang Kosong
+              </p>
+              <button
                 onClick={onClose}
-                className="mt-4 text-[10px] font-black text-teal-600 uppercase underline"
+                className="mt-4 px-6 py-3 bg-teal-600 text-white rounded-xl font-bold text-xs uppercase shadow-lg"
               >
-                Mulai Belanja
+                Cari Produk
               </button>
             </div>
           ) : (
-            cart.map((item) => (
-              <div key={item.id} className="bg-white p-3 flex gap-3 shadow-sm rounded-2xl relative border border-slate-100">
-                {/* Gambar Produk */}
-                <div className="w-16 h-16 bg-slate-100 rounded-xl overflow-hidden shrink-0">
-                  <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
-                </div>
+            <div className="space-y-4">
+              {cart.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex gap-4 animate-in slide-in-from-bottom-2 duration-500"
+                >
+                  {/* Gambar Produk */}
+                  <div className="w-20 h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0">
+                    {getImage(item) ? (
+                      <img
+                        src={getImage(item)}
+                        alt={getName(item)}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-300">
+                        <ShoppingBag size={20} />
+                      </div>
+                    )}
+                  </div>
 
-                {/* Info & Kontrol */}
-                <div className="flex-1 flex flex-col text-left">
-                  <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-tight line-clamp-1">{item.name}</h4>
-                  
-                  <div className="mt-auto flex justify-between items-end">
-                    <span className="text-xs font-black text-orange-600">
-                      Rp{item.price.toLocaleString()}
-                    </span>
-                    
-                    {/* Kontrol Jumlah Slim */}
-                    <div className="flex items-center bg-slate-50 border border-slate-100 rounded-lg p-0.5">
-                      <button 
-                        onClick={() => onUpdateQty(item.id, -1)}
-                        className="p-1 hover:bg-white rounded text-slate-400"
-                      >
-                        <Minus size={10} strokeWidth={4} />
-                      </button>
-                      <span className="w-6 text-center text-[11px] font-black text-slate-800">
-                        {item.quantity}
-                      </span>
-                      <button 
-                        onClick={() => onUpdateQty(item.id, 1)}
-                        className="p-1 hover:bg-white rounded text-teal-600"
-                      >
-                        <Plus size={10} strokeWidth={4} />
-                      </button>
+                  {/* Detail Produk */}
+                  <div className="flex-1 flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-800 line-clamp-1">
+                        {getName(item)}
+                      </h3>
+                      <p className="text-teal-600 font-black text-xs mt-1">
+                        Rp {getPrice(item).toLocaleString()}
+                      </p>
+                    </div>
+
+                    {/* KONTROL KUANTITAS (BISA DIKETIK) */}
+                    <div className="flex justify-between items-end mt-2">
+                      <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200">
+                        {/* Tombol Kurang */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            item.quantity > 1
+                              ? onUpdateQty(item.id, item.quantity - 1)
+                              : onRemove(item.id)
+                          }
+                          className="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-sm text-slate-600 active:scale-90 transition-all"
+                        >
+                          {item.quantity <= 1 ? (
+                            <Trash2 size={14} className="text-red-500" />
+                          ) : (
+                            <Minus size={14} />
+                          )}
+                        </button>
+
+                        {/* INPUT KOLOM JUMLAH (BISA DIKETIK) */}
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={item.quantity === 0 ? "" : item.quantity}
+                          onChange={(e) =>
+                            handleInputChange(item.id, e.target.value)
+                          }
+                          onBlur={() => {
+                            // Jika saat klik luar kolom isinya kosong/0, hapus item atau set ke 1
+                            if (item.quantity === 0) onRemove(item.id);
+                          }}
+                          className="w-12 h-8 bg-transparent text-center font-black text-sm text-slate-800 outline-none focus:ring-1 focus:ring-teal-500 rounded-md transition-all"
+                        />
+
+                        {/* Tombol Tambah */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateQty(item.id, item.quantity + 1)
+                          }
+                          className="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-sm text-slate-600 active:scale-90 transition-all"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-
-                {/* Tombol Hapus */}
-                <button 
-                  onClick={() => onRemove(item.id)}
-                  className="absolute top-2 right-2 text-slate-200 hover:text-rose-500 transition-colors"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
 
-        {/* FOOTER CHECKOUT */}
+        {/* FOOTER */}
         {cart.length > 0 && (
-          <div className="bg-white border-t border-slate-100 p-5 shrink-0">
-            {/* Voucher Mini Row */}
-            <div className="flex items-center justify-between mb-4 text-left bg-teal-50/50 p-2 rounded-xl border border-teal-100/50 cursor-pointer hover:bg-teal-50 transition-colors">
-               <div className="flex items-center gap-2 text-[9px] font-black uppercase text-teal-700">
-                  <Ticket size={14}/> Voucher Pasarqu
-               </div>
-               <ChevronRight size={14} className="text-teal-400"/>
+          <div className="p-6 bg-white border-t border-slate-100 shrink-0">
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Total Pembayaran
+              </span>
+              <span className="text-xl font-black text-slate-900">
+                Rp {totalAmount.toLocaleString()}
+              </span>
             </div>
-
-            <div className="flex items-center justify-between gap-4">
-              <div className="text-left">
-                <p className="text-[8px] text-slate-400 font-black uppercase tracking-widest">Total</p>
-                <p className="text-lg font-black text-orange-600 leading-none">
-                  Rp{totalHarga.toLocaleString()}
-                </p>
-              </div>
-              <button 
-                onClick={onCheckout}
-                className="flex-1 bg-orange-600 text-white py-3.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-orange-100 active:scale-95 transition-all flex items-center justify-center gap-2"
-              >
-                Checkout <ArrowRight size={16} />
-              </button>
-            </div>
+            <button
+              onClick={onCheckout}
+              className="w-full py-4 bg-orange-500 text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-orange-500/20 active:scale-95 transition-all hover:bg-orange-600"
+            >
+              Checkout Sekarang <ArrowRight size={18} />
+            </button>
           </div>
         )}
       </div>
