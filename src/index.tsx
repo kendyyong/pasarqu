@@ -1,72 +1,16 @@
-[
-  {
-    resource: "/f:/APLIKASI DEVELOPER/pasarqu/src/index.tsx",
-    owner: "typescript",
-    code: "1434",
-    severity: 8,
-    message: "Unexpected keyword or identifier.",
-    source: "ts",
-    startLineNumber: 17,
-    startColumn: 1,
-    endLineNumber: 17,
-    endColumn: 4,
-    modelVersionId: 5,
-    origin: "extHost1",
-  },
-  {
-    resource: "/f:/APLIKASI DEVELOPER/pasarqu/src/index.tsx",
-    owner: "typescript",
-    code: "2304",
-    severity: 8,
-    message: "Cannot find name 'npm'.",
-    source: "ts",
-    startLineNumber: 17,
-    startColumn: 1,
-    endLineNumber: 17,
-    endColumn: 4,
-    modelVersionId: 5,
-    origin: "extHost1",
-  },
-  {
-    resource: "/f:/APLIKASI DEVELOPER/pasarqu/src/index.tsx",
-    owner: "typescript",
-    code: "1434",
-    severity: 8,
-    message: "Unexpected keyword or identifier.",
-    source: "ts",
-    startLineNumber: 17,
-    startColumn: 5,
-    endLineNumber: 17,
-    endColumn: 8,
-    modelVersionId: 5,
-    origin: "extHost1",
-  },
-  {
-    resource: "/f:/APLIKASI DEVELOPER/pasarqu/src/index.tsx",
-    owner: "typescript",
-    code: "2304",
-    severity: 8,
-    message: "Cannot find name 'run'.",
-    source: "ts",
-    startLineNumber: 17,
-    startColumn: 5,
-    endLineNumber: 17,
-    endColumn: 8,
-    modelVersionId: 5,
-    origin: "extHost1",
-  },
-  {
-    resource: "/f:/APLIKASI DEVELOPER/pasarqu/src/index.tsx",
-    owner: "typescript",
-    code: "2304",
-    severity: 8,
-    message: "Cannot find name 'build'.",
-    source: "ts",
-    startLineNumber: 17,
-    startColumn: 9,
-    endLineNumber: 17,
-    endColumn: 14,
-    modelVersionId: 5,
-    origin: "extHost1",
-  },
-];
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import "./index.css";
+
+const rootElement = document.getElementById("root");
+if (!rootElement) {
+  throw new Error("Could not find root element to mount to");
+}
+
+const root = ReactDOM.createRoot(rootElement);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
