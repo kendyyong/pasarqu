@@ -3,6 +3,7 @@ import { useMarket } from "../../contexts/MarketContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
 import { supabase } from "../../lib/supabaseClient";
+import { useRegionalFinance } from "../../hooks/useRegionalFinance";
 import {
   ChevronLeft,
   MapPin,
@@ -39,26 +40,22 @@ export const CheckoutPaymentPage = ({
     "COURIER",
   );
   const [paymentMethod, setPaymentMethod] = useState("COD");
-  const [fees, setFees] = useState({ to_customer: 0, to_merchant: 0 });
+
+  const [marketInfo, setMarketInfo] = useState<any>(null);
   const [merchantBalance, setMerchantBalance] = useState(0);
 
+  // 1. Ambil Data Pasar untuk identifikasi Kecamatan
   useEffect(() => {
     const fetchData = async () => {
       if (cart.length > 0 && isOpen) {
-        // Ambil Biaya Pasar
         const { data: market } = await supabase
           .from("markets")
-          .select("fee_to_customer, fee_to_merchant")
+          .select("id, name, kecamatan")
           .eq("id", cart[0].market_id)
           .single();
 
-        if (market)
-          setFees({
-            to_customer: market.fee_to_customer,
-            to_merchant: market.fee_to_merchant,
-          });
+        if (market) setMarketInfo(market);
 
-        // Cek Deposit Merchant
         const { data: merchant } = await supabase
           .from("merchants")
           .select("deposit_balance")
@@ -71,17 +68,27 @@ export const CheckoutPaymentPage = ({
     fetchData();
   }, [isOpen, cart]);
 
+  // 2. Ambil Biaya Berdasarkan Kecamatan (Regional Finance)
+  const { regionalSettings, loading: loadingFee } = useRegionalFinance(
+    marketInfo?.kecamatan,
+  );
+
   if (!isOpen) return null;
 
+  // 3. Kalkulasi Biaya
   const subtotal = cart.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0,
   );
+
+  const buyerServiceFee = regionalSettings?.buyer_service_fee ?? 2000;
+  const courierAppFee = regionalSettings?.courier_app_fee ?? 1000;
+
   const deliveryFee = shippingMethod === "COURIER" ? 5000 : 0;
-  const totalToPay = subtotal + deliveryFee + fees.to_customer;
+  const totalToPay = subtotal + deliveryFee + buyerServiceFee;
 
   const handleProcessOrder = async () => {
-    if (shippingMethod === "PICKUP" && merchantBalance < fees.to_merchant) {
+    if (shippingMethod === "PICKUP" && merchantBalance < courierAppFee) {
       showToast(
         "Toko tidak menerima Ambil Sendiri saat ini (Saldo Deposit Habis).",
         "error",
@@ -91,8 +98,6 @@ export const CheckoutPaymentPage = ({
 
     setIsSubmitting(true);
     try {
-      // PROSES SIMPAN ORDER
-      // Trik: Gunakan objek dengan nama kolom yang sudah dipastikan di database
       const orderData = {
         customer_id: user?.id,
         merchant_id: cart[0].merchant_id,
@@ -100,25 +105,22 @@ export const CheckoutPaymentPage = ({
         total_amount: totalToPay,
         shipping_method: shippingMethod,
         payment_method: paymentMethod,
-        fee_customer: fees.to_customer,
-        fee_merchant: fees.to_merchant,
+        fee_customer: buyerServiceFee,
+        fee_merchant: courierAppFee,
         status: "PENDING",
+        kecamatan: marketInfo?.kecamatan,
       };
 
       const { error: orderError } = await supabase
         .from("orders")
-        .insert([orderData]); // Masukkan sebagai array
+        .insert([orderData]);
 
-      if (orderError) {
-        // Jika masih error kolom, kemungkinan cache API. Kita tampilkan error aslinya.
-        throw orderError;
-      }
+      if (orderError) throw orderError;
 
-      // Jika ambil sendiri, potong saldo merchant
       if (shippingMethod === "PICKUP") {
         await supabase.rpc("deduct_merchant_balance", {
           m_id: cart[0].merchant_id,
-          amount: fees.to_merchant,
+          amount: courierAppFee,
         });
       }
 
@@ -155,7 +157,7 @@ export const CheckoutPaymentPage = ({
       </header>
 
       <main className="flex-1 overflow-y-auto no-scrollbar">
-        <div className="max-w-7xl mx-auto px-4 py-6 md:py-8">
+        <div className="max-w-7xl mx-auto px-4 py-6 md:py-8 text-left">
           {isSuccess ? (
             <div className="bg-white rounded-[2rem] shadow-xl p-12 text-center max-w-2xl mx-auto animate-in zoom-in-95">
               <div className="w-24 h-24 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
@@ -169,17 +171,16 @@ export const CheckoutPaymentPage = ({
               </p>
               <button
                 onClick={onClose}
-                className="px-8 py-4 bg-teal-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-teal-700 transition-all shadow-lg shadow-teal-600/20"
+                className="px-8 py-4 bg-teal-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-teal-700 transition-all shadow-lg"
               >
                 Kembali Belanja
               </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* KOLOM KIRI */}
               <div className="lg:col-span-2 space-y-4">
                 {/* ALAMAT */}
-                <section className="bg-white rounded-3xl p-6 shadow-sm relative overflow-hidden text-left border border-slate-100">
+                <section className="bg-white rounded-3xl p-6 shadow-sm relative overflow-hidden border border-slate-100">
                   <div className="absolute top-0 left-0 w-full h-[4px] bg-[repeating-linear-gradient(45deg,#0d9488,#0d9488_10px,#ffffff_10px,#ffffff_20px,#f59e0b_20px,#f59e0b_30px,#ffffff_30px,#ffffff_40px)]"></div>
                   <div className="flex items-start gap-4 mt-2">
                     <div className="p-3 bg-teal-50 text-teal-600 rounded-2xl">
@@ -193,13 +194,10 @@ export const CheckoutPaymentPage = ({
                         {user?.email || "User Pasarqu"}
                       </p>
                       <p className="text-sm text-slate-500 leading-relaxed italic">
-                        Lokasi pengiriman disesuaikan dengan titik koordinat
-                        pasar saat ini.
+                        Lokasi pengiriman disesuaikan titik koordinat pasar saat
+                        ini.
                       </p>
                     </div>
-                    <button className="text-teal-600 text-sm font-black uppercase tracking-wider hover:underline">
-                      Ubah
-                    </button>
                   </div>
                 </section>
 
@@ -222,14 +220,11 @@ export const CheckoutPaymentPage = ({
                           alt={item.name}
                           className="w-24 h-24 rounded-2xl object-cover bg-slate-100 border border-slate-200"
                         />
-                        <div className="flex-1 text-left flex flex-col justify-center">
+                        <div className="flex-1 flex flex-col justify-center">
                           <p className="text-lg font-black text-slate-800 mb-1 line-clamp-1">
                             {item.name}
                           </p>
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
-                            Kualitas Pilihan
-                          </p>
-                          <div className="flex justify-between items-end">
+                          <div className="flex justify-between items-end mt-2">
                             <p className="text-xl font-black text-teal-600">
                               Rp {item.price.toLocaleString()}
                             </p>
@@ -244,9 +239,8 @@ export const CheckoutPaymentPage = ({
                 </section>
               </div>
 
-              {/* KOLOM KANAN */}
               <div className="space-y-4">
-                <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 text-left">
+                <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
                   <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
                     Metode Pengiriman
                   </h3>
@@ -261,9 +255,9 @@ export const CheckoutPaymentPage = ({
                       </span>
                     </button>
                     <button
-                      disabled={merchantBalance < fees.to_merchant}
+                      disabled={merchantBalance < courierAppFee}
                       onClick={() => setShippingMethod("PICKUP")}
-                      className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${shippingMethod === "PICKUP" ? "border-teal-500 bg-teal-50 text-teal-700 shadow-md shadow-teal-500/10" : "border-slate-50 bg-slate-50 text-slate-400 hover:border-slate-200"} ${merchantBalance < fees.to_merchant ? "opacity-30 cursor-not-allowed" : ""}`}
+                      className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${shippingMethod === "PICKUP" ? "border-teal-500 bg-teal-50 text-teal-700 shadow-md shadow-teal-500/10" : "border-slate-50 bg-slate-50 text-slate-400 hover:border-slate-200"} ${merchantBalance < courierAppFee ? "opacity-30 cursor-not-allowed" : ""}`}
                     >
                       <Store size={24} />
                       <span className="text-[10px] font-black uppercase">
@@ -271,17 +265,9 @@ export const CheckoutPaymentPage = ({
                       </span>
                     </button>
                   </div>
-                  <div className="p-4 bg-slate-50 rounded-2xl flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
-                      <Clock size={16} className="text-teal-600" /> Estimasi
-                    </div>
-                    <span className="text-xs font-black text-slate-800 tracking-tighter uppercase">
-                      HARI INI (30-60 MNT)
-                    </span>
-                  </div>
                 </section>
 
-                <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4 text-left">
+                <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
                   <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">
                     Ringkasan Biaya
                   </h3>
@@ -295,8 +281,16 @@ export const CheckoutPaymentPage = ({
                       <span>Rp {deliveryFee.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-sm font-bold text-slate-500">
-                      <span>Biaya Penanganan</span>
-                      <span>Rp {fees.to_customer.toLocaleString()}</span>
+                      <span>Biaya Layanan</span>{" "}
+                      {/* Label disederhanakan sesuai permintaan */}
+                      {loadingFee ? (
+                        <Loader2
+                          size={14}
+                          className="animate-spin text-teal-600"
+                        />
+                      ) : (
+                        <span>Rp {buyerServiceFee.toLocaleString()}</span>
+                      )}
                     </div>
                     <div className="pt-4 border-t border-dashed border-slate-200 flex justify-between items-center">
                       <span className="text-sm font-black text-slate-800 uppercase tracking-widest">
@@ -317,7 +311,7 @@ export const CheckoutPaymentPage = ({
                     </div>
                     <button
                       onClick={handleProcessOrder}
-                      disabled={isSubmitting || cart.length === 0}
+                      disabled={isSubmitting || cart.length === 0 || loadingFee}
                       className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl hover:bg-slate-800 active:scale-95 transition-all flex justify-center items-center gap-3"
                     >
                       {isSubmitting ? (
@@ -353,13 +347,13 @@ export const CheckoutPaymentPage = ({
           </div>
           <button
             onClick={handleProcessOrder}
-            disabled={isSubmitting}
-            className="bg-teal-600 text-white font-black uppercase text-xs tracking-widest px-8 py-4 rounded-2xl shadow-lg shadow-teal-600/20 active:scale-95"
+            disabled={isSubmitting || loadingFee}
+            className="bg-teal-600 text-white font-black uppercase text-xs tracking-widest px-8 py-4 rounded-2xl shadow-lg active:scale-95 flex items-center gap-2"
           >
             {isSubmitting ? (
-              <Loader2 className="animate-spin" />
+              <Loader2 size={16} className="animate-spin" />
             ) : (
-              "Buat Pesanan"
+              "Bayar"
             )}
           </button>
         </div>

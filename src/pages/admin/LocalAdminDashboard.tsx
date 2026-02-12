@@ -1,19 +1,40 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
-import { generateWALink, waTemplates } from "../../utils/whatsapp";
-import { ArrowLeft, Loader2, Coins } from "lucide-react";
+import { useJsApiLoader } from "@react-google-maps/api";
+import {
+  Loader2,
+  Bell,
+  Map as MapIcon,
+  ShoppingCart,
+  Volume2,
+  VolumeX,
+  Package,
+  X,
+  ArrowUpRight,
+  Star,
+  AlertCircle,
+  Megaphone,
+  ShoppingBag,
+  ArrowLeft,
+  LayoutGrid,
+} from "lucide-react";
 
 // --- IMPORT KOMPONEN MODULAR ---
 import { LocalSidebar } from "./components/LocalSidebar";
-import { ShippingRateModal } from "./components/ShippingRateModal";
 import { PartnerDetailModal } from "./components/PartnerDetailModal";
 
 // --- IMPORT TABS ---
 import { LocalOverviewTab } from "./tabs/LocalOverviewTab";
 import { LocalProductsTab } from "./tabs/LocalProductsTab";
 import { LocalUsersTab } from "./tabs/LocalUsersTab";
+import { LocalRadarTab } from "./tabs/LocalRadarTab";
+import { LocalFinanceTab } from "./tabs/LocalFinanceTab";
+import { LocalRatingsTab } from "./tabs/LocalRatingsTab";
+import { LocalResolutionTab } from "./tabs/LocalResolutionTab";
+import { LocalBroadcastTab } from "./tabs/LocalBroadcastTab";
+import { LocalOrdersTab } from "./tabs/LocalOrdersTab";
 
 type TabType =
   | "overview"
@@ -21,16 +42,37 @@ type TabType =
   | "products"
   | "couriers"
   | "customers"
-  | "finance";
+  | "finance"
+  | "radar"
+  | "ratings"
+  | "resolution"
+  | "broadcast"
+  | "orders";
 
-export const LocalAdminDashboard: React.FC<{ onBack?: () => void }> = ({
-  onBack,
-}) => {
+const libraries: "places"[] = ["places"];
+
+// Interface untuk menangani properti onBack dari App.tsx
+interface Props {
+  onBack?: () => void | Promise<void>;
+}
+
+export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
   const { profile, logout } = useAuth();
   const { showToast } = useToast();
 
+  const { isLoaded } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+    libraries,
+  });
+
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [isLoading, setIsLoading] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
+
+  // Audio & Notification State
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [newOrderPopup, setNewOrderPopup] = useState<any>(null);
 
   // DATA STATE
   const [myMarket, setMyMarket] = useState<any>(null);
@@ -38,157 +80,145 @@ export const LocalAdminDashboard: React.FC<{ onBack?: () => void }> = ({
   const [myCouriers, setMyCouriers] = useState<any[]>([]);
   const [myCustomers, setMyCustomers] = useState<any[]>([]);
   const [pendingProducts, setPendingProducts] = useState<any[]>([]);
+  const [liveOrdersCount, setLiveOrdersCount] = useState(0);
 
-  const [stats, setStats] = useState({
-    adminShare: 625000,
-  });
-
-  // MODAL STATE
   const [detailModal, setDetailModal] = useState<{
     isOpen: boolean;
     user: any;
   }>({ isOpen: false, user: null });
 
-  const [isRateModalOpen, setIsRateModalOpen] = useState(false);
-
-  // --- FETCH DATA (LOGIC) ---
   const fetchData = async () => {
     if (!profile?.managed_market_id) {
-      console.warn("⚠️ ADMIN TIDAK PUNYA MARKET ID. Tidak bisa load data.");
       setIsLoading(false);
       return;
     }
-
     setIsLoading(true);
     try {
-      console.log(
-        "🔍 FETCH DATA START. Market ID Admin:",
-        profile.managed_market_id,
-      );
-
-      // 1. Market & Users
-      const [marketRes, usersRes] = await Promise.all([
-        supabase
-          .from("markets")
-          .select("*")
-          .eq("id", profile.managed_market_id)
-          .single(),
+      const targetMarketId = profile.managed_market_id;
+      const [marketRes, usersRes, prodRes, orderCountRes] = await Promise.all([
+        supabase.from("markets").select("*").eq("id", targetMarketId).single(),
         supabase
           .from("profiles")
           .select("*")
-          .eq("managed_market_id", profile.managed_market_id)
-          .order("created_at", { ascending: false }),
+          .eq("managed_market_id", targetMarketId),
+        supabase
+          .from("products")
+          .select("*, merchants(name, shop_name)")
+          .eq("market_id", targetMarketId)
+          .eq("status", "PENDING"),
+        supabase
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .eq("market_id", targetMarketId)
+          .eq("status", "PENDING"),
       ]);
 
-      setMyMarket(marketRes.data);
+      if (marketRes.data) setMyMarket(marketRes.data);
       if (usersRes.data) {
         setMyMerchants(usersRes.data.filter((p) => p.role === "MERCHANT"));
         setMyCouriers(usersRes.data.filter((p) => p.role === "COURIER"));
         setMyCustomers(usersRes.data.filter((p) => p.role === "CUSTOMER"));
       }
-
-      // 2. Products Pending (DIAGNOSTIK)
-      const { data: products, error: prodError } = await supabase
-        .from("products")
-        .select("*, merchants(name, shop_name)")
-        .eq("market_id", profile.managed_market_id) // Filter sesuai pasar admin
-        .eq("status", "PENDING") // Filter status
-        .order("created_at", { ascending: false });
-
-      if (prodError) {
-        console.error("❌ Error Fetch Produk:", prodError);
-      } else {
-        console.log("✅ Produk Pending Ditemukan:", products?.length, products);
-      }
-
-      setPendingProducts(products || []);
-    } catch (error) {
-      console.error("❌ Critical Error:", error);
+      setPendingProducts(prodRes.data || []);
+      setLiveOrdersCount(orderCountRes.count || 0);
+    } catch (error: any) {
+      showToast("Gagal memuat data wilayah", "error");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // --- LOGIKA REAL-TIME NOTIFICATION ---
   useEffect(() => {
-    fetchData();
+    if (!profile?.managed_market_id) return;
+
+    audioRef.current = new Audio("/sounds/kaching.mp3");
+
+    const ordersSubscription = supabase
+      .channel("live_orders_wilayah")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "orders",
+          filter: `market_id=eq.${profile.managed_market_id}`,
+        },
+        async (payload) => {
+          setLiveOrdersCount((prev) => prev + 1);
+
+          const { data: orderDetail } = await supabase
+            .from("orders")
+            .select("*, profiles(full_name)")
+            .eq("id", payload.new.id)
+            .single();
+
+          if (orderDetail) {
+            setNewOrderPopup(orderDetail);
+            setTimeout(() => setNewOrderPopup(null), 8000);
+          }
+
+          if (!isMuted && audioRef.current) {
+            audioRef.current.play().catch(() => console.log("Audio blocked"));
+          }
+          showToast(`📦 PESANAN BARU MASUK!`, "success");
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ordersSubscription);
+    };
+  }, [profile?.managed_market_id, isMuted]);
+
+  useEffect(() => {
+    if (profile) fetchData();
   }, [profile]);
 
-  // --- ACTIONS ---
-
-  // 1. Approve/Reject Produk
-  const handleProductAction = async (
-    id: string,
-    action: "APPROVED" | "REJECTED",
-  ) => {
-    const { error } = await supabase
-      .from("products")
-      .update({ status: action })
-      .eq("id", id);
-    if (!error) {
-      showToast(`Produk ${action}`, "success");
-      setPendingProducts((prev) => prev.filter((p) => p.id !== id));
-    } else {
-      showToast("Gagal update produk", "error");
-    }
-  };
-
-  // 2. Approve Mitra (Toko/Kurir)
-  const handleApprovePartner = async (partner: any) => {
-    const { error } = await supabase
-      .from("profiles")
-      .update({ is_verified: true })
-      .eq("id", partner.id);
-
-    if (!error) {
-      showToast("Mitra Disetujui", "success");
-
-      // Kirim WA Notifikasi
-      if (partner.phone_number) {
-        let message = "";
-        if (partner.role === "MERCHANT") {
-          message = waTemplates.merchantApproval(
-            partner.name,
-            partner.shop_name || "Toko",
-            myMarket?.name,
-          );
-        } else if (partner.role === "COURIER") {
-          message = waTemplates.courierApproval(partner.name, myMarket?.name);
-        }
-        if (message)
-          window.open(generateWALink(partner.phone_number, message), "_blank");
-      }
-
-      setDetailModal({ isOpen: false, user: null });
-      fetchData();
-    } else {
-      showToast(error.message, "error");
-    }
-  };
-
-  // 3. Deactivate Mitra
-  const handleDeactivatePartner = async (id: string) => {
-    if (confirm("Yakin nonaktifkan?")) {
-      await supabase
-        .from("profiles")
-        .update({ is_verified: false })
-        .eq("id", id);
-      showToast("Mitra Nonaktif", "info");
-      setDetailModal({ isOpen: false, user: null });
-      fetchData();
-    }
-  };
-
-  // --- RENDER ---
   if (isLoading)
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50">
+      <div className="h-screen flex items-center justify-center bg-white">
         <Loader2 className="animate-spin text-teal-600" size={40} />
       </div>
     );
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex font-sans">
-      {/* 1. SIDEBAR MODULAR */}
+    <div className="min-h-screen bg-[#f8fafc] flex font-sans text-left transition-all duration-500 overflow-hidden">
+      {/* 1. NOTIFICATION POPUP */}
+      {newOrderPopup && (
+        <div className="fixed bottom-10 right-10 z-[100] w-80 bg-white rounded-[2.5rem] shadow-2xl border border-teal-100 p-6 animate-in slide-in-from-right-full duration-500">
+          <button
+            onClick={() => setNewOrderPopup(null)}
+            className="absolute top-6 right-6 text-slate-300 hover:text-slate-500"
+          >
+            <X size={18} />
+          </button>
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-12 h-12 bg-teal-500 text-white rounded-2xl flex items-center justify-center animate-bounce shadow-lg shadow-teal-200">
+              <Package size={22} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-black text-teal-600 uppercase tracking-[0.2em]">
+                Order Baru
+              </p>
+              <h4 className="text-sm font-black text-slate-800 uppercase truncate">
+                {newOrderPopup.profiles?.full_name}
+              </h4>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setActiveTab("orders");
+              setNewOrderPopup(null);
+            }}
+            className="w-full bg-slate-900 text-white py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 hover:bg-teal-600 transition-all"
+          >
+            Buka Monitoring <ArrowUpRight size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* 2. SIDEBAR */}
       <LocalSidebar
         marketName={myMarket?.name}
         activeTab={activeTab}
@@ -199,105 +229,210 @@ export const LocalAdminDashboard: React.FC<{ onBack?: () => void }> = ({
         onLogout={logout}
       />
 
-      {/* 2. MAIN CONTENT AREA */}
-      <main className="ml-72 flex-1 p-12">
-        <header className="flex justify-between items-center mb-12">
-          <div>
-            <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter mb-2">
-              {activeTab === "products"
-                ? "Verifikasi Produk"
-                : activeTab === "merchants"
-                  ? "Data Toko"
-                  : activeTab === "overview"
-                    ? "Ikhtisar Wilayah"
-                    : "Manajemen Data"}
-            </h1>
-            <button
-              onClick={() => setIsRateModalOpen(true)}
-              className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2 shadow-lg hover:scale-105 transition-all"
-            >
-              <Coins size={18} /> Atur Tarif Ongkir
-            </button>
+      {/* 3. MAIN CONTENT AREA */}
+      <div className="flex-1 ml-72 flex flex-col min-h-screen">
+        {/* HEADER PRO RAMPING */}
+        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between px-10 sticky top-0 z-40">
+          <div className="flex items-center gap-4">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="p-2.5 bg-slate-50 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-xl transition-all border border-slate-100 active:scale-90"
+              >
+                <ArrowLeft size={18} />
+              </button>
+            )}
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 bg-teal-500 rounded-full animate-pulse"></div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
+                Control Wilayah{" "}
+                <span className="text-teal-600">{myMarket?.name}</span>
+              </span>
+            </div>
           </div>
-          <button
-            onClick={onBack}
-            className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:bg-slate-50 transition-all"
-          >
-            <ArrowLeft />
-          </button>
+
+          <div className="flex items-center gap-5">
+            <button
+              onClick={() => setIsMuted(!isMuted)}
+              className={`p-2.5 rounded-xl transition-all ${isMuted ? "text-slate-300" : "text-teal-600 bg-teal-50 hover:bg-teal-100"}`}
+            >
+              {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+            </button>
+
+            <div className="relative p-2.5 bg-slate-50 rounded-xl text-slate-400">
+              <Bell size={20} />
+              {liveOrdersCount > 0 && (
+                <span className="absolute top-2 right-2 w-2 h-2 bg-orange-500 rounded-full border-2 border-white"></span>
+              )}
+            </div>
+
+            <div className="h-8 w-[1px] bg-slate-100 mx-2"></div>
+
+            <div className="flex items-center gap-3 bg-slate-50 pl-4 pr-1.5 py-1.5 rounded-2xl border border-slate-100">
+              <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">
+                {profile?.full_name?.split(" ")[0]}
+              </span>
+              <div className="w-8 h-8 bg-teal-600 text-white rounded-xl flex items-center justify-center font-black text-xs shadow-sm uppercase">
+                {profile?.full_name?.charAt(0)}
+              </div>
+            </div>
+          </div>
         </header>
 
-        {/* 3. SWITCH TAB CONTENT */}
+        <main className="p-10 max-w-7xl mx-auto w-full">
+          {/* TAB NAVIGATION & TITLE */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
+            <div>
+              <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-3">
+                {activeTab === "overview"
+                  ? "Dashboard"
+                  : activeTab.replace("_", " ")}
+              </h1>
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 bg-teal-600 text-white text-[9px] font-black rounded-lg uppercase tracking-widest shadow-lg shadow-teal-100">
+                  Live
+                </span>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                  Sinkronisasi Satelit Aktif
+                </p>
+              </div>
+            </div>
 
-        {activeTab === "overview" && (
-          <LocalOverviewTab
-            stats={{
-              pendingProducts: pendingProducts.length,
-              merchants: myMerchants.length,
-              couriers: myCouriers.length,
-              adminShare: stats.adminShare,
-            }}
-          />
-        )}
-
-        {activeTab === "products" && (
-          <LocalProductsTab
-            products={pendingProducts}
-            onAction={handleProductAction}
-          />
-        )}
-
-        {activeTab === "merchants" && (
-          <LocalUsersTab
-            type="merchants"
-            data={myMerchants}
-            onViewDetail={(u) => setDetailModal({ isOpen: true, user: u })}
-          />
-        )}
-
-        {activeTab === "couriers" && (
-          <LocalUsersTab
-            type="couriers"
-            data={myCouriers}
-            onViewDetail={(u) => setDetailModal({ isOpen: true, user: u })}
-          />
-        )}
-
-        {activeTab === "customers" && (
-          <LocalUsersTab
-            type="customers"
-            data={myCustomers}
-            onViewDetail={(u) => setDetailModal({ isOpen: true, user: u })}
-          />
-        )}
-
-        {activeTab === "finance" && (
-          <div className="bg-white p-10 rounded-[2rem] border border-slate-100 text-center">
-            <h3 className="font-bold text-slate-800">Fitur Keuangan</h3>
-            <p className="text-sm text-slate-500">
-              Anda bisa membuat LocalFinanceTab.tsx untuk bagian ini.
-            </p>
+            {/* QUICK ACTIONS BAR (PENGGANTI BANYAK TOMBOL) */}
+            <div className="flex bg-white p-2 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-x-auto no-scrollbar">
+              <QuickActionBtn
+                active={activeTab === "orders"}
+                icon={<ShoppingBag size={18} />}
+                label="Orders"
+                onClick={() => setActiveTab("orders")}
+              />
+              <QuickActionBtn
+                active={activeTab === "radar"}
+                icon={<MapIcon size={18} />}
+                label="Radar"
+                onClick={() => setActiveTab("radar")}
+              />
+              <QuickActionBtn
+                active={activeTab === "broadcast"}
+                icon={<Megaphone size={18} />}
+                label="Promo"
+                onClick={() => setActiveTab("broadcast")}
+              />
+              <QuickActionBtn
+                active={activeTab === "ratings"}
+                icon={<Star size={18} />}
+                label="QC"
+                onClick={() => setActiveTab("ratings")}
+              />
+              <QuickActionBtn
+                active={activeTab === "resolution"}
+                icon={<AlertCircle size={18} />}
+                label="Kasus"
+                onClick={() => setActiveTab("resolution")}
+                color="hover:text-red-500"
+              />
+            </div>
           </div>
-        )}
-      </main>
+
+          {/* MAIN DYNAMIC CONTENT */}
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+            {activeTab === "orders" && (
+              <LocalOrdersTab marketId={profile?.managed_market_id || ""} />
+            )}
+
+            {activeTab === "radar" && (
+              <LocalRadarTab
+                isLoaded={isLoaded}
+                myMarket={myMarket}
+                merchants={myMerchants}
+                couriers={myCouriers}
+                customers={myCustomers}
+              />
+            )}
+
+            {activeTab === "overview" && (
+              <LocalOverviewTab
+                stats={{
+                  pendingProducts: pendingProducts.length,
+                  merchants: myMerchants.length,
+                  couriers: myCouriers.length,
+                  adminShare: 0,
+                }}
+              />
+            )}
+
+            {activeTab === "finance" && (
+              <LocalFinanceTab merchants={myMerchants} couriers={myCouriers} />
+            )}
+
+            {activeTab === "ratings" && (
+              <LocalRatingsTab merchants={myMerchants} couriers={myCouriers} />
+            )}
+
+            {activeTab === "resolution" && <LocalResolutionTab />}
+
+            {activeTab === "broadcast" && (
+              <LocalBroadcastTab
+                marketId={profile?.managed_market_id || ""}
+                marketName={myMarket?.name || "Wilayah"}
+                customerCount={myCustomers.length}
+              />
+            )}
+
+            {(activeTab === "merchants" ||
+              activeTab === "couriers" ||
+              activeTab === "customers") && (
+              <LocalUsersTab
+                type={activeTab}
+                data={
+                  activeTab === "merchants"
+                    ? myMerchants
+                    : activeTab === "couriers"
+                      ? myCouriers
+                      : myCustomers
+                }
+                onViewDetail={(u) => setDetailModal({ isOpen: true, user: u })}
+              />
+            )}
+
+            {activeTab === "products" && (
+              <LocalProductsTab
+                products={pendingProducts}
+                onAction={() => fetchData()}
+              />
+            )}
+          </div>
+        </main>
+      </div>
 
       {/* --- MODALS --- */}
-
-      {/* Modal Detail User */}
       <PartnerDetailModal
         user={detailModal.user}
         onClose={() => setDetailModal({ isOpen: false, user: null })}
-        onApprove={handleApprovePartner}
-        onDeactivate={handleDeactivatePartner}
+        onApprove={() => fetchData()}
+        onDeactivate={() => fetchData()}
       />
-
-      {/* Modal Ongkir */}
-      {isRateModalOpen && (
-        <ShippingRateModal
-          marketId={profile.managed_market_id}
-          onClose={() => setIsRateModalOpen(false)}
-        />
-      )}
     </div>
   );
 };
+
+// --- SUB KOMPONEN QUICK ACTION ---
+const QuickActionBtn = ({
+  active,
+  icon,
+  label,
+  onClick,
+  color = "hover:text-teal-600",
+}: any) => (
+  <button
+    onClick={onClick}
+    className={`flex items-center gap-2 px-5 py-2.5 rounded-[1.5rem] transition-all group shrink-0 ${active ? "bg-slate-900 text-white shadow-lg" : `text-slate-400 ${color}`}`}
+  >
+    {icon}
+    <span
+      className={`text-[10px] font-black uppercase tracking-widest ${active ? "block" : "hidden group-hover:block"}`}
+    >
+      {label}
+    </span>
+  </button>
+);

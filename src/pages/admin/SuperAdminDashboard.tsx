@@ -1,29 +1,25 @@
 import React, { useState, useEffect } from "react";
 import { useJsApiLoader } from "@react-google-maps/api";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Shield } from "lucide-react";
+import { Bell, Search, ArrowLeft } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../contexts/AuthContext";
-import { getTheme } from "../../components/super-admin/SharedUI";
 
-// --- IMPORT KOMPONEN UTAMA ---
+// --- COMPONENTS ---
 import { Sidebar } from "../../components/super-admin/Sidebar";
 import { MarketAuditFullView } from "../../components/super-admin/MarketAudit";
 
-// --- IMPORT FITUR-FITUR (YANG SUDAH DIPISAH) ---
+// --- FEATURES ---
 import { DashboardOverview } from "./super-features/DashboardOverview";
 import { MarketManager } from "./super-features/MarketManager";
 import { FinanceManager } from "./super-features/FinanceManager";
 import { UserManager } from "./super-features/UserManager";
 import { VerificationCenter } from "./super-features/VerificationCenter";
-import { MenuManager } from "./super-features/MenuManager"; // Pastikan file ini ada jika sebelumnya sudah dibuat
-
-// Placeholder untuk fitur yang belum dibuat file terpisahnya
-const FeaturePlaceholder = ({ title }: { title: string }) => (
-  <div className="flex items-center justify-center h-[50vh] border-2 border-dashed border-slate-300 rounded-[3rem] text-slate-400 font-bold uppercase tracking-widest">
-    Fitur {title} (Segera Hadir)
-  </div>
-);
+import { MenuManager } from "./super-features/MenuManager";
+import { GlobalConfig } from "./super-features/GlobalConfig";
+import { NotificationManager } from "./super-features/NotificationManager";
+import { ActivityLogs } from "./super-features/ActivityLogs";
+import { RegionalFinance } from "./super-features/RegionalFinance"; // <--- IMPORT MODUL REGIONAL
 
 const libraries: "places"[] = ["places"];
 
@@ -38,22 +34,16 @@ export const SuperAdminDashboard: React.FC<{ onBack?: () => void }> = ({
     libraries,
   });
 
-  // --- STATE UTAMA ---
-  const [activeTab, setActiveTab] = useState<
-    | "dashboard"
-    | "finance"
-    | "disputes"
-    | "verification"
-    | "markets"
-    | "users"
-    | "categories"
-    | "menus"
-  >("dashboard");
-  const [darkMode, setDarkMode] = useState(true);
-  const [auditMarket, setAuditMarket] = useState<any>(null); // Mode "God View"
-  const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const [auditMarket, setAuditMarket] = useState<any>(null);
 
-  // --- DATA STATE ---
+  const shopeeTheme = {
+    sidebar: "bg-white",
+    accent: "text-teal-600",
+    text: "text-slate-800",
+    subText: "text-slate-400",
+  };
+
   const [markets, setMarkets] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [candidates, setCandidates] = useState<any[]>([]);
@@ -64,25 +54,14 @@ export const SuperAdminDashboard: React.FC<{ onBack?: () => void }> = ({
     active_markets: 0,
   });
 
-  // Helper Tema
-  const th = getTheme(darkMode);
-
-  // --- FETCH DATA ---
   const fetchData = async () => {
-    setIsLoading(true);
     try {
-      // 1. Ambil Pasar
       const { data: mData } = await supabase.from("markets").select("*");
       setMarkets(mData || []);
-
-      // 2. Ambil Semua User
       const { data: uData } = await supabase
         .from("profiles")
-        .select("*, markets(name)")
-        .order("created_at", { ascending: false });
+        .select("*, markets(name)");
       setAllUsers(uData || []);
-
-      // 3. Filter Kandidat Admin (Verification)
       setCandidates(
         uData?.filter(
           (u: any) =>
@@ -90,50 +69,41 @@ export const SuperAdminDashboard: React.FC<{ onBack?: () => void }> = ({
             (u.role === "LOCAL_ADMIN" && !u.is_verified),
         ) || [],
       );
-
-      // 4. Data Keuangan
       const { data: fData } = await supabase.rpc("get_financial_summary");
-      if (fData?.[0])
-        setFinance({
-          revenue: fData[0].total_revenue,
-          orders: fData[0].total_orders,
-          active_markets: fData[0].active_markets,
-        });
-
-      // 5. Data Komplain (Disputes)
+      if (fData?.[0]) setFinance(fData[0]);
       const { data: cData } = await supabase
         .from("complaints")
-        .select("*, profiles(name, phone_number)")
+        .select("*")
         .eq("status", "open");
       setComplaints(cData || []);
     } catch (err) {
       console.error(err);
-    } finally {
-      setIsLoading(false);
     }
   };
 
   useEffect(() => {
+    const isMaster = sessionStorage.getItem("isMasterAuthenticated");
+    if (isMaster !== "true") {
+      navigate("/");
+      return;
+    }
     if (user) fetchData();
-  }, [user]);
+  }, [user, navigate]);
 
   const handleLogout = async () => {
+    sessionStorage.removeItem("isMasterAuthenticated");
     await logout();
-    if (onBack) onBack();
     navigate("/");
   };
 
-  // --- RENDER UTAMA ---
   return (
-    <div
-      className={`min-h-screen font-sans flex transition-colors duration-300 ${th.bg} ${th.text}`}
-    >
+    <div className="min-h-screen bg-[#f5f5f5] font-sans flex text-left">
       {/* 1. SIDEBAR */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onLogout={handleLogout}
-        theme={th}
+        theme={shopeeTheme}
         setAuditMarket={setAuditMarket}
         counts={{
           users: allUsers.length,
@@ -142,101 +112,99 @@ export const SuperAdminDashboard: React.FC<{ onBack?: () => void }> = ({
         }}
       />
 
-      {/* 2. AREA KONTEN */}
-      <main className="flex-1 md:ml-72 p-6 md:p-10 transition-all duration-300">
-        {/* A. TAMPILAN KHUSUS: AUDIT WILAYAH (GOD MODE) */}
-        {auditMarket ? (
-          <div className="animate-in fade-in slide-in-from-right-4">
-            <div className="mb-8 flex items-center justify-between bg-indigo-600 p-8 rounded-[2.5rem] text-white shadow-xl">
-              <div className="flex items-center gap-6">
-                <button
-                  onClick={() => setAuditMarket(null)}
-                  className="p-4 bg-white/20 rounded-2xl hover:bg-white/40 transition-all"
-                >
-                  <ArrowLeft size={24} />
-                </button>
-                <div>
-                  <h1 className="text-3xl font-black uppercase">
-                    {auditMarket.name}
-                  </h1>
-                  <p className="text-indigo-200 text-xs font-bold uppercase">
-                    God Mode: Audit Wilayah Full Access
-                  </p>
-                </div>
+      {/* 2. MAIN CONTENT AREA */}
+      <div className="flex-1 ml-72 flex flex-col min-h-screen">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-40">
+          <div>
+            <h2 className="text-sm font-black text-slate-400 uppercase tracking-[0.3em]">
+              Master Control /{" "}
+              <span className="text-teal-600">{activeTab}</span>
+            </h2>
+          </div>
+          <div className="flex items-center gap-6">
+            <button className="relative text-slate-400 hover:text-teal-600 transition-colors">
+              <Bell size={20} />
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full border-2 border-white"></span>
+            </button>
+            <div className="flex items-center gap-3 pl-6 border-l border-slate-100">
+              <div className="text-right hidden md:block">
+                <p className="text-xs font-black text-slate-800 leading-none">
+                  ROOT ADMIN
+                </p>
+                <p className="text-[9px] text-teal-600 font-bold uppercase mt-1">
+                  Full Access
+                </p>
               </div>
-              <div className="flex items-center gap-4 bg-black/20 px-6 py-3 rounded-2xl border border-white/10">
-                <Shield size={20} className="text-emerald-400" />
-                <span className="font-black text-xs uppercase">
-                  Monitoring Berjalan
-                </span>
+              <div className="w-9 h-9 bg-teal-600 text-white rounded-xl flex items-center justify-center font-black">
+                P
               </div>
             </div>
-            <MarketAuditFullView
-              market={auditMarket}
-              allUsers={allUsers}
-              theme={th}
-              onViewUser={() => {}}
-            />
           </div>
-        ) : (
-          /* B. TAMPILAN FITUR MODULAR */
-          <>
-            {/* 1. Dashboard Peta */}
-            {activeTab === "dashboard" && (
-              <DashboardOverview
-                isLoaded={isLoaded}
-                markets={markets}
-                darkMode={darkMode}
-                theme={th}
-                setAuditMarket={setAuditMarket}
+        </header>
+
+        <main className="p-8">
+          {auditMarket ? (
+            <div className="animate-in fade-in slide-in-from-bottom-2">
+              <button
+                onClick={() => setAuditMarket(null)}
+                className="mb-6 flex items-center gap-2 text-slate-500 hover:text-teal-600 font-black text-[10px] uppercase tracking-widest transition-all"
+              >
+                <ArrowLeft size={14} /> Kembali ke Peta
+              </button>
+              <MarketAuditFullView
+                market={auditMarket}
+                allUsers={allUsers}
+                theme={{ bg: "bg-white", text: "text-slate-900" }}
+                onViewUser={() => {}}
               />
-            )}
+            </div>
+          ) : (
+            <div className="animate-in fade-in duration-500">
+              {activeTab === "dashboard" && (
+                <DashboardOverview
+                  isLoaded={isLoaded}
+                  markets={markets}
+                  darkMode={false}
+                  theme={shopeeTheme}
+                  setAuditMarket={setAuditMarket}
+                />
+              )}
+              {activeTab === "markets" && (
+                <MarketManager
+                  markets={markets}
+                  theme={shopeeTheme}
+                  darkMode={false}
+                  isLoaded={isLoaded}
+                  refreshData={fetchData}
+                  setAuditMarket={setAuditMarket}
+                />
+              )}
+              {activeTab === "menus" && <MenuManager />}
+              {activeTab === "users" && (
+                <UserManager allUsers={allUsers} theme={shopeeTheme} />
+              )}
+              {activeTab === "verification" && (
+                <VerificationCenter
+                  candidates={candidates}
+                  markets={markets}
+                  theme={shopeeTheme}
+                  refreshData={fetchData}
+                />
+              )}
+              {activeTab === "finance" && (
+                <FinanceManager finance={finance} theme={shopeeTheme} />
+              )}
 
-            {/* 2. Manajemen Pasar */}
-            {activeTab === "markets" && (
-              <MarketManager
-                markets={markets}
-                theme={th}
-                darkMode={darkMode}
-                isLoaded={isLoaded}
-                refreshData={fetchData}
-                setAuditMarket={setAuditMarket}
-              />
-            )}
+              {/* --- FITUR BARU: REGIONAL FINANCE --- */}
+              {activeTab === "regional-finance" && <RegionalFinance />}
 
-            {/* 3. Keuangan */}
-            {activeTab === "finance" && (
-              <FinanceManager finance={finance} theme={th} />
-            )}
-
-            {/* 4. Manajemen User */}
-            {activeTab === "users" && (
-              <UserManager allUsers={allUsers} theme={th} />
-            )}
-
-            {/* 5. Verifikasi Admin */}
-            {activeTab === "verification" && (
-              <VerificationCenter
-                candidates={candidates}
-                markets={markets}
-                theme={th}
-                refreshData={fetchData}
-              />
-            )}
-
-            {/* 6. Manajemen Menu (Jika ada file MenuManager.tsx) */}
-            {activeTab === "menus" && <MenuManager />}
-
-            {/* Fitur Lain (Belum Dipisah) */}
-            {activeTab === "disputes" && (
-              <FeaturePlaceholder title="Resolusi Sengketa" />
-            )}
-            {activeTab === "categories" && (
-              <FeaturePlaceholder title="Kategori Produk" />
-            )}
-          </>
-        )}
-      </main>
+              {activeTab === "settings" && <GlobalConfig />}
+              {activeTab === "broadcast" && <NotificationManager />}
+              {activeTab === "logs" && <ActivityLogs />}
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 };

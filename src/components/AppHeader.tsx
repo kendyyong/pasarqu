@@ -42,10 +42,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
   return (
     <header className="fixed top-0 left-0 right-0 z-[1000] shadow-md">
-      {/* BARIS 1 (Partner Bar) SUDAH DIHAPUS 
-          Agar tampilan lebih bersih & profesional 
-      */}
-
       {/* MAIN HEADER */}
       <div className="bg-teal-600">
         <div className="max-w-[1200px] mx-auto px-3 h-[60px] md:h-[70px] flex items-center justify-between gap-3">
@@ -79,7 +75,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
           {/* ACTIONS (KERANJANG & USER) */}
           <div className="flex items-center gap-2 md:gap-4">
-            {/* KERANJANG */}
+            {/* KERANJANG - Tetap muncul di Mobile & Desktop */}
             <div
               className="relative cursor-pointer text-white p-2 group"
               onClick={onCartClick}
@@ -95,10 +91,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               )}
             </div>
 
-            {/* USER PROFILE (Muncul Foto Google jika Login) */}
+            {/* USER PROFILE - INI YANG KITA UBAH!
+                Class 'hidden md:flex' artinya:
+                - Di HP (layar kecil): HILANG (Hidden)
+                - Di Laptop (layar md ke atas): MUNCUL (Flex)
+            */}
             <div
               onClick={onUserClick}
-              className="flex items-center gap-2 cursor-pointer bg-teal-700/50 hover:bg-teal-700 px-2 py-1.5 md:pr-4 rounded-full transition-all border border-white/10"
+              className="hidden md:flex items-center gap-2 cursor-pointer bg-teal-700/50 hover:bg-teal-700 px-2 py-1.5 md:pr-4 rounded-full transition-all border border-white/10"
             >
               {userAvatar ? (
                 <img

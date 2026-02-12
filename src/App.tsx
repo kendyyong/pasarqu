@@ -47,11 +47,14 @@ import { AdminPromoPage } from "./pages/promo/AdminPromoPage";
 import { MarketSelectionPage } from "./pages/MarketSelection/MarketSelectionPage";
 import { CheckoutPaymentPage } from "./pages/checkout/CheckoutPaymentPage";
 
+// IMPORT HALAMAN MASTER ADMIN
+import { ManageQuickActions } from "./pages/admin/super-features/ManageQuickActions";
+
 import {
   MerchantLogin,
   CourierLogin,
   AdminLogin,
-  SuperAdminLogin,
+  SuperAdminLogin, // <--- INI ADALAH KOMPONEN GOD MODE
 } from "./pages/auth/PartnerLoginPages";
 
 // --- KOMPONEN MARKETPLACE (HOME) ---
@@ -122,8 +125,12 @@ const MarketplaceApp = () => {
             user ? navigate("/customer-dashboard") : navigate("/login")
           }
         />
-        <HeroOnboarding />
-        <HomeMenuGrid />
+        {!searchQuery && (
+          <>
+            <HeroOnboarding />
+            <HomeMenuGrid />
+          </>
+        )}
         <Home searchQuery={searchQuery} />
 
         <CartDrawer
@@ -164,10 +171,20 @@ const MainContent = () => {
     "/promo",
     "/super-admin",
     "/waiting-approval",
+    "/login/master",
   ];
   const isBypassRoute = bypassRoutes.some((route) =>
     location.pathname.startsWith(route),
   );
+
+  // LOGIKA BYPASS UNTUK RUTE RAHASIA (LANGSUNG KE GOD MODE)
+  if (location.pathname === "/login/master") {
+    return (
+      <Routes>
+        <Route path="/login/master" element={<SuperAdminLogin />} />
+      </Routes>
+    );
+  }
 
   if (!selectedMarket && !isBypassRoute) return <MarketSelectionPage />;
 
@@ -181,20 +198,22 @@ const MainContent = () => {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/waiting-approval" element={<WaitingApprovalPage />} />
 
-      {/* --- REVISI ROUTE LOGIN PARTNER --- */}
+      {/* --- RUTE RAHASIA: MENGARAH KE GOD MODE LOGIN --- */}
+      <Route path="/login/master" element={<SuperAdminLogin />} />
+
+      {/* LOGIN PARTNER */}
       <Route path="/login/toko" element={<MerchantLogin />} />
       <Route path="/login/kurir" element={<CourierLogin />} />
       <Route path="/login/admin" element={<AdminLogin />} />
-      {/* Tambahan alias rute agar tombol di AdminPromoPage berfungsi */}
       <Route path="/admin/login" element={<AdminLogin />} />
 
-      {/* --- ROUTE PROMO/PENDAFTARAN --- */}
+      {/* PROMO/PENDAFTARAN */}
       <Route path="/promo/toko" element={<MerchantPromoPage />} />
       <Route path="/promo/kurir" element={<CourierPromoPage />} />
       <Route path="/promo/admin" element={<AdminPromoPage />} />
-      {/* Tambahan alias rute agar konsisten */}
       <Route path="/admin/register" element={<AdminPromoPage />} />
 
+      {/* DASHBOARD DASHBOARD */}
       <Route
         path="/merchant-dashboard"
         element={
@@ -227,6 +246,8 @@ const MainContent = () => {
           </ProtectedRoute>
         }
       />
+
+      {/* PUSAT KENDALI SUPER ADMIN */}
       <Route
         path="/super-admin"
         element={

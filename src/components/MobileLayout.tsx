@@ -1,6 +1,6 @@
 import React from "react";
 import { AppLogo } from "./AppLogo";
-import { Home, Search, ClipboardList, User } from "lucide-react"; // Gunakan icon lucide agar profesional
+import { Home, Search, ClipboardList, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface MobileLayoutProps {
@@ -13,6 +13,11 @@ interface MobileLayoutProps {
   cartCount: number;
 }
 
+/**
+ * MobileLayout Component
+ * Dibuat sebagai 'export const' DAN 'export default' agar fleksibel
+ * dipanggil di App.tsx (menghindari error Uncaught SyntaxError).
+ */
 export const MobileLayout: React.FC<MobileLayoutProps> = ({
   children,
   activeTab,
@@ -20,17 +25,17 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
 }) => {
   const navigate = useNavigate();
 
-  // Data Navigasi Bawah
+  // Konfigurasi Navigasi Bawah
   const tabs = [
     { id: "home", label: "Beranda", icon: <Home size={20} /> },
     { id: "search", label: "Cari", icon: <Search size={20} /> },
     { id: "orders", label: "Pesanan", icon: <ClipboardList size={20} /> },
-    { id: "account", label: "Saya", icon: <User size={20} /> }, // Tombol SAYA
+    { id: "account", label: "Saya", icon: <User size={20} /> },
   ];
 
   const handleTabClick = (tabId: string) => {
     if (tabId === "account") {
-      // PINDAHAN FUNGSI: Klik 'Saya' langsung lari ke Portal
+      // Navigasi ke portal mitra (pindahan dari icon top bar)
       navigate("/portal");
     } else {
       onTabChange(tabId);
@@ -38,19 +43,19 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5] flex flex-col font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-[#f5f5f5] flex flex-col font-sans overflow-x-hidden text-left">
       {/* AREA KONTEN UTAMA */}
       <main className="flex-1 w-full max-w-[1200px] mx-auto bg-white md:bg-transparent min-h-screen relative pb-20 md:pb-10">
         {children}
       </main>
 
-      {/* NAVIGASI BAWAH: Mobile Only */}
+      {/* NAVIGASI BAWAH: Hanya muncul di layar Mobile (md:hidden) */}
       <nav className="fixed bottom-0 left-0 right-0 w-full bg-white border-t border-slate-100 flex justify-around items-center py-2 z-[2000] shadow-[0_-2px_10px_rgba(0,0,0,0.05)] md:hidden">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => handleTabClick(tab.id)}
-            className={`flex flex-col items-center gap-1 flex-1 transition-all ${
+            className={`flex flex-col items-center gap-1 flex-1 transition-all active:scale-90 ${
               activeTab === tab.id
                 ? "text-teal-600 font-bold"
                 : "text-slate-400"
@@ -64,15 +69,15 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
         ))}
       </nav>
 
-      {/* FOOTER DESKTOP */}
-      <footer className="hidden md:block bg-white border-t border-slate-200 py-10">
+      {/* FOOTER KHUSUS DESKTOP */}
+      <footer className="hidden md:block bg-white border-t border-slate-200 py-10 mt-auto">
         <div className="max-w-[1200px] mx-auto px-4 grid grid-cols-4 gap-8 text-left">
           <div>
             <h4 className="font-black text-slate-700 mb-4 uppercase text-[10px] tracking-widest">
               Layanan Pelanggan
             </h4>
             <ul className="text-xs text-slate-500 space-y-2 font-medium">
-              <li>Bantuan</li>
+              <li>Pusat Bantuan</li>
               <li>Metode Pembayaran</li>
               <li>Lacak Pesanan</li>
             </ul>
@@ -84,7 +89,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
             <ul className="text-xs text-slate-500 space-y-2 font-medium">
               <li>Tentang Kami</li>
               <li>Kebijakan Privasi</li>
-              <li>Blog Resmi</li>
+              <li>Blog Pasarqu</li>
             </ul>
           </div>
           <div className="col-span-2 text-right">
@@ -102,3 +107,6 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
     </div>
   );
 };
+
+// --- TAMBAHKAN INI AGAR TIDAK BLANK PUTIH LAGI ---
+export default MobileLayout;
