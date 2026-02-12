@@ -17,6 +17,8 @@ export const LocationPickerModal: React.FC<Props> = ({
 }) => {
   const { showToast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+
+  // State lokal untuk menampung lokasi sebelum disimpan
   const [tempLocation, setTempLocation] = useState<{
     lat: number;
     lng: number;
@@ -24,28 +26,51 @@ export const LocationPickerModal: React.FC<Props> = ({
   } | null>(null);
 
   const handleSave = async () => {
-    if (!tempLocation) {
-      showToast("Silakan pilih titik lokasi pada peta", "error");
+    // 1. CEK KEAMANAN: Pastikan profil tidak null
+    if (!merchantProfile) {
+      showToast("Data profil tidak ditemukan, silakan refresh.", "error");
+      return;
+    }
+
+    // Ambil ID yang benar (id atau user_id tergantung struktur tabel Anda)
+    const targetId = merchantProfile.id || merchantProfile.user_id;
+
+    if (!targetId) {
+      showToast("ID Toko tidak valid.", "error");
+      return;
+    }
+
+    // 2. Tentukan data lokasi yang akan dikirim
+    const locationToSave = tempLocation || {
+      lat: merchantProfile.latitude,
+      lng: merchantProfile.longitude,
+      address: merchantProfile.address,
+    };
+
+    if (!locationToSave.lat || !locationToSave.lng) {
+      showToast("Silakan tentukan titik lokasi pada peta", "error");
       return;
     }
 
     setIsSaving(true);
     try {
+      // 3. Eksekusi Update ke tabel 'merchants'
       const { error } = await supabase
-        .from("profiles")
+        .from("merchants")
         .update({
-          latitude: tempLocation.lat,
-          longitude: tempLocation.lng,
-          address: tempLocation.address,
+          latitude: locationToSave.lat,
+          longitude: locationToSave.lng,
+          address: locationToSave.address,
         })
-        .eq("id", merchantProfile.id);
+        .eq("id", targetId); // Menggunakan ID yang sudah divalidasi
 
       if (error) throw error;
 
       showToast("Lokasi jualan berhasil diperbarui!", "success");
-      onUpdate(tempLocation.lat, tempLocation.lng, tempLocation.address);
+      onUpdate(locationToSave.lat, locationToSave.lng, locationToSave.address);
       onClose();
     } catch (err: any) {
+      console.error("Save Location Error:", err);
       showToast("Gagal simpan lokasi: " + err.message, "error");
     } finally {
       setIsSaving(false);
@@ -55,7 +80,7 @@ export const LocationPickerModal: React.FC<Props> = ({
   return (
     <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
       <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-        {/* MODAL HEADER */}
+        {/* HEADER */}
         <div className="p-8 border-b border-slate-50 flex justify-between items-center text-left">
           <div>
             <h2 className="text-xl font-black uppercase text-slate-800 tracking-tight leading-none">
@@ -87,7 +112,7 @@ export const LocationPickerModal: React.FC<Props> = ({
           />
         </div>
 
-        {/* MODAL FOOTER */}
+        {/* FOOTER */}
         <div className="p-8 bg-slate-50/50 flex flex-col md:flex-row items-center justify-between gap-4 text-left">
           <div className="flex items-start gap-3 flex-1">
             <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600 shrink-0">
@@ -100,13 +125,13 @@ export const LocationPickerModal: React.FC<Props> = ({
               <p className="text-xs font-bold text-slate-700 truncate w-full md:max-w-[300px]">
                 {tempLocation?.address ||
                   merchantProfile?.address ||
-                  "Belum memilih titik..."}
+                  "Belum memilih titik baru..."}
               </p>
             </div>
           </div>
 
           <button
-            disabled={isSaving}
+            disabled={isSaving || !merchantProfile}
             onClick={handleSave}
             className="w-full md:w-auto px-10 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl hover:bg-teal-600 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
           >

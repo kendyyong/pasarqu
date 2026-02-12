@@ -92,16 +92,12 @@ const MarketplaceApp = () => {
     fetchUserData();
   }, [user]);
 
-  // --- PERBAIKAN DI SINI: FUNGSI CHECKOUT ---
   const handleCheckoutProcess = () => {
     if (!user) {
       navigate("/login");
       return;
     }
-    // 1. TUTUP Keranjang terlebih dahulu untuk menghilangkan bayangan/backdrop
     setIsCartOpen(false);
-
-    // 2. Beri jeda sedikit agar animasi drawer selesai, baru buka checkout
     setTimeout(() => {
       setIsCheckoutOpen(true);
     }, 300);
@@ -130,17 +126,15 @@ const MarketplaceApp = () => {
         <HomeMenuGrid />
         <Home searchQuery={searchQuery} />
 
-        {/* DRAWER KERANJANG */}
         <CartDrawer
           isOpen={isCartOpen}
           onClose={() => setIsCartOpen(false)}
           cart={cart}
           onUpdateQty={updateQty}
           onRemove={removeFromCart}
-          onCheckout={handleCheckoutProcess} // Menggunakan fungsi perbaikan
+          onCheckout={handleCheckoutProcess}
         />
 
-        {/* MODAL PEMBAYARAN */}
         <CheckoutPaymentPage
           isOpen={isCheckoutOpen}
           onClose={() => setIsCheckoutOpen(false)}
@@ -187,13 +181,19 @@ const MainContent = () => {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/waiting-approval" element={<WaitingApprovalPage />} />
 
+      {/* --- REVISI ROUTE LOGIN PARTNER --- */}
       <Route path="/login/toko" element={<MerchantLogin />} />
       <Route path="/login/kurir" element={<CourierLogin />} />
       <Route path="/login/admin" element={<AdminLogin />} />
+      {/* Tambahan alias rute agar tombol di AdminPromoPage berfungsi */}
+      <Route path="/admin/login" element={<AdminLogin />} />
 
+      {/* --- ROUTE PROMO/PENDAFTARAN --- */}
       <Route path="/promo/toko" element={<MerchantPromoPage />} />
       <Route path="/promo/kurir" element={<CourierPromoPage />} />
       <Route path="/promo/admin" element={<AdminPromoPage />} />
+      {/* Tambahan alias rute agar konsisten */}
+      <Route path="/admin/register" element={<AdminPromoPage />} />
 
       <Route
         path="/merchant-dashboard"

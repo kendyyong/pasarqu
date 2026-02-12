@@ -9,31 +9,39 @@ import {
   AlertCircle,
 } from "lucide-react";
 
+// 1. UPDATE INTERFACE: Tambahkan 'stats' agar sesuai dengan data dari Dashboard
 interface Props {
   merchantProfile: any;
+  stats: {
+    orders: number;
+    products: number;
+  };
 }
 
-export const MerchantOverview: React.FC<Props> = ({ merchantProfile }) => {
-  // Data dummy untuk statistik (Nanti bisa dihubungkan ke database)
-  const stats = [
+export const MerchantOverview: React.FC<Props> = ({
+  merchantProfile,
+  stats,
+}) => {
+  // 2. GUNAKAN DATA DARI PROPS (Bukan Dummy Lagi)
+  const statCards = [
     {
       label: "Pesanan Baru",
-      value: "0",
-      desc: "Perlu diproses",
+      value: stats.orders.toString(), // Data Real dari Database
+      desc: "Total pesanan masuk",
       icon: <ShoppingBag size={24} />,
       color: "bg-orange-50 text-orange-600",
     },
     {
       label: "Produk Aktif",
-      value: "0",
-      desc: "Tampil di pasar",
+      value: stats.products.toString(), // Data Real dari Database
+      desc: "Tampil di etalase",
       icon: <Box size={24} />,
       color: "bg-teal-50 text-teal-600",
     },
     {
-      label: "Total Saldo",
-      value: "Rp 0",
-      desc: "Siap dicairkan",
+      label: "Estimasi Saldo",
+      value: "Rp 0", // Placeholder (Nanti bisa diupdate jika fitur keuangan aktif)
+      desc: "Belum ada transaksi cair",
       icon: <Wallet size={24} />,
       color: "bg-blue-50 text-blue-600",
     },
@@ -48,10 +56,14 @@ export const MerchantOverview: React.FC<Props> = ({ merchantProfile }) => {
             Ringkasan Penjualan
           </h2>
           <p className="text-sm text-slate-400 font-medium">
-            Pantau statistik toko {merchantProfile?.shop_name} hari ini.
+            Pantau statistik toko{" "}
+            <span className="text-teal-600 font-bold">
+              {merchantProfile?.name}
+            </span>{" "}
+            hari ini.
           </p>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-2xl shadow-sm">
+        <div className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-2xl shadow-sm w-fit">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
           <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
             Sistem Online
@@ -61,7 +73,7 @@ export const MerchantOverview: React.FC<Props> = ({ merchantProfile }) => {
 
       {/* STATS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {stats.map((item, index) => (
+        {statCards.map((item, index) => (
           <div
             key={index}
             className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group"
@@ -90,7 +102,9 @@ export const MerchantOverview: React.FC<Props> = ({ merchantProfile }) => {
             </div>
             {/* Dekorasi Background */}
             <div className="absolute bottom-[-20px] right-[-20px] opacity-[0.03] group-hover:scale-110 transition-transform duration-700">
-              {React.cloneElement(item.icon, { size: 100 })}
+              {React.cloneElement(item.icon as React.ReactElement, {
+                size: 100,
+              })}
             </div>
           </div>
         ))}

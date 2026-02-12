@@ -44,7 +44,7 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
     const { data, error } = await supabase
       .from("products")
       .select("*")
-      .eq("merchant_id", user.id)
+      .eq("merchant_id", merchantProfile?.id || user.id) // Pakai ID dari profile merchant
       .order("created_at", { ascending: false });
 
     if (!error && data) setProducts(data);
@@ -53,15 +53,26 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
 
   useEffect(() => {
     fetchProducts();
-  }, [user]);
+  }, [user, merchantProfile]);
 
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !merchantProfile) return;
+
+    // 1. VALIDASI PASAR (PENTING!)
+    if (!merchantProfile.market_id) {
+      showToast(
+        "Error: Data Toko tidak memiliki ID Pasar. Hubungi Admin.",
+        "error",
+      );
+      return;
+    }
+
     setIsUploading(true);
 
     try {
       let imageUrl = null;
+      // Upload Gambar
       if (imageFile) {
         const fileExt = imageFile.name.split(".").pop();
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
@@ -76,23 +87,34 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
         imageUrl = urlData.publicUrl;
       }
 
+      // 2. INSERT KE DATABASE (DENGAN PERBAIKAN)
       const { error } = await supabase.from("products").insert({
-        merchant_id: user.id,
-        market_id: merchantProfile?.managed_market_id || null,
+        merchant_id: merchantProfile.id, // Pastikan pakai ID Merchant (bukan user_id auth)
+
+        // --- PERBAIKAN UTAMA DI SINI ---
+        market_id: merchantProfile.market_id, // Bukan managed_market_id
+
         name: newProduct.name,
         price: parseInt(newProduct.price),
         stock: parseInt(newProduct.stock),
         description: newProduct.description,
         unit: newProduct.unit,
         image_url: imageUrl,
-        status: "pending",
+
+        // --- STATUS WAJIB PENDING (HURUF BESAR) ---
+        status: "PENDING",
       });
 
       if (error) throw error;
 
-      showToast("Produk berhasil diajukan!", "success");
+      showToast(
+        "Produk berhasil diajukan! Menunggu verifikasi admin.",
+        "success",
+      );
       setShowAddModal(false);
       fetchProducts();
+
+      // Reset Form
       setNewProduct({
         name: "",
         price: "",
@@ -102,9 +124,19 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
       });
       setImageFile(null);
     } catch (err: any) {
-      showToast(err.message, "error");
+      console.error(err);
+      showToast("Gagal upload: " + err.message, "error");
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Hapus produk ini?")) return;
+    const { error } = await supabase.from("products").delete().eq("id", id);
+    if (!error) {
+      showToast("Produk dihapus", "success");
+      fetchProducts();
     }
   };
 
@@ -195,7 +227,10 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
                       Stok: {p.stock} {p.unit}
                     </p>
                   </div>
-                  <button className="p-2 text-slate-300 hover:text-red-500 transition-colors">
+                  <button
+                    onClick={() => handleDelete(p.id)}
+                    className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                  >
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -320,13 +355,16 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
 
 // --- INTERNAL HELPERS ---
 const StatusBadge = ({ status }: { status: string }) => {
-  if (status === "approved")
+  // Samakan case-nya (biasanya uppercase dari DB)
+  const s = status?.toUpperCase();
+
+  if (s === "APPROVED")
     return (
       <span className="bg-green-500 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 shadow-md">
         <CheckCircle size={8} /> Aktif
       </span>
     );
-  if (status === "pending")
+  if (s === "PENDING")
     return (
       <span className="bg-orange-400 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 shadow-md">
         <Clock size={8} /> Verifikasi

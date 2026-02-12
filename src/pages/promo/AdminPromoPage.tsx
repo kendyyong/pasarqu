@@ -85,7 +85,6 @@ export const AdminPromoPage: React.FC = () => {
         if (profileError) throw profileError;
 
         showToast("Akses diajukan! Menunggu verifikasi Pusat.", "success");
-        // REDIRECT KE WAITING APPROVAL
         setTimeout(() => {
           navigate("/waiting-approval");
         }, 1500);
@@ -172,10 +171,10 @@ export const AdminPromoPage: React.FC = () => {
                 <LayoutDashboard size={32} />
               </div>
               <h2 className="text-2xl font-black text-slate-800 tracking-tight">
-                Daftar Admin
+                Akses Admin
               </h2>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-2">
-                Permohonan Akses Kelola Wilayah
+                Daftar atau Masuk Dashboard Wilayah
               </p>
             </div>
 
@@ -271,6 +270,19 @@ export const AdminPromoPage: React.FC = () => {
                 )}
               </button>
             </form>
+
+            {/* --- BAGIAN LOGIN ADMIN --- */}
+            <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.15em] mb-3">
+                Sudah Terdaftar Sebagai Admin?
+              </p>
+              <button
+                onClick={() => navigate("/admin/login")}
+                className="w-full py-3 bg-white border border-slate-200 text-slate-800 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+              >
+                MASUK DASHBOARD <Lock size={14} className="text-teal-700" />
+              </button>
+            </div>
           </div>
         </div>
       </main>
@@ -285,7 +297,7 @@ export const AdminPromoPage: React.FC = () => {
 };
 
 const BenefitItem = ({ icon, title, desc }: any) => (
-  <div className="flex gap-5">
+  <div className="flex gap-5 text-left">
     <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shrink-0 shadow-md border border-slate-50">
       {icon}
     </div>

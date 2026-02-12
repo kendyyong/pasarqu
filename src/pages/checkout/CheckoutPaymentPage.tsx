@@ -7,7 +7,7 @@ import {
   ChevronLeft,
   MapPin,
   ChevronRight,
-  Bike, // Menggunakan Bike untuk ikon motor
+  Bike,
   Store,
   Wallet,
   CreditCard,
@@ -45,6 +45,7 @@ export const CheckoutPaymentPage = ({
   useEffect(() => {
     const fetchData = async () => {
       if (cart.length > 0 && isOpen) {
+        // Ambil Biaya Pasar
         const { data: market } = await supabase
           .from("markets")
           .select("fee_to_customer, fee_to_merchant")
@@ -57,10 +58,11 @@ export const CheckoutPaymentPage = ({
             to_merchant: market.fee_to_merchant,
           });
 
+        // Cek Deposit Merchant
         const { data: merchant } = await supabase
           .from("merchants")
           .select("deposit_balance")
-          .eq("id", cart[0].market_id)
+          .eq("id", cart[0].merchant_id)
           .single();
 
         setMerchantBalance(merchant?.deposit_balance || 0);
@@ -80,25 +82,39 @@ export const CheckoutPaymentPage = ({
 
   const handleProcessOrder = async () => {
     if (shippingMethod === "PICKUP" && merchantBalance < fees.to_merchant) {
-      showToast("Toko tidak menerima Ambil Sendiri saat ini.", "error");
+      showToast(
+        "Toko tidak menerima Ambil Sendiri saat ini (Saldo Deposit Habis).",
+        "error",
+      );
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const { error: orderError } = await supabase.from("orders").insert({
+      // PROSES SIMPAN ORDER
+      // Trik: Gunakan objek dengan nama kolom yang sudah dipastikan di database
+      const orderData = {
         customer_id: user?.id,
         merchant_id: cart[0].merchant_id,
+        market_id: cart[0].market_id,
         total_amount: totalToPay,
         shipping_method: shippingMethod,
         payment_method: paymentMethod,
         fee_customer: fees.to_customer,
         fee_merchant: fees.to_merchant,
         status: "PENDING",
-      });
+      };
 
-      if (orderError) throw orderError;
+      const { error: orderError } = await supabase
+        .from("orders")
+        .insert([orderData]); // Masukkan sebagai array
 
+      if (orderError) {
+        // Jika masih error kolom, kemungkinan cache API. Kita tampilkan error aslinya.
+        throw orderError;
+      }
+
+      // Jika ambil sendiri, potong saldo merchant
       if (shippingMethod === "PICKUP") {
         await supabase.rpc("deduct_merchant_balance", {
           m_id: cart[0].merchant_id,
@@ -113,7 +129,8 @@ export const CheckoutPaymentPage = ({
         onClose();
       }, 2500);
     } catch (err: any) {
-      showToast(err.message, "error");
+      console.error("Detail Error Checkout:", err);
+      showToast(`Gagal: ${err.message}`, "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -131,7 +148,7 @@ export const CheckoutPaymentPage = ({
             <ChevronLeft size={28} className="text-teal-600" />
           </button>
           <div className="h-8 w-[1px] bg-slate-200 mx-2 hidden md:block" />
-          <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase">
+          <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase text-left">
             Checkout Pesanan
           </h2>
         </div>
@@ -164,7 +181,7 @@ export const CheckoutPaymentPage = ({
                 {/* ALAMAT */}
                 <section className="bg-white rounded-3xl p-6 shadow-sm relative overflow-hidden text-left border border-slate-100">
                   <div className="absolute top-0 left-0 w-full h-[4px] bg-[repeating-linear-gradient(45deg,#0d9488,#0d9488_10px,#ffffff_10px,#ffffff_20px,#f59e0b_20px,#f59e0b_30px,#ffffff_30px,#ffffff_40px)]"></div>
-                  <div className="flex items-start gap-4">
+                  <div className="flex items-start gap-4 mt-2">
                     <div className="p-3 bg-teal-50 text-teal-600 rounded-2xl">
                       <MapPin size={24} />
                     </div>
@@ -186,7 +203,7 @@ export const CheckoutPaymentPage = ({
                   </div>
                 </section>
 
-                {/* DAFTAR PRODUK */}
+                {/* PRODUK */}
                 <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                   <div className="p-6 border-b border-slate-50 flex items-center gap-2">
                     <Store className="text-slate-400" size={20} />
@@ -229,7 +246,6 @@ export const CheckoutPaymentPage = ({
 
               {/* KOLOM KANAN */}
               <div className="space-y-4">
-                {/* OPSI PENGIRIMAN */}
                 <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 text-left">
                   <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
                     Metode Pengiriman
@@ -239,11 +255,10 @@ export const CheckoutPaymentPage = ({
                       onClick={() => setShippingMethod("COURIER")}
                       className={`p-4 rounded-2xl border-2 flex flex-col items-center gap-2 transition-all ${shippingMethod === "COURIER" ? "border-teal-500 bg-teal-50 text-teal-700 shadow-md shadow-teal-500/10" : "border-slate-50 bg-slate-50 text-slate-400 hover:border-slate-200"}`}
                     >
-                      <Bike size={24} /> {/* Diganti menjadi ikon motor */}
+                      <Bike size={24} />
                       <span className="text-[10px] font-black uppercase">
                         Kurir
-                      </span>{" "}
-                      {/* Diganti menjadi "Kurir" */}
+                      </span>
                     </button>
                     <button
                       disabled={merchantBalance < fees.to_merchant}
@@ -259,22 +274,20 @@ export const CheckoutPaymentPage = ({
                   <div className="p-4 bg-slate-50 rounded-2xl flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
                       <Clock size={16} className="text-teal-600" /> Estimasi
-                      Tiba
                     </div>
-                    <span className="text-xs font-black text-slate-800 tracking-tighter">
+                    <span className="text-xs font-black text-slate-800 tracking-tighter uppercase">
                       HARI INI (30-60 MNT)
                     </span>
                   </div>
                 </section>
 
-                {/* RINGKASAN PEMBAYARAN */}
                 <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4 text-left">
                   <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">
                     Ringkasan Biaya
                   </h3>
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm font-bold text-slate-500">
-                      <span>Total Harga Produk</span>
+                      <span>Total Produk</span>
                       <span>Rp {subtotal.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-sm font-bold text-slate-500">
@@ -302,7 +315,6 @@ export const CheckoutPaymentPage = ({
                         Bayar Tunai (COD)
                       </span>
                     </div>
-
                     <button
                       onClick={handleProcessOrder}
                       disabled={isSubmitting || cart.length === 0}
@@ -317,7 +329,6 @@ export const CheckoutPaymentPage = ({
                   </div>
                 </section>
 
-                {/* SECURITY FOOTER */}
                 <div className="flex flex-col items-center gap-2 opacity-30 pt-4">
                   <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">
                     <ShieldCheck size={18} /> Proteksi Pasarqu 2026
