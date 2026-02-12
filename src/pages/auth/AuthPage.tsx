@@ -1,220 +1,255 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { supabase } from '../../lib/supabaseClient';
-import { useToast } from '../../contexts/ToastContext';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { 
-  Mail, Lock, ArrowRight, Loader2, Store, Bike, 
-  ShieldCheck, ChevronLeft, LayoutDashboard
-} from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { useNavigate, Link, useLocation } from "react-router-dom";
+import { supabase } from "../../lib/supabaseClient";
+import { useToast } from "../../contexts/ToastContext";
+import {
+  Eye,
+  EyeOff,
+  Mail,
+  Lock,
+  LogIn,
+  Store,
+  Bike,
+  ShieldCheck,
+  ArrowLeft,
+  ArrowRight,
+} from "lucide-react";
+import { GoogleLoginButton } from "../../components/GoogleLoginButton";
 
-export const AuthPage: React.FC = () => {
-  const { login } = useAuth();
-  const { showToast } = useToast();
+export const AuthPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { showToast } = useToast();
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({ identifier: '', password: '' });
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [formData, setFormData] = useState({ identifier: "", password: "" });
 
-  // --- LOGIKA DETEKSI ROLE ---
   const params = new URLSearchParams(location.search);
-  const currentRole = params.get('role');
+  const roleParam = params.get("role");
 
-  const getRegistrationLink = () => {
-    switch (currentRole) {
-      case 'MERCHANT':
-        return { text: "Belum punya akun Toko?", linkText: "Daftar Toko", path: "/promo/toko" };
-      case 'COURIER':
-        return { text: "Belum punya akun Kurir?", linkText: "Daftar Kurir", path: "/promo/kurir" };
-      case 'ADMIN_CANDIDATE':
-      case 'LOCAL_ADMIN':
-        return { text: "Belum punya akun Mitra?", linkText: "Daftar Mitra Zona", path: "/promo/admin" };
-      default:
-        return { text: "Belum punya akun pelanggan?", linkText: "Daftar Sekarang", path: "/register" };
-    }
-  };
-
-  const regInfo = getRegistrationLink();
-
-  // Konfigurasi Tampilan Berdasarkan Role
-  const [roleUI, setRoleUI] = useState({
-    title: 'Selamat Datang',
-    subtitle: 'Masuk untuk mulai bertransaksi',
-    icon: <LayoutDashboard size={28} className="text-white" />
+  const [uiConfig, setUiConfig] = useState({
+    title: "Masuk",
+    subtitle: "Silakan masuk ke akun Anda",
+    icon: <LogIn size={20} className="text-teal-600" />,
+    color: "bg-teal-600",
+    regPath: "/register",
+    regLabel: "Daftar Akun Baru",
   });
 
   useEffect(() => {
-    if (currentRole === 'MERCHANT') {
-      setRoleUI({
-        title: 'Login Toko',
-        subtitle: 'Kelola penjualan & produk Anda',
-        icon: <Store size={28} className="text-white" />
+    if (roleParam === "MERCHANT") {
+      setUiConfig({
+        title: "Seller Centre",
+        subtitle: "Kelola operasional toko Anda",
+        icon: <Store size={20} className="text-orange-500" />,
+        color: "bg-slate-800",
+        regPath: "/promo/toko",
+        regLabel: "Ingin Membuka Toko?",
       });
-    } else if (currentRole === 'COURIER') {
-      setRoleUI({
-        title: 'Login Kurir',
-        subtitle: 'Akses orderan & pengiriman',
-        icon: <Bike size={28} className="text-white" />
+    } else if (roleParam === "COURIER") {
+      setUiConfig({
+        title: "Driver Portal",
+        subtitle: "Pantau pengiriman & penghasilan",
+        icon: <Bike size={20} className="text-blue-500" />,
+        color: "bg-slate-800",
+        regPath: "/promo/kurir",
+        regLabel: "Daftar Jadi Kurir",
       });
-    } else if (currentRole === 'ADMIN_CANDIDATE' || currentRole === 'LOCAL_ADMIN') {
-      setRoleUI({
-        title: 'Mitra Zona',
-        subtitle: 'Panel kendali wilayah',
-        icon: <ShieldCheck size={28} className="text-white" />
+    } else if (roleParam === "LOCAL_ADMIN") {
+      setUiConfig({
+        title: "Admin Panel",
+        subtitle: "Manajemen wilayah & pasar",
+        icon: <ShieldCheck size={20} className="text-teal-600" />,
+        color: "bg-teal-900",
+        regPath: "/promo/admin",
+        regLabel: "Info Kemitraan Wilayah",
       });
     }
-  }, [currentRole]);
+  }, [roleParam]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLoading) return;
-    setIsLoading(true);
+    setLoading(true);
 
     try {
       let finalEmail = formData.identifier.trim();
       const isPhone = /^\d+$/.test(finalEmail);
       if (isPhone) {
-        if (finalEmail.startsWith('0')) finalEmail = finalEmail.substring(1);
+        if (finalEmail.startsWith("0")) finalEmail = finalEmail.substring(1);
         finalEmail = `${finalEmail}@pasarqu.com`;
       }
 
-      const success = await login(finalEmail, formData.password);
-      
-      if (success) {
-          const { data: profile } = await supabase.from('profiles').select('role, is_verified, name').eq('email', finalEmail).single();
-          
-          if (!profile) throw new Error("Profil tidak ditemukan.");
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: finalEmail,
+        password: formData.password,
+      });
 
-          if ((profile.role === 'MERCHANT' || profile.role === 'COURIER' || profile.role === 'LOCAL_ADMIN') && !profile.is_verified) {
-              showToast("Akun Anda sedang diverifikasi Admin.", "info");
-          } else {
-              showToast(`Halo, ${profile.name || 'User'}!`, "success");
+      if (error) throw error;
+
+      if (data.user) {
+        // AMBIL DATA ROLE DAN STATUS VERIFIKASI
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role, name, is_verified")
+          .eq("id", data.user.id)
+          .single();
+
+        if (profile) {
+          // LOGIKA CEK VERIFIKASI UNTUK MITRA
+          if (!profile.is_verified && profile.role !== "CUSTOMER") {
+            showToast("Akun Anda sedang dalam verifikasi Admin.", "info");
+            navigate("/waiting-approval");
+            return;
           }
-          
-          setTimeout(() => {
-            if(profile.role === 'MERCHANT') window.location.href = '/merchant-dashboard';
-            else if(profile.role === 'COURIER') window.location.href = '/courier-dashboard';
-            else if(profile.role === 'LOCAL_ADMIN' || profile.role === 'ADMIN_CANDIDATE') window.location.href = '/admin-wilayah';
-            else window.location.href = '/customer-dashboard'; 
-          }, 800);
 
-      } else {
-          showToast("Email/HP atau Password salah.", "error");
+          showToast(`Selamat bekerja, ${profile.name}!`, "success");
+          setTimeout(() => {
+            if (profile.role === "MERCHANT") navigate("/merchant-dashboard");
+            else if (profile.role === "COURIER") navigate("/courier-dashboard");
+            else if (profile.role === "LOCAL_ADMIN") navigate("/admin-wilayah");
+            else navigate("/");
+          }, 800);
+        }
       }
-    } catch (err: any) {
-      showToast(err.message, "error");
+    } catch (error: any) {
+      showToast("Email/HP atau Password salah", "error");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 font-sans relative overflow-hidden">
-      
-      {/* BACKGROUND DECORATION (Subtle) */}
-      <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-teal-200/40 rounded-full blur-[100px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-slate-200/50 rounded-full blur-[100px] pointer-events-none"></div>
-
-      <div className="w-full max-w-md relative z-10">
-        
-        {/* TOMBOL KEMBALI */}
-        <Link to="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-teal-600 transition-colors mb-6 font-bold text-[10px] uppercase tracking-widest pl-2">
-            <ChevronLeft size={16}/> Kembali ke Beranda
-        </Link>
-
-        {/* CARD UTAMA */}
-        <div className="bg-white rounded-[2.5rem] shadow-xl overflow-hidden border border-gray-100">
-            
-            {/* HEADER HIJAU TOSCA */}
-            <div className="bg-teal-600 p-8 pt-10 text-center relative overflow-hidden">
-                {/* Dekorasi Header */}
-                <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white to-transparent pointer-events-none"></div>
-                
-                <div className="relative z-10">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl shadow-sm mb-4 border border-white/10">
-                        {roleUI.icon}
-                    </div>
-                    <h1 className="text-2xl font-black text-white tracking-tight mb-1">
-                        {roleUI.title}
-                    </h1>
-                    <p className="text-teal-100 text-[11px] font-bold uppercase tracking-widest">
-                        {roleUI.subtitle}
-                    </p>
-                </div>
+    <div className="min-h-screen bg-[#f5f5f5] flex flex-col font-sans">
+      <div className="bg-white shadow-sm sticky top-0 z-50">
+        <div className="max-w-[1200px] mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-4 text-left">
+            <div
+              onClick={() => navigate("/")}
+              className="cursor-pointer flex items-center gap-2"
+            >
+              <div className="text-2xl font-black text-teal-600 tracking-tighter flex items-center gap-1">
+                <span className="bg-teal-600 text-white px-1.5 rounded">P</span>{" "}
+                PASARQU
+              </div>
             </div>
-
-            {/* FORM SECTION */}
-            <div className="p-8 pt-8">
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  <InputGroup 
-                    label="Email atau Nomor HP" 
-                    icon={<Mail size={18}/>} 
-                    type="text" 
-                    placeholder="nama@email.com / 0812..." 
-                    value={formData.identifier} 
-                    onChange={(v:string)=>setFormData({...formData, identifier: v})} 
-                  />
-                  
-                  <InputGroup 
-                    label="Kata Sandi" 
-                    icon={<Lock size={18}/>} 
-                    type="password" 
-                    placeholder="••••••••" 
-                    value={formData.password} 
-                    onChange={(v:string)=>setFormData({...formData, password: v})} 
-                  />
-
-                  {/* TOMBOL LOGIN (NAVY BLUE) */}
-                  <button 
-                    disabled={isLoading} 
-                    className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-lg hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-3 mt-4 disabled:opacity-70 group"
-                  >
-                      {isLoading ? <Loader2 className="animate-spin text-teal-400"/> : (
-                        <>Masuk Akun <ArrowRight size={16} className="text-teal-400 group-hover:translate-x-1 transition-transform"/></>
-                      )}
-                  </button>
-                </form>
-
-                {/* LINK DAFTAR (ORANGE TERANG) */}
-                <div className="mt-8 text-center border-t border-gray-100 pt-6">
-                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mb-2">
-                     {regInfo.text}
-                   </p>
-                   
-                   <Link 
-                     to={regInfo.path} 
-                     className="inline-flex items-center gap-1 text-orange-500 font-black text-[11px] uppercase tracking-widest hover:text-orange-600 transition-colors border-b-2 border-transparent hover:border-orange-500 pb-0.5"
-                   >
-                     {regInfo.linkText} <ArrowRight size={12}/>
-                   </Link>
-                </div>
+            <div className="text-xl text-slate-800 hidden md:block mt-1 font-bold">
+              {uiConfig.title}
             </div>
+          </div>
+          <Link to="/help" className="text-teal-600 text-sm font-bold">
+            Butuh Bantuan?
+          </Link>
         </div>
-        
-        {/* Footer Copyright */}
-        <p className="text-center text-[10px] text-slate-400 font-bold mt-6 uppercase tracking-widest opacity-60">
-            © Pasarqu Indonesia Aman & Terpercaya
-        </p>
+      </div>
+
+      <div
+        className={`flex-1 flex items-center justify-center p-4 transition-colors duration-500 ${uiConfig.color}`}
+      >
+        <div className="w-full max-w-[1000px] flex items-center justify-center md:justify-end min-h-[500px]">
+          <div className="hidden lg:flex flex-col text-white mr-20 max-w-md animate-in slide-in-from-left duration-500 text-left">
+            <h1 className="text-5xl font-black mb-4 leading-tight uppercase tracking-tighter">
+              Mulai Langkah <br /> Digital Anda.
+            </h1>
+            <p className="text-lg font-medium opacity-80 leading-relaxed uppercase text-[12px] tracking-widest">
+              {uiConfig.subtitle}. Bersama Pasarqu, kelola operasional lebih
+              cerdas dan efisien.
+            </p>
+          </div>
+
+          <div className="bg-white w-full max-w-[400px] rounded-[2rem] shadow-2xl overflow-hidden p-10 text-left">
+            <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2 uppercase tracking-tight">
+              {uiConfig.icon} {uiConfig.title}
+            </h2>
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Email atau Nomor HP"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-teal-600 outline-none text-sm font-bold transition-all"
+                  onChange={(e) =>
+                    setFormData({ ...formData, identifier: e.target.value })
+                  }
+                  required
+                />
+                <Mail
+                  className="absolute left-3 top-3.5 text-slate-400"
+                  size={18}
+                />
+              </div>
+
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Password"
+                  className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-teal-600 outline-none text-sm font-bold transition-all"
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
+                  required
+                />
+                <Lock
+                  className="absolute left-3 top-3.5 text-slate-400"
+                  size={18}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3.5 text-slate-400"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+
+              <button
+                disabled={loading}
+                className="w-full bg-slate-900 text-white font-black py-4 rounded-xl shadow-lg hover:bg-teal-600 transition-all uppercase text-[10px] tracking-[0.2em] mt-2 active:scale-95"
+              >
+                {loading ? "Memproses..." : "MASUK"}
+              </button>
+            </form>
+
+            {roleParam === null ? (
+              <>
+                <div className="relative my-6 text-center">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-100"></div>
+                  </div>
+                  <span className="relative bg-white px-2 text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                    Atau
+                  </span>
+                </div>
+                <GoogleLoginButton />
+                <div className="mt-8 text-center text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                  Baru di Pasarqu?{" "}
+                  <Link
+                    to="/register"
+                    className="text-teal-600 font-black hover:underline ml-1"
+                  >
+                    Daftar
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <div className="mt-10 pt-6 border-t border-slate-50 space-y-4">
+                <button
+                  onClick={() => navigate(uiConfig.regPath)}
+                  className="w-full py-3 bg-teal-50 border border-teal-100 rounded-xl text-[10px] font-black text-teal-600 uppercase tracking-widest hover:bg-teal-600 hover:text-white transition-all flex items-center justify-center gap-2"
+                >
+                  {uiConfig.regLabel} <ArrowRight size={14} />
+                </button>
+                <button
+                  onClick={() => navigate("/portal")}
+                  className="w-full text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] hover:text-teal-600 transition-colors"
+                >
+                  Bukan {uiConfig.title}? Ganti Jenis Akun
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 };
-
-// Komponen Input dengan Fokus Hijau Tosca
-const InputGroup = ({ icon, label, value, onChange, type = "text", placeholder }: any) => (
-  <div className="space-y-1.5 text-left group">
-      <label className="text-[10px] font-black text-slate-500 uppercase ml-4 tracking-widest group-focus-within:text-teal-600 transition-colors">{label}</label>
-      <div className="relative">
-          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-teal-600 transition-colors">{icon}</div>
-          <input 
-            type={type}
-            placeholder={placeholder}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-full pl-14 pr-6 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-sm font-bold text-slate-900 placeholder:text-gray-300 focus:bg-white focus:border-teal-500 outline-none transition-all shadow-inner" 
-            required 
-          />
-      </div>
-  </div>
-);

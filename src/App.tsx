@@ -1,272 +1,200 @@
 import React, { useState, useEffect } from "react";
+import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabaseClient";
+import { useToast } from "../../contexts/ToastContext";
+import { useNavigate } from "react-router-dom";
 import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  useNavigate,
-  useLocation,
-} from "react-router-dom";
-import { Loader2 } from "lucide-react";
+  Loader2,
+  Clock,
+  MessageCircle,
+  Wallet,
+  ArrowUpRight,
+  History,
+  Power,
+} from "lucide-react";
 
-// CONTEXTS
-import { ConfigProvider } from "./contexts/ConfigContext";
-import { MarketProvider, useMarket } from "./contexts/MarketContext";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { ChatProvider } from "./contexts/ChatContext";
-import { ToastProvider, useToast } from "./contexts/ToastContext";
-import { supabase } from "./lib/supabaseClient";
+// KOMPONEN MODULAR
+import { CourierSidebar } from "./components/CourierSidebar";
+import { CourierBidArea } from "./components/CourierBidArea";
+import { CourierProfile } from "./components/CourierProfile";
+// Reuse modal dari merchant (Pastikan path ini benar)
+import { LocationPickerModal } from "../merchant/components/LocationPickerModal";
 
-// HOOKS
-import { useMarketCheck } from "./hooks/useMarketCheck";
-
-// COMPONENTS
-import { MobileLayout } from "./components/MobileLayout";
-import { HeroOnboarding } from "./components/HeroOnboarding";
-import { GhostBar } from "./components/GhostBar";
-import { CartDrawer } from "./components/CartDrawer";
-import { ProtectedRoute } from "./components/ProtectedRoute";
-import { AppHeader } from "./components/AppHeader";
-import { HomeMenuGrid } from "./components/HomeMenuGrid";
-
-// PAGES
-import { Home } from "./pages/Home";
-import { LocalAdminDashboard } from "./pages/admin/LocalAdminDashboard";
-import { SuperAdminDashboard } from "./pages/admin/SuperAdminDashboard";
-import { MerchantDashboard } from "./pages/merchant/MerchantDashboard";
-import { CourierDashboard } from "./pages/courier/CourierDashboard";
-import { CustomerDashboard } from "./pages/customer/CustomerDashboard";
-import { ShopDetail } from "./pages/customer/ShopDetail";
-import { ProductDetail } from "./pages/customer/ProductDetail";
-import { AuthPage } from "./pages/auth/AuthPage";
-import { RegisterPage } from "./pages/auth/RegisterPage";
-import { CheckoutPaymentPage } from "./pages/checkout/CheckoutPaymentPage";
-import { PortalLoginPage } from "./pages/auth/TopBarLoginPage";
-import { MerchantPromoPage } from "./pages/promo/MerchantPromoPage";
-import { CourierPromoPage } from "./pages/promo/CourierPromoPage";
-import { AdminPromoPage } from "./pages/promo/AdminPromoPage";
-import { MarketSelectionPage } from "./pages/MarketSelection/MarketSelectionPage";
-import {
-  MerchantLogin,
-  CourierLogin,
-  AdminLogin,
-  SuperAdminLogin,
-} from "./pages/auth/PartnerLoginPages";
-
-// --- KOMPONEN BERANDA (MarketplaceApp) ---
-const MarketplaceApp = () => {
-  const { user } = useAuth();
-  const marketContext = useMarket();
+// PASTIKAN ADA KATA 'export' DI BAWAH INI
+export const CourierDashboard: React.FC = () => {
+  const { user, logout } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
 
-  const cart = marketContext?.cart || [];
-  const updateQty = marketContext?.updateQty || (() => {});
-  const removeFromCart = marketContext?.removeFromCart || (() => {});
+  const [activeTab, setActiveTab] = useState("bid");
+  const [isOnline, setIsOnline] = useState(false);
+  const [courierData, setCourierData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [currentCoords, setCurrentCoords] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
 
-  const [activeTab, setActiveTab] = useState<
-    "home" | "search" | "orders" | "account"
-  >("home");
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const fetchProfile = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*, markets(name)")
+        .eq("id", user.id)
+        .single();
 
-  // State untuk Nama dan Foto Profil
-  const [userName, setUserName] = useState<string>("Tamu");
-  const [userAvatar, setUserAvatar] = useState<string | null>(null);
-
-  const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-
-  useEffect(() => {
-    const fetchUserData = async () => {
-      if (user?.id) {
-        // Ambil data dari tabel profiles
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("name, avatar_url")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        // LOGIKA IDENTITAS: Prioritas Tabel Profile > Metadata Google > Email
-        const finalName =
-          profileData?.name ||
-          user.user_metadata?.full_name ||
-          user.email?.split("@")[0] ||
-          "User";
-
-        // LOGIKA FOTO: Prioritas Tabel Profile > Metadata Google
-        const finalAvatar =
-          profileData?.avatar_url || user.user_metadata?.avatar_url || null;
-
-        setUserName(finalName);
-        setUserAvatar(finalAvatar);
-      } else {
-        setUserName("Tamu");
-        setUserAvatar(null);
+      if (error) throw error;
+      if (data) {
+        setCourierData(data);
+        setIsOnline(data.is_active || false);
+        if (data.latitude)
+          setCurrentCoords({ lat: data.latitude, lng: data.longitude });
       }
-    };
-    fetchUserData();
-  }, [user]);
-
-  const handleCheckoutProcess = () => {
-    setIsCartOpen(false);
-    user ? setIsCheckoutOpen(true) : navigate("/register");
+    } catch (err: any) {
+      console.error("Fetch profile error:", err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleUserClick = () =>
-    user ? navigate("/customer-dashboard") : navigate("/login");
+  useEffect(() => {
+    fetchProfile();
+  }, [user]);
 
-  const renderHomeContent = () => (
-    <div className="bg-[#f5f5f5] min-h-screen text-left pt-[86px] md:pt-[105px]">
-      <AppHeader
-        userName={userName}
-        userAvatar={userAvatar}
-        cartCount={totalCartCount}
-        onCartClick={() => setIsCartOpen(true)}
-        onSearch={setSearchQuery}
-        onUserClick={handleUserClick}
-      />
+  const handleLogout = async () => {
+    if (window.confirm("Selesai bekerja & keluar?")) {
+      await logout();
+      navigate("/portal");
+    }
+  };
 
-      <HeroOnboarding />
-      <HomeMenuGrid />
-      <Home searchQuery={searchQuery} />
+  const toggleOnline = async () => {
+    if (!courierData?.is_verified) {
+      showToast("Akun belum diverifikasi Admin", "error");
+      return;
+    }
+    const newState = !isOnline;
+    const { error } = await supabase
+      .from("profiles")
+      .update({ is_active: newState })
+      .eq("id", user?.id);
+    if (!error) {
+      setIsOnline(newState);
+      showToast(
+        newState ? "ONLINE: Siap Terima Order" : "OFFLINE",
+        newState ? "success" : "info",
+      );
+    }
+  };
 
-      <CartDrawer
-        isOpen={isCartOpen}
-        onClose={() => setIsCartOpen(false)}
-        cart={cart}
-        onUpdateQty={updateQty}
-        onRemove={removeFromCart}
-        onCheckout={handleCheckoutProcess}
-      />
-      <CheckoutPaymentPage
-        isOpen={isCheckoutOpen}
-        onClose={() => setIsCheckoutOpen(false)}
-      />
-    </div>
-  );
-
-  return (
-    <MobileLayout
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      onSearch={setSearchQuery}
-      onCartClick={() => setIsCartOpen(true)}
-      cartCount={totalCartCount}
-    >
-      {renderHomeContent()}
-    </MobileLayout>
-  );
-};
-
-// --- MAIN ROUTING CONTENT ---
-const MainContent = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { isChecking, selectedMarket } = useMarketCheck();
-
-  if (isChecking)
+  if (loading)
     return (
-      <div className="h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <Loader2 className="animate-spin text-teal-600" size={40} />
       </div>
     );
 
-  const bypassRoutes = [
-    "/login",
-    "/register",
-    "/portal",
-    "/promo",
-    "/super-admin",
-    "/checkout",
-  ];
-  const isBypassRoute = bypassRoutes.some((route) =>
-    location.pathname.startsWith(route),
-  );
-
-  if (!selectedMarket && !isBypassRoute) return <MarketSelectionPage />;
+  // VIEW BELUM VERIFIKASI
+  if (courierData && !courierData.is_verified) {
+    return (
+      <div className="min-h-screen bg-[#F3F4F6] flex items-center justify-center p-6 text-center">
+        <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in-95">
+          <Clock
+            size={60}
+            className="text-teal-600 mx-auto mb-6 animate-pulse"
+          />
+          <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight">
+            Menunggu Verifikasi
+          </h1>
+          <p className="text-[11px] text-slate-500 font-bold uppercase mt-4 leading-relaxed tracking-widest px-2 text-center">
+            Pendaftaran kurir{" "}
+            <span className="text-teal-600">"{courierData.name}"</span> sedang
+            ditinjau.
+          </p>
+          <div className="mt-8 space-y-3">
+            <button
+              onClick={() => window.open("https://wa.me/628123456789")}
+              className="w-full py-4 bg-teal-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg flex items-center justify-center gap-2"
+            >
+              <MessageCircle size={16} /> Chat Admin
+            </button>
+            <button
+              onClick={handleLogout}
+              className="w-full py-4 bg-white border border-slate-200 text-slate-400 rounded-2xl font-black uppercase text-[10px]"
+            >
+              Keluar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <Routes>
-      <Route path="/" element={<MarketplaceApp />} />
-      <Route path="/shop/:merchantId" element={<ShopDetail />} />
-      <Route path="/product/:productId" element={<ProductDetail />} />
-      <Route path="/portal" element={<PortalLoginPage />} />
-      <Route path="/login" element={<AuthPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route
-        path="/checkout"
-        element={
-          <div className="pt-16 bg-gray-50 min-h-screen">
-            <CheckoutPaymentPage isOpen={true} onClose={() => navigate("/")} />
+    <div className="min-h-screen bg-[#f4f7f6] flex font-sans">
+      <CourierSidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        isOnline={isOnline}
+        onToggleOnline={toggleOnline}
+        courierData={courierData}
+        onLocationClick={() => setShowLocationModal(true)}
+        onLogout={handleLogout}
+      />
+
+      <main className="flex-1 flex flex-col min-w-0 pb-24 lg:pb-0 text-left">
+        <header className="h-16 bg-white border-b border-slate-200 sticky top-0 z-20 px-6 flex items-center justify-between lg:hidden text-left">
+          <div className="text-lg font-black text-teal-600 tracking-tighter uppercase italic">
+            PASARQU DRIVER
           </div>
-        }
-      />
-      <Route path="/login/toko" element={<MerchantLogin />} />
-      <Route path="/login/kurir" element={<CourierLogin />} />
-      <Route path="/login/admin" element={<AdminLogin />} />
-      <Route path="/login/master" element={<SuperAdminLogin />} />
-      <Route path="/promo/toko" element={<MerchantPromoPage />} />
-      <Route path="/promo/kurir" element={<CourierPromoPage />} />
-      <Route path="/promo/admin" element={<AdminPromoPage />} />
-      <Route
-        path="/admin-wilayah"
-        element={
-          <ProtectedRoute allowedRoles={["LOCAL_ADMIN"]}>
-            <LocalAdminDashboard onBack={() => navigate("/")} />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/super-admin"
-        element={
-          <ProtectedRoute allowedRoles={["SUPER_ADMIN"]}>
-            <SuperAdminDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/merchant-dashboard"
-        element={
-          <ProtectedRoute allowedRoles={["MERCHANT"]}>
-            <MerchantDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/courier-dashboard"
-        element={
-          <ProtectedRoute allowedRoles={["COURIER"]}>
-            <CourierDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/customer-dashboard"
-        element={
-          <ProtectedRoute allowedRoles={["CUSTOMER", "BUYER"]}>
-            <CustomerDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route path="*" element={<MarketplaceApp />} />
-    </Routes>
+          <div
+            onClick={toggleOnline}
+            className={`px-4 py-1.5 rounded-full text-[10px] font-black transition-all cursor-pointer ${isOnline ? "bg-green-100 text-green-600" : "bg-slate-100 text-slate-400"}`}
+          >
+            {isOnline ? "ONLINE" : "OFFLINE"}
+          </div>
+        </header>
+
+        <div className="p-4 md:p-10 max-w-5xl mx-auto w-full">
+          {activeTab === "bid" && (
+            <CourierBidArea isOnline={isOnline} currentCoords={currentCoords} />
+          )}
+          {activeTab === "profile" && (
+            <CourierProfile courierData={courierData} />
+          )}
+          {activeTab === "finance" && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-xl">
+                <p className="text-teal-400 text-[10px] font-black uppercase tracking-widest mb-1">
+                  Total Saldo
+                </p>
+                <h2 className="text-4xl font-black tracking-tighter">
+                  Rp {courierData?.wallet_balance?.toLocaleString() || 0}
+                </h2>
+                <button className="mt-6 px-6 py-3 bg-teal-600 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-teal-700 transition-all">
+                  <ArrowUpRight size={14} /> Tarik Dana
+                </button>
+                <Wallet className="absolute right-[-20px] bottom-[-20px] text-white/5 w-64 h-64 rotate-[-15deg]" />
+              </div>
+            </div>
+          )}
+          {activeTab === "history" && (
+            <div className="py-20 text-center opacity-30 font-black uppercase tracking-widest text-[10px]">
+              <History size={40} className="mx-auto mb-4" /> Riwayat Kosong
+            </div>
+          )}
+        </div>
+      </main>
+
+      {showLocationModal && (
+        <LocationPickerModal
+          merchantProfile={courierData}
+          onClose={() => setShowLocationModal(false)}
+          onUpdate={fetchProfile}
+        />
+      )}
+    </div>
   );
 };
-
-const App = () => (
-  <ToastProvider>
-    <ConfigProvider>
-      <MarketProvider>
-        <AuthProvider>
-          <ChatProvider>
-            <Router>
-              <GhostBar />
-              <MainContent />
-            </Router>
-          </ChatProvider>
-        </AuthProvider>
-      </MarketProvider>
-    </ConfigProvider>
-  </ToastProvider>
-);
-
-export default App;

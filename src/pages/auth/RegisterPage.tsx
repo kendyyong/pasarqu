@@ -1,173 +1,231 @@
-import React, { useState } from 'react';
-import { supabase } from '../../lib/supabaseClient';
-import { useToast } from '../../contexts/ToastContext';
-import { useNavigate, Link } from 'react-router-dom';
-import { 
-  User, Mail, Lock, Phone, MapPin, 
-  ArrowRight, Loader2, ChevronLeft, ShoppingBag 
-} from 'lucide-react';
+import React, { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { supabase } from "../../lib/supabaseClient";
+import { useToast } from "../../contexts/ToastContext";
+import { Eye, EyeOff, User, Mail, Lock } from "lucide-react";
+import { GoogleLoginButton } from "../../components/GoogleLoginButton";
+import { AppLogo } from "../../components/AppLogo"; // Pastikan punya komponen ini, atau ganti text biasa
 
-export const RegisterPage: React.FC = () => {
-  const { showToast } = useToast();
+export const RegisterPage = () => {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
-  
-  const [formData, setFormData] = useState({ 
-    name: '',
-    address: '', 
-    phone: '',
-    email: '', 
-    password: '' 
+  const { showToast } = useToast();
+
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const [formData, setFormData] = useState({
+    fullName: "",
+    email: "",
+    password: "",
   });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLoading) return;
-    
-    console.log("--- MULAI VALIDASI ---");
+    setLoading(true);
 
-    // 1. VALIDASI KETAT SEBELUM KIRIM KE SERVER
     try {
-        if (!formData.name || formData.name.length < 3) throw new Error("Nama minimal 3 huruf.");
-        if (!formData.address || formData.address.length < 5) throw new Error("Alamat harus lengkap.");
-        
-        // Bersihkan nomor HP dari karakter aneh
-        const cleanPhone = formData.phone.replace(/[^0-9]/g, '');
-        if (!cleanPhone || cleanPhone.length < 10) throw new Error("Nomor HP harus valid (Min. 10 angka).");
+      // 1. Validasi Sederhana
+      if (formData.password.length < 6)
+        throw new Error("Password minimal 6 karakter");
 
-        if (!formData.password || formData.password.length < 6) throw new Error("Password WAJIB minimal 6 karakter.");
+      // 2. Daftar ke Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            full_name: formData.fullName, // Simpan nama di metadata
+          },
+        },
+      });
 
-        // 2. GENERATE EMAIL
-        // Jika email kosong, pakai format: nomorHP@pasarqu.com
-        const emailToRegister = formData.email.trim() !== '' 
-            ? formData.email 
-            : `${cleanPhone}@pasarqu.com`;
+      if (error) throw error;
 
-        console.log("Mendaftar dengan:", emailToRegister, "Pass:", formData.password);
-
-        setIsLoading(true);
-
-        // 3. KIRIM KE SUPABASE
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: emailToRegister,
-            password: formData.password,
-            options: { data: { full_name: formData.name } }
+      // 3. Simpan ke Tabel Profiles (Backup Data)
+      if (data.user) {
+        const { error: profileError } = await supabase.from("profiles").insert({
+          id: data.user.id,
+          name: formData.fullName,
+          email: formData.email,
+          role: "CUSTOMER",
+          created_at: new Date().toISOString(),
         });
 
-        if (authError) throw authError;
-
-        // 4. JIKA SUKSES, UPDATE PROFIL
-        if (authData.user) {
-            console.log("Auth sukses, menyimpan profil...");
-            
-            const { error: profileError } = await supabase.from('profiles').upsert({
-                id: authData.user.id,
-                name: formData.name,
-                address: formData.address,
-                phone_number: cleanPhone,
-                email: emailToRegister,
-                role: 'CUSTOMER', 
-                is_verified: true, 
-                created_at: new Date().toISOString()
-            });
-
-            if (profileError) {
-                console.error("Gagal simpan profil:", profileError);
-                // Kita biarkan lolos saja, karena akun auth sudah jadi
-            }
-
-            showToast("Pendaftaran Berhasil! Lanjut...", "success");
-            
-            setTimeout(() => {
-                window.location.href = '/checkout'; 
-            }, 1000);
+        if (profileError && profileError.code !== "23505") {
+          console.error("Profile Error:", profileError);
         }
+      }
 
-    } catch (err: any) {
-        console.error("REGISTER ERROR:", err);
-        
-        // Terjemahkan error 422
-        let msg = err.message;
-        if (msg.includes("422")) msg = "Format data salah. Pastikan password min. 6 karakter.";
-        if (msg.includes("already registered")) msg = "Nomor HP/Email ini sudah terdaftar.";
-        
-        showToast(msg, "error");
-        setIsLoading(false);
+      showToast("Pendaftaran Berhasil! Silakan Login.", "success");
+      navigate("/login"); // Arahkan ke login agar user masuk manual
+    } catch (error: any) {
+      // Handle error duplikat
+      let msg = error.message;
+      if (msg.includes("already registered"))
+        msg = "Email ini sudah terdaftar. Silakan Login.";
+      showToast(msg, "error");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 font-sans flex items-center justify-center p-4 relative overflow-hidden">
-        
-        {/* BACKGROUND */}
-        <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-teal-200/40 rounded-full blur-[100px] pointer-events-none"></div>
-        <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-orange-200/40 rounded-full blur-[100px] pointer-events-none"></div>
-
-        <div className="w-full max-w-md relative z-10">
-            <Link to="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-teal-600 transition-colors mb-6 font-bold text-[10px] uppercase tracking-widest pl-2">
-                <ChevronLeft size={16}/> Kembali ke Beranda
-            </Link>
-
-            <div className="bg-white rounded-[2.5rem] shadow-xl overflow-hidden border border-gray-100">
-                <div className="bg-teal-600 p-8 pt-10 text-center relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white to-transparent pointer-events-none"></div>
-                    <div className="relative z-10">
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl shadow-sm mb-4 border border-white/10 text-white">
-                            <ShoppingBag size={32} />
-                        </div>
-                        <h1 className="text-2xl font-black text-white tracking-tight mb-1">Daftar Pelanggan</h1>
-                        <p className="text-teal-100 text-[11px] font-bold uppercase tracking-widest">Langsung Aktif & Bisa Belanja</p>
-                    </div>
-                </div>
-
-                <div className="p-8 pt-8">
-                    <form onSubmit={handleRegister} className="space-y-4">
-                        <InputGroup label="Nama Lengkap" icon={<User size={18}/>} placeholder="Nama Anda" value={formData.name} onChange={(v: string) => setFormData({...formData, name: v})} required={true}/>
-                        <InputGroup label="Alamat Pengiriman" icon={<MapPin size={18}/>} type="text" placeholder="Jalan, RT/RW, Kelurahan..." value={formData.address} onChange={(v: string) => setFormData({...formData, address: v})} required={true}/>
-                        <InputGroup label="Nomor WhatsApp" icon={<Phone size={18}/>} type="tel" placeholder="0812xxxx (Min 10 angka)" value={formData.phone} onChange={(v: string) => setFormData({...formData, phone: v})} required={true}/>
-                        <InputGroup label="Email (Opsional)" icon={<Mail size={18}/>} type="email" placeholder="nama@email.com (Boleh kosong)" value={formData.email} onChange={(v: string) => setFormData({...formData, email: v})} required={false} />
-                        
-                        {/* PENTING: PASSWORD */}
-                        <div className="space-y-1.5 text-left group">
-                            <label className="text-[10px] font-black text-slate-500 uppercase ml-4 tracking-widest group-focus-within:text-teal-600">Buat Password (Min 6)</label>
-                            <div className="relative">
-                                <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-teal-600"><Lock size={18}/></div>
-                                <input 
-                                    type="password" 
-                                    placeholder="Min. 6 Karakter" 
-                                    value={formData.password} 
-                                    onChange={(e) => setFormData({...formData, password: e.target.value})} 
-                                    className="w-full pl-14 pr-6 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-sm font-bold text-slate-900 placeholder:text-gray-300 focus:bg-white focus:border-teal-500 outline-none transition-all shadow-inner" 
-                                    required
-                                    minLength={6} // Validasi HTML Tambahan
-                                />
-                            </div>
-                        </div>
-
-                        <button disabled={isLoading} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-lg hover:bg-slate-800 active:scale-95 transition-all flex justify-center items-center gap-3 mt-6 disabled:opacity-70 group">
-                            {isLoading ? <Loader2 className="animate-spin text-teal-400"/> : (<>Buat Akun & Bayar <ArrowRight size={16} className="text-teal-400 group-hover:translate-x-1 transition-transform"/></>)} 
-                        </button>
-                    </form>
-
-                    <div className="mt-8 pt-6 border-t border-gray-100 text-center">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mb-2">Sudah punya akun?</p>
-                        <Link to="/login" className="inline-flex items-center gap-1 text-orange-500 font-black text-[11px] uppercase tracking-widest hover:text-orange-600 transition-colors border-b-2 border-transparent hover:border-orange-500 pb-0.5">Masuk Disini <ArrowRight size={12}/></Link>
-                    </div>
-                </div>
+    <div className="min-h-screen bg-[#f5f5f5] flex flex-col font-sans">
+      {/* --- HEADER ALA SHOPEE (Background Putih, Logo Tosca) --- */}
+      <div className="bg-white shadow-sm sticky top-0 z-50">
+        <div className="max-w-[1200px] mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            {/* Klik Logo kembali ke Beranda */}
+            <div
+              onClick={() => navigate("/")}
+              className="cursor-pointer flex items-center gap-2"
+            >
+              <div className="text-2xl md:text-3xl font-black text-teal-600 tracking-tighter flex items-center gap-1">
+                <span className="bg-teal-600 text-white px-1 rounded">P</span>{" "}
+                PASARQU
+              </div>
             </div>
+            <div className="text-xl text-slate-800 hidden md:block mt-1">
+              Daftar
+            </div>
+          </div>
+          <Link
+            to="/help"
+            className="text-teal-600 text-sm font-bold hover:text-teal-700"
+          >
+            Butuh Bantuan?
+          </Link>
         </div>
+      </div>
+
+      {/* --- BODY (Background Hijau Tosca) --- */}
+      <div
+        className="flex-1 flex items-center justify-center p-4 bg-teal-600"
+        style={{
+          backgroundImage: "linear-gradient(135deg, #0d9488 0%, #115e59 100%)",
+        }}
+      >
+        {/* Container Card (Mirip Shopee: Gambar di kiri (opsional), Form di kanan) */}
+        <div className="w-full max-w-[1000px] flex items-center justify-center md:justify-end">
+          {/* Bagian Kiri (Slogan/Gambar - Hidden di Mobile) */}
+          <div className="hidden md:flex flex-col text-white mr-16 max-w-md">
+            <h1 className="text-5xl font-black mb-4">Pasarqu</h1>
+            <p className="text-xl font-medium opacity-90">
+              Platform belanja kebutuhan pasar terlengkap & termurah langsung
+              dari petani lokal.
+            </p>
+          </div>
+
+          {/* Bagian Kanan (Form Card Putih) */}
+          <div className="bg-white w-full max-w-[420px] rounded-lg shadow-2xl overflow-hidden">
+            <div className="p-8">
+              <h2 className="text-xl font-bold text-slate-800 mb-6">
+                Daftar Sekarang
+              </h2>
+
+              {/* Form Input */}
+              <form onSubmit={handleRegister} className="space-y-4">
+                {/* Nama Lengkap */}
+                <div className="relative group">
+                  <input
+                    type="text"
+                    name="fullName"
+                    placeholder="Nama Lengkap"
+                    value={formData.fullName}
+                    onChange={handleChange}
+                    className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-sm focus:outline-none focus:border-teal-600 focus:shadow-sm transition-all text-sm"
+                    required
+                  />
+                  <User
+                    className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-teal-600"
+                    size={18}
+                  />
+                </div>
+
+                {/* Email */}
+                <div className="relative group">
+                  <input
+                    type="email"
+                    name="email"
+                    placeholder="Email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-sm focus:outline-none focus:border-teal-600 focus:shadow-sm transition-all text-sm"
+                    required
+                  />
+                  <Mail
+                    className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-teal-600"
+                    size={18}
+                  />
+                </div>
+
+                {/* Password */}
+                <div className="relative group">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    placeholder="Password (Min. 6 Karakter)"
+                    value={formData.password}
+                    onChange={handleChange}
+                    className="w-full pl-10 pr-10 py-3 border border-slate-300 rounded-sm focus:outline-none focus:border-teal-600 focus:shadow-sm transition-all text-sm"
+                    required
+                  />
+                  <Lock
+                    className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-teal-600"
+                    size={18}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+
+                {/* Tombol Daftar (Warna Oranye Khas CTA) */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-orange-500 text-white font-bold py-3 rounded-sm shadow-md hover:bg-orange-600 active:scale-[0.98] transition-all uppercase text-sm tracking-wide mt-2"
+                >
+                  {loading ? "Memproses..." : "DAFTAR"}
+                </button>
+              </form>
+
+              {/* Divider */}
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200"></div>
+                </div>
+                <div className="relative flex justify-center text-xs text-slate-400 uppercase">
+                  <span className="bg-white px-2">Atau</span>
+                </div>
+              </div>
+
+              {/* Tombol Google */}
+              <div className="mb-6">
+                <GoogleLoginButton />
+              </div>
+
+              {/* Footer Card */}
+              <div className="text-center text-sm text-slate-600">
+                Sudah punya akun?{" "}
+                <Link
+                  to="/login"
+                  className="text-teal-600 font-bold hover:underline"
+                >
+                  Masuk
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
-
-const InputGroup = ({ icon, label, value, onChange, type = "text", placeholder, required = true }: any) => (
-  <div className="space-y-1.5 text-left group">
-      <label className="text-[10px] font-black text-slate-500 uppercase ml-4 tracking-widest group-focus-within:text-teal-600 transition-colors">
-        {label} {!required && <span className="text-slate-300 font-normal italic lowercase">(boleh kosong)</span>}
-      </label>
-      <div className="relative">
-          <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-teal-600 transition-colors">{icon}</div>
-          <input type={type} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} className="w-full pl-14 pr-6 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl text-sm font-bold text-slate-900 placeholder:text-gray-300 focus:bg-white focus:border-teal-500 outline-none transition-all shadow-inner" required={required} />
-      </div>
-  </div>
-);
