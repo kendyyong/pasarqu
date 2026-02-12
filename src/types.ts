@@ -66,6 +66,7 @@ export interface Market {
   image_url?: string;
 }
 
+// --- UPDATE PENTING DI SINI ---
 export interface Product {
   id: string;
   sellerId: string;
@@ -74,6 +75,13 @@ export interface Product {
   name: string;
   description: string;
   price: number;
+
+  // TAMBAHAN BARU (Agar tidak error di Home.tsx)
+  discount?: number; // Persen diskon
+  old_price?: number; // Harga coret
+  status?: string; // 'approved', 'pending'
+  is_active?: boolean; // Status aktif produk
+
   stock: number;
   unit: string;
   category: string;
@@ -84,10 +92,22 @@ export interface Product {
   isPromoted: boolean;
   createdAt: string;
   merchant_id: string;
+
+  // Relasi ke Merchant (Untuk halaman Detail Produk)
+  merchants?: {
+    id: string;
+    name: string;
+    city?: string;
+    is_verified?: boolean;
+    image_url?: string;
+  };
 }
 
 export interface CartItem extends Product {
   quantity: number;
+  // Opsional: properti tambahan jika struktur cart berbeda
+  variant_name?: string;
+  product?: Product; // Helper untuk kompatibilitas code lama
 }
 
 export interface StoreProfile {

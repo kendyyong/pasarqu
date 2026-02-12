@@ -1,14 +1,22 @@
-import React, { useEffect, useState } from "react";
-import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight } from "lucide-react";
-import { useAuth } from "../contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom"; // <--- INI KUNCINYA
+import {
+  ArrowLeft,
+  Trash2,
+  Minus,
+  Plus,
+  ShoppingCart,
+  Store,
+  ArrowRight,
+} from "lucide-react";
 import { CartItem } from "../types";
+import { useNavigate } from "react-router-dom";
 
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   cart: CartItem[];
-  onUpdateQty: (id: string, qty: number) => void;
+  onUpdateQty: (id: string, delta: number) => void;
   onRemove: (id: string) => void;
   onCheckout: () => void;
 }
@@ -22,201 +30,248 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onCheckout,
 }) => {
   const navigate = useNavigate();
-  const [isAnimating, setIsAnimating] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Helper aman untuk mengambil data produk
-  const getPrice = (item: any) => item.product?.price || item.price || 0;
-  const getName = (item: any) =>
-    item.product?.name || item.product_name || item.name || "Produk";
-  const getImage = (item: any) =>
-    item.product?.image_url || item.image_url || null;
-
-  const totalAmount = cart.reduce(
-    (sum, item) => sum + getPrice(item) * item.quantity,
-    0,
-  );
+  // State untuk animasi mounting (agar portal aman)
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (isOpen) setIsAnimating(true);
-    else setTimeout(() => setIsAnimating(false), 300);
-  }, [isOpen]);
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
-  // Handler untuk input ketik manual
-  const handleInputChange = (id: string, value: string) => {
-    // Hanya izinkan angka
-    const cleanValue = value.replace(/[^0-9]/g, "");
-    const numValue = Number(cleanValue);
-
-    // Jika input kosong, biarkan kosong sementara (agar user bisa hapus semua angka dulu)
-    if (cleanValue === "") {
-      onUpdateQty(id, 0); // Di context akan terfilter/tetap 0
-      return;
+  // Default: Pilih semua saat dibuka
+  useEffect(() => {
+    if (isOpen && cart.length > 0) {
+      const allIds = new Set(cart.map((item) => item.id));
+      setSelectedIds(allIds);
     }
+  }, [isOpen, cart.length]);
 
-    onUpdateQty(id, numValue);
+  // Hitung Total
+  const totalPrice = cart.reduce((sum, item) => {
+    if (selectedIds.has(item.id)) {
+      return sum + item.price * item.quantity;
+    }
+    return sum;
+  }, 0);
+
+  const totalSelectedItems = cart.reduce((sum, item) => {
+    if (selectedIds.has(item.id)) return sum + item.quantity;
+    return sum;
+  }, 0);
+
+  // Checkbox Logic
+  const toggleSelection = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedIds(newSet);
   };
 
-  if (!isOpen && !isAnimating) return null;
+  const toggleSelectAll = () => {
+    if (selectedIds.size === cart.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(cart.map((item) => item.id)));
+  };
 
-  return (
-    <div
-      className={`fixed inset-0 z-[2000] flex items-center justify-center px-4 transition-all duration-300 ${isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
-    >
-      {/* OVERLAY */}
+  // Jangan render apa-apa jika belum mounted atau tidak open
+  if (!mounted || !isOpen) return null;
+
+  // KONTEN KERANJANG
+  const drawerContent = (
+    // Z-INDEX 9999: SANGAT TINGGI AGAR DI ATAS SEGALANYA
+    <div className="fixed inset-0 z-[9999] flex justify-end font-sans">
+      {/* 1. OVERLAY GELAP */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
         onClick={onClose}
       />
 
-      {/* POPUP CARD */}
-      <div
-        className={`relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] transition-all duration-300 ease-out transform ${isOpen ? "translate-y-0 opacity-100 scale-100" : "translate-y-[100%] opacity-0 scale-95"}`}
-      >
-        {/* HEADER */}
-        <div className="bg-teal-600 p-6 flex justify-between items-center text-white shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/20 rounded-xl">
-              <ShoppingBag size={20} />
-            </div>
-            <div>
-              <h2 className="font-black text-lg uppercase tracking-wide">
-                Keranjang
-              </h2>
-              <p className="text-[10px] text-teal-100 font-medium">
-                {cart.length} Item terpilih
-              </p>
-            </div>
+      {/* 2. PANEL KERANJANG */}
+      <div className="relative w-full md:w-[480px] h-full bg-[#f5f5f5] shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+        {/* --- HEADER KERANJANG --- */}
+        <div className="bg-teal-700 text-white px-4 py-4 flex items-center justify-between shadow-md z-20 shrink-0 pt-safe-top">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-white/10 rounded-full active:scale-90 transition-transform"
+            >
+              <ArrowLeft size={24} />
+            </button>
+            <h2 className="font-bold text-lg flex items-center gap-2">
+              Keranjang{" "}
+              <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
+                {cart.length}
+              </span>
+            </h2>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 bg-black/10 hover:bg-black/20 rounded-full transition-colors"
-          >
-            <X size={20} />
-          </button>
         </div>
 
-        {/* ISI KERANJANG */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+        {/* --- ISI KERANJANG --- */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-32">
           {cart.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center py-10">
-              <ShoppingBag size={40} className="text-slate-300 mb-4" />
-              <p className="font-black text-slate-400 text-lg">
-                Keranjang Kosong
-              </p>
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-4 -mt-10">
+              <div className="w-24 h-24 bg-slate-200 rounded-full flex items-center justify-center mb-2 animate-bounce">
+                <ShoppingCart size={40} className="text-slate-400" />
+              </div>
+              <p className="font-bold text-slate-600">Keranjang kosong</p>
               <button
-                onClick={onClose}
-                className="mt-4 px-6 py-3 bg-teal-600 text-white rounded-xl font-bold text-xs uppercase shadow-lg"
+                onClick={() => {
+                  onClose();
+                  navigate("/");
+                }}
+                className="px-6 py-2 bg-teal-600 text-white rounded-full font-bold text-sm shadow-lg hover:bg-teal-700 transition-colors"
               >
-                Cari Produk
+                Mulai Belanja
               </button>
             </div>
           ) : (
-            <div className="space-y-4">
-              {cart.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex gap-4 animate-in slide-in-from-bottom-2 duration-500"
-                >
-                  {/* Gambar Produk */}
-                  <div className="w-20 h-20 bg-slate-100 rounded-xl overflow-hidden shrink-0">
-                    {getImage(item) ? (
-                      <img
-                        src={getImage(item)}
-                        alt={getName(item)}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-300">
-                        <ShoppingBag size={20} />
-                      </div>
-                    )}
+            cart.map((item) => (
+              <div
+                key={item.id}
+                className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden"
+              >
+                {/* Header Toko */}
+                <div className="px-3 py-2 border-b border-slate-50 flex items-center gap-2 bg-slate-50/50">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(item.id)}
+                    onChange={() => toggleSelection(item.id)}
+                    className="w-4 h-4 accent-teal-600 rounded cursor-pointer"
+                  />
+                  <Store size={14} className="text-slate-500" />
+                  <span className="text-xs font-bold text-slate-700">
+                    Toko Official
+                  </span>
+                  <ArrowRight size={12} className="text-slate-400" />
+                </div>
+
+                <div className="p-3 flex gap-3">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(item.id)}
+                      onChange={() => toggleSelection(item.id)}
+                      className="w-4 h-4 accent-teal-600 rounded cursor-pointer"
+                    />
                   </div>
 
-                  {/* Detail Produk */}
+                  <div
+                    className="w-20 h-20 bg-slate-100 rounded-lg overflow-hidden shrink-0 border border-slate-100 relative cursor-pointer"
+                    onClick={() => {
+                      onClose();
+                      navigate(`/product/${item.id}`);
+                    }}
+                  >
+                    <img
+                      src={item.image_url || item.product?.image_url}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
                   <div className="flex-1 flex flex-col justify-between">
-                    <div>
-                      <h3 className="font-bold text-sm text-slate-800 line-clamp-1">
-                        {getName(item)}
+                    <div
+                      onClick={() => {
+                        onClose();
+                        navigate(`/product/${item.id}`);
+                      }}
+                      className="cursor-pointer"
+                    >
+                      <h3 className="text-sm font-medium text-slate-800 line-clamp-2 leading-snug">
+                        {item.name}
                       </h3>
-                      <p className="text-teal-600 font-black text-xs mt-1">
-                        Rp {getPrice(item).toLocaleString()}
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 border border-slate-200">
+                          Default
+                        </span>
+                      </div>
                     </div>
 
-                    {/* KONTROL KUANTITAS (BISA DIKETIK) */}
-                    <div className="flex justify-between items-end mt-2">
-                      <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1 border border-slate-200">
-                        {/* Tombol Kurang */}
+                    <div className="flex items-end justify-between mt-2">
+                      <span className="text-sm font-black text-teal-700">
+                        Rp{item.price.toLocaleString()}
+                      </span>
+
+                      <div className="flex items-center border border-slate-200 rounded-md bg-white shadow-sm">
                         <button
-                          type="button"
-                          onClick={() =>
-                            item.quantity > 1
-                              ? onUpdateQty(item.id, item.quantity - 1)
-                              : onRemove(item.id)
-                          }
-                          className="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-sm text-slate-600 active:scale-90 transition-all"
+                          onClick={() => onUpdateQty(item.id, -1)}
+                          className="w-7 h-7 flex items-center justify-center text-slate-500 hover:bg-slate-50 border-r border-slate-200 disabled:opacity-50"
+                          disabled={item.quantity <= 1}
                         >
-                          {item.quantity <= 1 ? (
-                            <Trash2 size={14} className="text-red-500" />
-                          ) : (
-                            <Minus size={14} />
-                          )}
+                          <Minus size={12} strokeWidth={3} />
                         </button>
-
-                        {/* INPUT KOLOM JUMLAH (BISA DIKETIK) */}
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={item.quantity === 0 ? "" : item.quantity}
-                          onChange={(e) =>
-                            handleInputChange(item.id, e.target.value)
-                          }
-                          onBlur={() => {
-                            // Jika saat klik luar kolom isinya kosong/0, hapus item atau set ke 1
-                            if (item.quantity === 0) onRemove(item.id);
-                          }}
-                          className="w-12 h-8 bg-transparent text-center font-black text-sm text-slate-800 outline-none focus:ring-1 focus:ring-teal-500 rounded-md transition-all"
-                        />
-
-                        {/* Tombol Tambah */}
+                        <span className="w-9 text-center text-xs font-bold text-slate-700">
+                          {item.quantity}
+                        </span>
                         <button
-                          type="button"
-                          onClick={() =>
-                            onUpdateQty(item.id, item.quantity + 1)
-                          }
-                          className="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-sm text-slate-600 active:scale-90 transition-all"
+                          onClick={() => onUpdateQty(item.id, 1)}
+                          className="w-7 h-7 flex items-center justify-center text-teal-600 hover:bg-teal-50 border-l border-slate-200"
                         >
-                          <Plus size={14} />
+                          <Plus size={12} strokeWidth={3} />
                         </button>
                       </div>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+
+                <div className="px-3 py-2 border-t border-slate-50 flex justify-end">
+                  <button
+                    onClick={() => onRemove(item.id)}
+                    className="text-[10px] text-slate-400 hover:text-red-500 flex items-center gap-1"
+                  >
+                    <Trash2 size={12} /> Hapus
+                  </button>
+                </div>
+              </div>
+            ))
           )}
         </div>
 
-        {/* FOOTER */}
+        {/* --- FOOTER --- */}
         {cart.length > 0 && (
-          <div className="p-6 bg-white border-t border-slate-100 shrink-0">
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Total Pembayaran
-              </span>
-              <span className="text-xl font-black text-slate-900">
-                Rp {totalAmount.toLocaleString()}
-              </span>
+          <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-100 p-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] z-20 pb-safe">
+            <div className="flex items-center justify-between mb-3">
+              <div
+                className="flex items-center gap-2 cursor-pointer select-none"
+                onClick={toggleSelectAll}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.size === cart.length && cart.length > 0}
+                  readOnly
+                  className="w-4 h-4 accent-teal-600 rounded"
+                />
+                <span className="text-xs text-slate-500 font-medium">
+                  Semua
+                </span>
+              </div>
+
+              <div className="text-right flex items-center gap-2">
+                <span className="text-xs text-slate-400">Total:</span>
+                <span className="text-lg font-black text-orange-500">
+                  Rp{totalPrice.toLocaleString()}
+                </span>
+              </div>
             </div>
+
             <button
               onClick={onCheckout}
-              className="w-full py-4 bg-orange-500 text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-orange-500/20 active:scale-95 transition-all hover:bg-orange-600"
+              disabled={selectedIds.size === 0}
+              className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
+                selectedIds.size === 0
+                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                  : "bg-orange-500 text-white shadow-lg shadow-orange-500/30 hover:bg-orange-600 active:scale-[0.98]"
+              }`}
             >
-              Checkout Sekarang <ArrowRight size={18} />
+              Checkout ({totalSelectedItems}) <ArrowRight size={16} />
             </button>
           </div>
         )}
       </div>
     </div>
   );
+
+  // GUNAKAN PORTAL UNTUK MELEMPAR DRAWER KE BODY (LUAR APP.TSX)
+  return createPortal(drawerContent, document.body);
 };

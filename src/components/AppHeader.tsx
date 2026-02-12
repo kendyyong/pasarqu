@@ -6,6 +6,7 @@ import { useToast } from "../contexts/ToastContext";
 
 interface AppHeaderProps {
   userName: string;
+  userAvatar: string | null; // Tambahkan prop untuk foto
   cartCount: number;
   onCartClick: () => void;
   onSearch: (query: string) => void;
@@ -14,6 +15,7 @@ interface AppHeaderProps {
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
   userName,
+  userAvatar,
   cartCount,
   onCartClick,
   onSearch,
@@ -40,8 +42,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
   return (
     <header className="fixed top-0 left-0 right-0 z-[1000] shadow-sm">
-      {/* BARIS 1: PARTNER BAR (SEKARANG HIJAU TOSCA TUA) */}
-      {/* Perubahan: bg-slate-950 -> bg-teal-900 */}
+      {/* BARIS 1: PARTNER BAR */}
       <div className="bg-teal-900 text-white border-b border-white/10">
         <div className="max-w-[1200px] mx-auto px-4 h-8 flex justify-between items-center text-[9px] md:text-[10px] font-bold uppercase tracking-tight">
           <div className="flex items-center gap-4">
@@ -66,17 +67,27 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               <Globe size={12} className="text-blue-400" /> Login Admin
             </button>
           </div>
+
+          {/* USER PROFILE SECTION (DESKTOP/TAB) */}
           <button
             onClick={onUserClick}
-            className="flex items-center gap-1.5 hover:text-teal-200 transition-colors"
+            className="flex items-center gap-2 hover:text-teal-200 transition-colors"
           >
-            <User size={12} className="text-orange-500" />{" "}
-            <span>{userName}</span>
+            {userAvatar ? (
+              <img
+                src={userAvatar}
+                alt="Profile"
+                className="w-5 h-5 rounded-full border border-white/20 object-cover"
+              />
+            ) : (
+              <User size={12} className="text-orange-500" />
+            )}
+            <span className="max-w-[100px] truncate">{userName}</span>
           </button>
         </div>
       </div>
 
-      {/* BARIS 2: MAIN HEADER (HIJAU TOSCA STANDAR) */}
+      {/* BARIS 2: MAIN HEADER */}
       <div className="bg-teal-600">
         <div className="max-w-[1200px] mx-auto px-3 h-[54px] md:h-[64px] flex items-center justify-between gap-3">
           {/* LOGO */}
@@ -93,19 +104,28 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
           {/* SEARCH BAR */}
           <div className="flex-1 bg-white rounded-sm flex items-center p-1 shadow-inner h-9 md:h-10">
-            <div className="flex-1 px-2">
-              {/* Icon User Mobile */}
+            <div className="flex-1 flex items-center px-2">
+              {/* Icon User / Avatar Mobile */}
               <div
                 className="md:hidden mr-2 shrink-0 cursor-pointer"
                 onClick={onUserClick}
               >
-                <div className="w-6 h-6 bg-teal-50 rounded-full flex items-center justify-center text-teal-600 border border-teal-100">
-                  <User size={14} />
-                </div>
+                {userAvatar ? (
+                  <img
+                    src={userAvatar}
+                    alt="User"
+                    className="w-7 h-7 rounded-full border border-teal-100 object-cover"
+                  />
+                ) : (
+                  <div className="w-7 h-7 bg-teal-50 rounded-full flex items-center justify-center text-teal-600 border border-teal-100">
+                    <User size={14} />
+                  </div>
+                )}
               </div>
+
               <input
                 type="text"
-                placeholder={`Cari di Pasarqu...`}
+                placeholder="Cari di Pasarqu..."
                 className="w-full text-xs md:text-sm outline-none text-slate-800 font-medium bg-transparent"
                 onChange={(e) => onSearch(e.target.value)}
               />

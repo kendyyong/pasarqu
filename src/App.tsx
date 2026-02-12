@@ -6,7 +6,7 @@ import {
   useNavigate,
   useLocation,
 } from "react-router-dom";
-import { Loader2 } from "lucide-react"; // Icon yang dibutuhkan sisa ini saja
+import { Loader2 } from "lucide-react";
 
 // CONTEXTS
 import { ConfigProvider } from "./contexts/ConfigContext";
@@ -26,7 +26,7 @@ import { GhostBar } from "./components/GhostBar";
 import { CartDrawer } from "./components/CartDrawer";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AppHeader } from "./components/AppHeader";
-import { HomeMenuGrid } from "./components/HomeMenuGrid"; // <--- KOMPONEN BARU
+import { HomeMenuGrid } from "./components/HomeMenuGrid";
 
 // PAGES
 import { Home } from "./pages/Home";
@@ -36,6 +36,7 @@ import { MerchantDashboard } from "./pages/merchant/MerchantDashboard";
 import { CourierDashboard } from "./pages/courier/CourierDashboard";
 import { CustomerDashboard } from "./pages/customer/CustomerDashboard";
 import { ShopDetail } from "./pages/customer/ShopDetail";
+import { ProductDetail } from "./pages/customer/ProductDetail";
 import { AuthPage } from "./pages/auth/AuthPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
 import { CheckoutPaymentPage } from "./pages/checkout/CheckoutPaymentPage";
@@ -51,6 +52,7 @@ import {
   SuperAdminLogin,
 } from "./pages/auth/PartnerLoginPages";
 
+// --- KOMPONEN BERANDA (MarketplaceApp) ---
 const MarketplaceApp = () => {
   const { user } = useAuth();
   const marketContext = useMarket();
@@ -66,24 +68,42 @@ const MarketplaceApp = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // State untuk Nama dan Foto Profil
   const [userName, setUserName] = useState<string>("Tamu");
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   useEffect(() => {
-    const fetchProfileName = async () => {
+    const fetchUserData = async () => {
       if (user?.id) {
-        const { data } = await supabase
+        // Ambil data dari tabel profiles
+        const { data: profileData } = await supabase
           .from("profiles")
-          .select("name")
+          .select("name, avatar_url")
           .eq("id", user.id)
           .maybeSingle();
-        setUserName(data?.name || user.email?.split("@")[0] || "User");
+
+        // LOGIKA IDENTITAS: Prioritas Tabel Profile > Metadata Google > Email
+        const finalName =
+          profileData?.name ||
+          user.user_metadata?.full_name ||
+          user.email?.split("@")[0] ||
+          "User";
+
+        // LOGIKA FOTO: Prioritas Tabel Profile > Metadata Google
+        const finalAvatar =
+          profileData?.avatar_url || user.user_metadata?.avatar_url || null;
+
+        setUserName(finalName);
+        setUserAvatar(finalAvatar);
       } else {
         setUserName("Tamu");
+        setUserAvatar(null);
       }
     };
-    fetchProfileName();
+    fetchUserData();
   }, [user]);
 
   const handleCheckoutProcess = () => {
@@ -94,32 +114,20 @@ const MarketplaceApp = () => {
   const handleUserClick = () =>
     user ? navigate("/customer-dashboard") : navigate("/login");
 
-  const renderTabContent = () => (
+  const renderHomeContent = () => (
     <div className="bg-[#f5f5f5] min-h-screen text-left pt-[86px] md:pt-[105px]">
       <AppHeader
         userName={userName}
+        userAvatar={userAvatar}
         cartCount={totalCartCount}
         onCartClick={() => setIsCartOpen(true)}
         onSearch={setSearchQuery}
         onUserClick={handleUserClick}
       />
 
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <>
-              <HeroOnboarding />
-
-              {/* AREA NAVIGASI (Sangat Ringkas!) */}
-              <HomeMenuGrid />
-
-              <Home searchQuery={searchQuery} />
-            </>
-          }
-        />
-        <Route path="/shop/:merchantId" element={<ShopDetail />} />
-      </Routes>
+      <HeroOnboarding />
+      <HomeMenuGrid />
+      <Home searchQuery={searchQuery} />
 
       <CartDrawer
         isOpen={isCartOpen}
@@ -144,12 +152,12 @@ const MarketplaceApp = () => {
       onCartClick={() => setIsCartOpen(true)}
       cartCount={totalCartCount}
     >
-      {renderTabContent()}
+      {renderHomeContent()}
     </MobileLayout>
   );
 };
 
-// --- MAIN CONTENT ---
+// --- MAIN ROUTING CONTENT ---
 const MainContent = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -178,6 +186,9 @@ const MainContent = () => {
 
   return (
     <Routes>
+      <Route path="/" element={<MarketplaceApp />} />
+      <Route path="/shop/:merchantId" element={<ShopDetail />} />
+      <Route path="/product/:productId" element={<ProductDetail />} />
       <Route path="/portal" element={<PortalLoginPage />} />
       <Route path="/login" element={<AuthPage />} />
       <Route path="/register" element={<RegisterPage />} />
@@ -189,16 +200,13 @@ const MainContent = () => {
           </div>
         }
       />
-
       <Route path="/login/toko" element={<MerchantLogin />} />
       <Route path="/login/kurir" element={<CourierLogin />} />
       <Route path="/login/admin" element={<AdminLogin />} />
       <Route path="/login/master" element={<SuperAdminLogin />} />
-
       <Route path="/promo/toko" element={<MerchantPromoPage />} />
       <Route path="/promo/kurir" element={<CourierPromoPage />} />
       <Route path="/promo/admin" element={<AdminPromoPage />} />
-
       <Route
         path="/admin-wilayah"
         element={
@@ -239,13 +247,11 @@ const MainContent = () => {
           </ProtectedRoute>
         }
       />
-
-      <Route path="/*" element={<MarketplaceApp />} />
+      <Route path="*" element={<MarketplaceApp />} />
     </Routes>
   );
 };
 
-// --- APP PROVIDERS WRAPPER (Opsional: Agar bagian bawah lebih rapi) ---
 const App = () => (
   <ToastProvider>
     <ConfigProvider>
