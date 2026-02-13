@@ -7,8 +7,13 @@ import { useMarket } from "../contexts/MarketContext";
 const MenuIcon = ({ icon, label, color, onClick }: any) => (
   <div
     onClick={onClick}
-    className="flex flex-col items-center gap-1.5 cursor-pointer active:scale-90 transition-all flex-shrink-0 w-[72px] group"
+    /**
+     * gap-1.5: Jarak ikon ke teks yang sudah kita rapatkan.
+     * pb-0: Menghilangkan padding bawah item agar teks tetap naik.
+     */
+    className="flex flex-col items-center gap-1.5 cursor-pointer active:scale-90 transition-all flex-shrink-0 w-[72px] group pb-0"
   >
+    {/* Box Ikon */}
     <div
       className={`w-12 h-12 ${
         color
@@ -17,11 +22,13 @@ const MenuIcon = ({ icon, label, color, onClick }: any) => (
               .replace("600", "100")
               .replace("500", "100")
           : "bg-slate-50"
-      } rounded-xl flex items-center justify-center ${color || "text-slate-600"}`}
+      } rounded-2xl flex items-center justify-center ${color || "text-slate-600"} shadow-sm`}
     >
-      {icon}
+      {React.cloneElement(icon as React.ReactElement, { size: 22 })}
     </div>
-    <span className="text-[10px] font-black text-slate-500 text-center leading-tight truncate w-full px-1 uppercase tracking-tighter">
+
+    {/* Label Teks - leading-none agar rapat ke bawah */}
+    <span className="text-[10px] font-black text-slate-500 text-center leading-none truncate w-full px-1 uppercase tracking-tighter">
       {label}
     </span>
   </div>
@@ -75,13 +82,15 @@ export const HomeMenuGrid = () => {
 
   return (
     /**
-     * KALIBRASI POSISI TURUN (GIVE SOME SPACE):
-     * mt-2: Di ponsel, memberikan jarak 8px dari iklan (sebelumnya negatif/nempel).
-     * md:mt-6: Di desktop, memberikan jarak 24px agar lebih elegan dan lega.
+     * WRAPPER UTAMA
+     * mt-2: Jarak atas dari iklan utama.
      */
-    <div className="-mx-5 md:mx-0 relative z-10 mt-2 md:mt-6 pb-2">
-      {/* py-4: Padding vertikal dikembalikan sedikit lebih longgar agar tidak terlihat pesek */}
-      <div className="w-full bg-white py-4 px-4 md:p-5 rounded-none md:rounded-xl border-b md:border border-slate-50 shadow-none md:shadow-sm">
+    <div className="-mx-5 md:mx-0 relative z-10 mt-2 md:mt-3 pb-0 bg-transparent">
+      {/* KONTEN MENU (PUTIH BERSIH)
+          pt-2: Jarak atas ikon.
+          pb-1: Jarak bawah teks ke garis (sangat pendek sesuai permintaan).
+      */}
+      <div className="w-full bg-white pt-2 pb-1 px-4 md:px-5 rounded-none md:rounded-xl border-b md:border border-slate-50 shadow-none">
         <div
           className="flex flex-nowrap items-center gap-4 overflow-x-auto no-scrollbar"
           style={{
@@ -96,7 +105,7 @@ export const HomeMenuGrid = () => {
                   key={i}
                   className="flex flex-col items-center gap-2 flex-shrink-0 w-[72px] animate-pulse"
                 >
-                  <div className="w-12 h-12 bg-slate-50 rounded-xl"></div>
+                  <div className="w-12 h-12 bg-slate-50 rounded-2xl"></div>
                   <div className="w-10 h-2 bg-slate-50 rounded"></div>
                 </div>
               ))
@@ -114,3 +123,5 @@ export const HomeMenuGrid = () => {
     </div>
   );
 };
+
+export default HomeMenuGrid;

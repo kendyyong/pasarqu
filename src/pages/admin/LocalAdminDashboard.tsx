@@ -49,7 +49,6 @@ type TabType =
 
 const libraries: "places"[] = ["places"];
 
-// Interface untuk menangani properti onBack dari App.tsx
 interface Props {
   onBack?: () => void | Promise<void>;
 }
@@ -68,11 +67,9 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
 
-  // Audio & Notification State
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [newOrderPopup, setNewOrderPopup] = useState<any>(null);
 
-  // DATA STATE
   const [myMarket, setMyMarket] = useState<any>(null);
   const [myMerchants, setMyMerchants] = useState<any[]>([]);
   const [myCouriers, setMyCouriers] = useState<any[]>([]);
@@ -86,16 +83,13 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
   }>({ isOpen: false, user: null });
 
   const fetchData = async () => {
-    // KUNCI: Gunakan managed_market_id dari profile admin wilayah
     if (!profile?.managed_market_id) {
       setIsLoading(false);
       return;
     }
-
     setIsLoading(true);
     try {
       const targetMarketId = profile.managed_market_id;
-
       const [marketRes, usersRes, prodRes, orderCountRes] = await Promise.all([
         supabase.from("markets").select("*").eq("id", targetMarketId).single(),
         supabase
@@ -129,13 +123,41 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
     }
   };
 
-  // --- LOGIKA REAL-TIME NOTIFICATION (KACHING!) ---
+  // --- LOGIKA AKSI KONTROL AKUN (BEKUKAN & AKTIFKAN) ---
+
+  const handleDeactivate = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ status: "SUSPENDED" })
+        .eq("id", id);
+      if (error) throw error;
+      showToast("Akun berhasil dibekukan", "success");
+      fetchData();
+      setDetailModal({ isOpen: false, user: null });
+    } catch (err: any) {
+      showToast(err.message, "error");
+    }
+  };
+
+  const handleActivate = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ status: "APPROVED", is_verified: true })
+        .eq("id", id);
+      if (error) throw error;
+      showToast("Akun berhasil diaktifkan kembali", "success");
+      fetchData();
+      setDetailModal({ isOpen: false, user: null });
+    } catch (err: any) {
+      showToast(err.message, "error");
+    }
+  };
+
   useEffect(() => {
     if (!profile?.managed_market_id) return;
-
-    // Load sound file
     audioRef.current = new Audio("/sounds/kaching.mp3");
-
     const ordersSubscription = supabase
       .channel("live_orders_wilayah")
       .on(
@@ -148,28 +170,21 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
         },
         async (payload) => {
           setLiveOrdersCount((prev) => prev + 1);
-
           const { data: orderDetail } = await supabase
             .from("orders")
             .select("*, profiles:customer_id(full_name)")
             .eq("id", payload.new.id)
             .single();
-
           if (orderDetail) {
             setNewOrderPopup(orderDetail);
-            setTimeout(() => setNewOrderPopup(null), 8000); // Popup hilang setelah 8 detik
+            setTimeout(() => setNewOrderPopup(null), 8000);
           }
-
-          if (!isMuted && audioRef.current) {
-            audioRef.current
-              .play()
-              .catch(() => console.log("Audio blocked by browser"));
-          }
+          if (!isMuted && audioRef.current)
+            audioRef.current.play().catch(() => {});
           showToast(`📦 PESANAN BARU MASUK!`, "success");
         },
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(ordersSubscription);
     };
@@ -188,7 +203,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex font-sans text-left transition-all duration-500 overflow-hidden">
-      {/* 1. NOTIFICATION POPUP (MODAL MELAYANG) */}
+      {/* 1. NOTIFICATION POPUP */}
       {newOrderPopup && (
         <div className="fixed bottom-10 right-10 z-[100] w-80 bg-white rounded-[2.5rem] shadow-2xl border border-teal-100 p-6 animate-in slide-in-from-right-full duration-500">
           <button
@@ -235,7 +250,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
 
       {/* 3. MAIN CONTENT AREA */}
       <div className="flex-1 ml-72 flex flex-col min-h-screen">
-        {/* HEADER TOPBAR */}
         <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between px-10 sticky top-0 z-40">
           <div className="flex items-center gap-4">
             {onBack && (
@@ -254,7 +268,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
               </span>
             </div>
           </div>
-
           <div className="flex items-center gap-5">
             <button
               onClick={() => setIsMuted(!isMuted)}
@@ -262,16 +275,13 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
             >
               {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
             </button>
-
             <div className="relative p-2.5 bg-slate-50 rounded-xl text-slate-400">
               <Bell size={20} />
               {liveOrdersCount > 0 && (
                 <span className="absolute top-2 right-2 w-2 h-2 bg-orange-500 rounded-full border-2 border-white animate-pulse"></span>
               )}
             </div>
-
             <div className="h-8 w-[1px] bg-slate-100 mx-2"></div>
-
             <div className="flex items-center gap-3 bg-slate-50 pl-4 pr-1.5 py-1.5 rounded-2xl border border-slate-100">
               <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">
                 {profile?.full_name?.split(" ")[0] || "Admin"}
@@ -283,7 +293,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
           </div>
         </header>
 
-        {/* MAIN DASHBOARD CONTENT */}
         <main className="p-10 max-w-7xl mx-auto w-full">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
             <div className="text-left">
@@ -301,8 +310,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 </p>
               </div>
             </div>
-
-            {/* QUICK ACTIONS BAR */}
             <div className="flex bg-white p-2 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-x-auto no-scrollbar">
               <QuickActionBtn
                 active={activeTab === "orders"}
@@ -338,12 +345,10 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
             </div>
           </div>
 
-          {/* DYNAMIC TAB RENDERING */}
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             {activeTab === "orders" && (
               <LocalOrdersTab marketId={profile?.managed_market_id || ""} />
             )}
-
             {activeTab === "radar" && (
               <LocalRadarTab
                 isLoaded={isLoaded}
@@ -353,7 +358,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 customers={myCustomers}
               />
             )}
-
             {activeTab === "overview" && (
               <LocalOverviewTab
                 stats={{
@@ -364,17 +368,13 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 }}
               />
             )}
-
             {activeTab === "finance" && (
               <LocalFinanceTab merchants={myMerchants} couriers={myCouriers} />
             )}
-
             {activeTab === "ratings" && (
               <LocalRatingsTab merchants={myMerchants} couriers={myCouriers} />
             )}
-
             {activeTab === "resolution" && <LocalResolutionTab />}
-
             {activeTab === "broadcast" && (
               <LocalBroadcastTab
                 marketId={profile?.managed_market_id || ""}
@@ -382,7 +382,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 customerCount={myCustomers.length}
               />
             )}
-
             {(activeTab === "merchants" ||
               activeTab === "couriers" ||
               activeTab === "customers") && (
@@ -398,7 +397,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 onViewDetail={(u) => setDetailModal({ isOpen: true, user: u })}
               />
             )}
-
             {activeTab === "products" && (
               <LocalProductsTab
                 products={pendingProducts}
@@ -409,18 +407,18 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
         </main>
       </div>
 
-      {/* --- MODAL DETAIL PARTNER --- */}
+      {/* --- MODAL DETAIL PARTNER DENGAN PROP LENGKAP --- */}
       <PartnerDetailModal
         user={detailModal.user}
         onClose={() => setDetailModal({ isOpen: false, user: null })}
         onApprove={() => fetchData()}
-        onDeactivate={() => fetchData()}
+        onDeactivate={handleDeactivate} // <--- SEKARANG ADA
+        onActivate={handleActivate} // <--- SEKARANG ADA
       />
     </div>
   );
 };
 
-// --- SUB KOMPONEN QUICK ACTION ---
 const QuickActionBtn = ({
   active,
   icon,

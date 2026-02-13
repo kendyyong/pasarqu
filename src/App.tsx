@@ -16,7 +16,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ChatProvider } from "./contexts/ChatContext";
 import { ToastProvider, useToast } from "./contexts/ToastContext";
 
-// PERBAIKAN DI SINI: Alamat disetel ke level yang benar
+// LEVEL AKSES DB
 import { supabase } from "./lib/supabaseClient";
 
 // --- HOOKS ---
@@ -128,7 +128,6 @@ const MarketplaceApp = () => {
   }, [user]);
 
   return (
-    /* PERBAIKAN BACKGROUND: bg-white untuk menghapus warna abu-abu */
     <div className="bg-white min-h-screen">
       <MobileLayout
         activeTab={activeTab}
@@ -148,25 +147,15 @@ const MarketplaceApp = () => {
           }
         />
 
-        {/* STRUKTUR FULL LEBAR (PONSEL):
-            - px-0: Menghapus sisa ruang di kiri kanan ponsel secara total.
-            - md:px-5: Hanya memberikan jarak/sejajar saat di layar desktop.
-            - bg-white: Memastikan latar belakang bersih.
-        */}
         <div className="w-full max-w-[1200px] mx-auto px-0 md:px-5 bg-white">
           {!searchQuery && (
             <>
-              {/* Iklan Utama - Full Mentok */}
               <HeroOnboarding />
-
-              {/* Panel Cepat - Full Lebar di HP */}
               <div className="mt-0">
                 <HomeMenuGrid />
               </div>
             </>
           )}
-
-          {/* Katalog Produk & Portal - Full Lebar di HP */}
           <Home searchQuery={searchQuery} />
         </div>
 
@@ -211,6 +200,7 @@ const MainContent = () => {
     "/super-admin",
     "/waiting-approval",
     "/login/master",
+    "/login/admin-wilayah", // Tambahkan rute ini agar tidak terhalang pemilihan pasar
     "/track-order",
   ];
   const isBypassRoute = bypassRoutes.some((route) =>
@@ -227,7 +217,10 @@ const MainContent = () => {
       <Route path="/login/master" element={<SuperAdminLogin />} />
       <Route path="/login/toko" element={<MerchantLogin />} />
       <Route path="/login/kurir" element={<CourierLogin />} />
-      <Route path="/login/admin" element={<AdminLogin />} />
+
+      {/* PENYESUAIAN RUTE ADMIN WILAYAH AGAR SESUAI DENGAN TOMBOL RAHASIA DI PORTAL */}
+      <Route path="/login/admin-wilayah" element={<AdminLogin />} />
+
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/waiting-approval" element={<WaitingApprovalPage />} />
       <Route path="/promo/toko" element={<MerchantPromoPage />} />

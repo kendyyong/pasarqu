@@ -20,8 +20,7 @@ interface HomeProps {
 }
 
 const SkeletonCard = () => (
-  /* Skeleton juga disamakan sudutnya menjadi tidak terlalu bulat */
-  <div className="flex flex-col h-full bg-white border border-slate-100 rounded-xl overflow-hidden animate-pulse">
+  <div className="flex flex-col h-full bg-white border border-slate-100 rounded-none overflow-hidden animate-pulse">
     <div className="aspect-square w-full bg-slate-200" />
     <div className="p-4 flex flex-col flex-1">
       <div className="h-2 w-12 bg-slate-100 mb-2 rounded" />
@@ -128,7 +127,8 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   };
 
   return (
-    <div className="w-full font-sans text-left bg-white min-h-screen pb-16 pt-[10px]">
+    /* PERBAIKAN: Tambahkan overflow-x-hidden pada kontainer paling luar agar tidak bocor ke samping */
+    <div className="w-full font-sans text-left bg-white min-h-screen pb-16 pt-[10px] overflow-x-hidden">
       <div className="max-w-[1200px] mx-auto px-0 md:px-0">
         {/* 1. IKLAN SLIDE */}
         {!searchQuery && ads.length > 0 && (
@@ -159,7 +159,6 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
         {/* 2. QUICK ACTIONS */}
         {!searchQuery && quickActions.length > 0 && (
           <div className="mt-5 px-4 md:px-0">
-            {/* Sudut Panel Cepat juga diubah menjadi rounded-xl agar serasi */}
             <div className="bg-white p-5 overflow-x-auto no-scrollbar flex gap-6 rounded-xl border border-slate-100 shadow-sm">
               {quickActions.map((action) => (
                 <button
@@ -181,15 +180,19 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
           </div>
         )}
 
-        {/* 3. PRODUK GRID */}
-        <div className="mt-8 mb-8 px-4 md:px-0">
-          <div className="flex items-center justify-between mb-4 px-1">
+        {/* 3. PRODUK GRID - FULL WIDTH FIXED */}
+        <div className="mt-8 mb-8">
+          <div className="flex items-center justify-between mb-4 px-5 md:px-1">
             <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
               Katalog Produk
             </h3>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          {/* PERBAIKAN: 
+              - mx-0 di HP sebenarnya sudah mepet karena pembungkus utamanya px-0.
+              - Menggunakan border-x untuk memastikan garis kiri kanan tetap rapi.
+          */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-[1px] bg-slate-100 md:bg-transparent md:gap-4 border-y border-slate-100 md:border-none">
             {isLoading ? (
               <>
                 {[...Array(6)].map((_, i) => (
@@ -200,8 +203,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
               filteredProducts.map((product) => (
                 <div
                   key={product.id}
-                  /* PERBAIKAN: rounded-xl agar tidak membulat ekstrim */
-                  className="flex flex-col h-full bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden group transition-all"
+                  className="flex flex-col h-full bg-white rounded-none md:rounded-xl md:border md:border-slate-100 md:shadow-sm overflow-hidden group transition-all"
                 >
                   <div
                     onClick={() => navigate(`/product/${product.id}`)}
@@ -233,7 +235,6 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                         addToCart(product);
                         showToast("Masuk Keranjang", "success");
                       }}
-                      /* Tombol juga dibuat rounded-lg agar serasi */
                       className="w-full bg-teal-600 hover:bg-teal-700 text-white py-2.5 rounded-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
                     >
                       <ShoppingBasket size={14} />
@@ -248,10 +249,9 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
           </div>
         </div>
 
-        {/* 4. PORTAL MITRA */}
-        <div className="mt-8 mb-10 px-4 md:px-0">
-          {/* Sudut Portal juga diubah menjadi rounded-xl */}
-          <div className="bg-slate-900 p-6 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden shadow-2xl rounded-xl">
+        {/* 4. PORTAL MITRA - FULL WIDTH FIXED */}
+        <div className="mt-8 mb-10">
+          <div className="bg-slate-900 p-6 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden md:rounded-xl shadow-2xl">
             <div className="relative z-10 flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
               <div className="bg-white/10 p-2 rounded-lg text-orange-400">
                 <Zap size={22} fill="currentColor" />
