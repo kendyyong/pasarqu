@@ -13,7 +13,9 @@ import {
   Settings,
   Megaphone,
   ShieldAlert,
-  Landmark, // Icon Baru untuk Regional Finance
+  Landmark,
+  BarChart3,
+  Image as ImageIcon, // Icon untuk Manajemen Iklan
 } from "lucide-react";
 import { SidebarItem } from "./SharedUI";
 
@@ -88,6 +90,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           theme={theme}
         />
 
+        {/* SECTION: PENGATURAN BERANDA */}
         <div className="pt-6 mt-6 border-t border-slate-100">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3 mb-3">
             Pengaturan Beranda
@@ -97,6 +100,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             label="Quick Buttons"
             active={activeTab === "menus"}
             onClick={() => handleTabChange("menus")}
+            theme={theme}
+          />
+          {/* MENU BARU: MANAJEMEN IKLAN */}
+          <SidebarItem
+            icon={<ImageIcon size={18} className="text-teal-600" />}
+            label="Manage Ads"
+            active={activeTab === "manage-ads"}
+            onClick={() => handleTabChange("manage-ads")}
             theme={theme}
           />
           <SidebarItem
@@ -121,14 +132,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
             count={counts.candidates}
             isAlert={counts.candidates > 0}
           />
+
           <SidebarItem
-            icon={<DollarSign size={18} />}
-            label="Laporan Keuangan"
-            active={activeTab === "finance"}
-            onClick={() => handleTabChange("finance")}
+            icon={<BarChart3 size={18} className="text-blue-600" />}
+            label="Laporan Profit"
+            active={activeTab === "finance-report"}
+            onClick={() => handleTabChange("finance-report")}
             theme={theme}
           />
-          {/* MENU BARU: REGIONAL FINANCE */}
+
           <SidebarItem
             icon={<Landmark size={18} className="text-teal-600" />}
             label="Regional Finance"
@@ -136,6 +148,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => handleTabChange("regional-finance")}
             theme={theme}
           />
+
+          <SidebarItem
+            icon={<DollarSign size={18} />}
+            label="Finance Summary"
+            active={activeTab === "finance"}
+            onClick={() => handleTabChange("finance")}
+            theme={theme}
+          />
+
           <SidebarItem
             icon={<Flag size={18} />}
             label="Pusat Komplain"

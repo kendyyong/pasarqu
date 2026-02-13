@@ -1,6 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { GoogleMap, Marker, InfoWindow } from "@react-google-maps/api";
-import { Store, Bike, User, Loader2, Info, ShieldCheck } from "lucide-react";
+import { supabase } from "../../../lib/supabaseClient";
+import {
+  Store,
+  Bike,
+  User,
+  Loader2,
+  Info,
+  ShieldCheck,
+  Navigation,
+} from "lucide-react";
 
 interface Props {
   myMarket: any;
@@ -13,16 +22,56 @@ interface Props {
 export const LocalRadarTab: React.FC<Props> = ({
   myMarket,
   merchants,
-  couriers,
+  couriers: initialCouriers,
   customers,
   isLoaded,
 }) => {
   const [selectedPin, setSelectedPin] = useState<any>(null);
 
-  // 1. KUNCI KOORDINAT: Peta otomatis memusatkan pandangan ke Pasar Admin tersebut
+  // --- 1. STATE UNTUK LIVE TRACKING ---
+  const [liveCouriers, setLiveCouriers] = useState<any[]>(initialCouriers);
+
+  // --- 2. REAL-TIME LISTENER: MENDENGARKAN PERGERAKAN GPS ---
+  useEffect(() => {
+    if (!myMarket?.id) return;
+
+    setLiveCouriers(initialCouriers);
+
+    const channel = supabase
+      .channel("local_radar_tracking")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `role=eq.COURIER`,
+        },
+        (payload) => {
+          setLiveCouriers((prev) =>
+            prev.map((c) =>
+              c.id === payload.new.id
+                ? {
+                    ...c,
+                    latitude: payload.new.latitude,
+                    longitude: payload.new.longitude,
+                  }
+                : c,
+            ),
+          );
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [myMarket?.id, initialCouriers]);
+
+  // KOORDINAT PUSAT PASAR
   const center = {
-    lat: myMarket?.latitude || -6.2,
-    lng: myMarket?.longitude || 106.816666,
+    lat: Number(myMarket?.latitude) || -6.2,
+    lng: Number(myMarket?.longitude) || 106.816666,
   };
 
   const mapContainerStyle = {
@@ -31,7 +80,6 @@ export const LocalRadarTab: React.FC<Props> = ({
     borderRadius: "2.5rem",
   };
 
-  // 2. CONFIG MAPS: Matikan akses navigasi liar ke luar wilayah
   const options = {
     disableDefaultUI: false,
     zoomControl: true,
@@ -43,11 +91,23 @@ export const LocalRadarTab: React.FC<Props> = ({
     ],
   };
 
+  // --- 3. ICON DEFINITIONS (SVG PATHS) ---
+  // Icon Motor yang Bold dan Clean
+  const bikeIcon = {
+    path: "M19.44 7H17c-.52 0-.98.33-1.15.82l-1.01 2.94C13.25 10.28 11.23 10 9 10c-3.11 0-5.83 1.59-7.39 4h3.55c.42-1.15 1.52-2 2.84-2 1.66 0 3 1.34 3 3s-1.34 3-3 3c-1.32 0-2.42-.85-2.84-2H1V17h1c0 2.21 1.79 4 4 4s4-1.79 4-4c0-.18-.02-.35-.06-.52 1.56.33 3.19.52 4.93.52 2.07 0 3.9-.27 5.48-.78l.65 1.91c.17.49.63.82 1.15.82h1.85c.55 0 1-.45 1-1v-2l-4-9zm-1.94 2L20 13h-4.3l.83-2.43c.12-.34.43-.57.79-.57h.18z",
+    fillColor: "#0d9488", // Teal 600
+    fillOpacity: 1,
+    strokeWeight: 1.5,
+    strokeColor: "#ffffff",
+    scale: 1.8,
+    anchor: isLoaded ? new google.maps.Point(12, 12) : undefined,
+  };
+
   if (!isLoaded)
     return (
       <div className="h-[600px] flex flex-col items-center justify-center bg-white rounded-[2.5rem] border border-slate-100">
         <Loader2 className="animate-spin text-teal-600 mb-4" size={40} />
-        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
+        <p className="text-xs font-black text-slate-400 uppercase tracking-widest text-center">
           Inisialisasi Radar Wilayah...
         </p>
       </div>
@@ -80,7 +140,7 @@ export const LocalRadarTab: React.FC<Props> = ({
               Kurir Standby
             </p>
             <p className="text-lg font-black text-slate-800">
-              {couriers.length}
+              {liveCouriers.length}
             </p>
           </div>
         </div>
@@ -108,7 +168,7 @@ export const LocalRadarTab: React.FC<Props> = ({
           center={center}
           options={options}
         >
-          {/* PIN PASAR ADMIN (PRIMARY) */}
+          {/* PIN PASAR ADMIN */}
           <Marker
             position={center}
             icon={{
@@ -117,7 +177,7 @@ export const LocalRadarTab: React.FC<Props> = ({
             onClick={() => setSelectedPin({ ...myMarket, type: "PASAR UTAMA" })}
           />
 
-          {/* PIN TOKO: Hanya yang masuk dalam array merchants wilayah ini */}
+          {/* PIN TOKO */}
           {merchants.map(
             (m) =>
               m.latitude && (
@@ -135,8 +195,8 @@ export const LocalRadarTab: React.FC<Props> = ({
               ),
           )}
 
-          {/* PIN KURIR: Hanya yang masuk dalam array couriers wilayah ini */}
-          {couriers.map(
+          {/* PIN KURIR: BENTUK MOTOR (LIVE TRACKING) */}
+          {liveCouriers.map(
             (c) =>
               c.latitude && (
                 <Marker
@@ -145,15 +205,13 @@ export const LocalRadarTab: React.FC<Props> = ({
                     lat: Number(c.latitude),
                     lng: Number(c.longitude),
                   }}
-                  icon={{
-                    url: "http://maps.google.com/mapfiles/ms/icons/orange-dot.png",
-                  }}
+                  icon={bikeIcon}
                   onClick={() => setSelectedPin({ ...c, type: "MITRA KURIR" })}
                 />
               ),
           )}
 
-          {/* PIN PEMBELI: Hanya yang masuk dalam array customers wilayah ini */}
+          {/* PIN PEMBELI */}
           {customers.map(
             (u) =>
               u.latitude && (
@@ -191,7 +249,7 @@ export const LocalRadarTab: React.FC<Props> = ({
                     selectedPin.full_name ||
                     selectedPin.name}
                 </h4>
-                <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                <p className="text-[10px] text-slate-500 mt-1">
                   {selectedPin.address || "Lokasi Terverifikasi"}
                 </p>
                 {selectedPin.phone_number && (
@@ -220,7 +278,7 @@ export const LocalRadarTab: React.FC<Props> = ({
           <div className="space-y-3">
             <LegendItem color="bg-blue-500" label="Pasar Anda" />
             <LegendItem color="bg-green-500" label="Mitra Toko" />
-            <LegendItem color="bg-orange-500" label="Mitra Kurir" />
+            <LegendItem color="bg-teal-600" label="Motor Kurir" />
             <LegendItem color="bg-yellow-500" label="Pelanggan" />
           </div>
         </div>
@@ -236,8 +294,8 @@ export const LocalRadarTab: React.FC<Props> = ({
           </h4>
           <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
             Radar ini telah dikunci pada titik koordinat <b>{myMarket?.name}</b>
-            . Anda hanya dapat memantau mitra yang terdaftar secara sah di bawah
-            manajemen wilayah Anda sesuai kebijakan privasi Pasarqu 2026.
+            . Anda memantau armada kurir secara real-time berdasarkan data
+            koordinat GPS terenkripsi.
           </p>
         </div>
       </div>

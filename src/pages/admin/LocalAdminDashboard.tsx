@@ -7,7 +7,6 @@ import {
   Loader2,
   Bell,
   Map as MapIcon,
-  ShoppingCart,
   Volume2,
   VolumeX,
   Package,
@@ -18,7 +17,6 @@ import {
   Megaphone,
   ShoppingBag,
   ArrowLeft,
-  LayoutGrid,
 } from "lucide-react";
 
 // --- IMPORT KOMPONEN MODULAR ---
@@ -88,13 +86,16 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
   }>({ isOpen: false, user: null });
 
   const fetchData = async () => {
+    // KUNCI: Gunakan managed_market_id dari profile admin wilayah
     if (!profile?.managed_market_id) {
       setIsLoading(false);
       return;
     }
+
     setIsLoading(true);
     try {
       const targetMarketId = profile.managed_market_id;
+
       const [marketRes, usersRes, prodRes, orderCountRes] = await Promise.all([
         supabase.from("markets").select("*").eq("id", targetMarketId).single(),
         supabase
@@ -103,7 +104,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
           .eq("managed_market_id", targetMarketId),
         supabase
           .from("products")
-          .select("*, merchants(name, shop_name)")
+          .select("*, merchants(full_name, shop_name)")
           .eq("market_id", targetMarketId)
           .eq("status", "PENDING"),
         supabase
@@ -128,10 +129,11 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
     }
   };
 
-  // --- LOGIKA REAL-TIME NOTIFICATION ---
+  // --- LOGIKA REAL-TIME NOTIFICATION (KACHING!) ---
   useEffect(() => {
     if (!profile?.managed_market_id) return;
 
+    // Load sound file
     audioRef.current = new Audio("/sounds/kaching.mp3");
 
     const ordersSubscription = supabase
@@ -149,17 +151,19 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
 
           const { data: orderDetail } = await supabase
             .from("orders")
-            .select("*, profiles(full_name)")
+            .select("*, profiles:customer_id(full_name)")
             .eq("id", payload.new.id)
             .single();
 
           if (orderDetail) {
             setNewOrderPopup(orderDetail);
-            setTimeout(() => setNewOrderPopup(null), 8000);
+            setTimeout(() => setNewOrderPopup(null), 8000); // Popup hilang setelah 8 detik
           }
 
           if (!isMuted && audioRef.current) {
-            audioRef.current.play().catch(() => console.log("Audio blocked"));
+            audioRef.current
+              .play()
+              .catch(() => console.log("Audio blocked by browser"));
           }
           showToast(`📦 PESANAN BARU MASUK!`, "success");
         },
@@ -184,7 +188,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex font-sans text-left transition-all duration-500 overflow-hidden">
-      {/* 1. NOTIFICATION POPUP */}
+      {/* 1. NOTIFICATION POPUP (MODAL MELAYANG) */}
       {newOrderPopup && (
         <div className="fixed bottom-10 right-10 z-[100] w-80 bg-white rounded-[2.5rem] shadow-2xl border border-teal-100 p-6 animate-in slide-in-from-right-full duration-500">
           <button
@@ -197,12 +201,12 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
             <div className="w-12 h-12 bg-teal-500 text-white rounded-2xl flex items-center justify-center animate-bounce shadow-lg shadow-teal-200">
               <Package size={22} />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 text-left">
               <p className="text-[10px] font-black text-teal-600 uppercase tracking-[0.2em]">
-                Order Baru
+                Order Baru Masuk
               </p>
               <h4 className="text-sm font-black text-slate-800 uppercase truncate">
-                {newOrderPopup.profiles?.full_name}
+                {newOrderPopup.profiles?.full_name || "Pelanggan"}
               </h4>
             </div>
           </div>
@@ -220,7 +224,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
 
       {/* 2. SIDEBAR */}
       <LocalSidebar
-        marketName={myMarket?.name}
+        marketName={myMarket?.name || "Wilayah"}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         pendingMerchants={myMerchants.filter((m) => !m.is_verified).length}
@@ -231,7 +235,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
 
       {/* 3. MAIN CONTENT AREA */}
       <div className="flex-1 ml-72 flex flex-col min-h-screen">
-        {/* HEADER PRO RAMPING */}
+        {/* HEADER TOPBAR */}
         <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between px-10 sticky top-0 z-40">
           <div className="flex items-center gap-4">
             {onBack && (
@@ -245,7 +249,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 bg-teal-500 rounded-full animate-pulse"></div>
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
-                Control Wilayah{" "}
+                Local Control:{" "}
                 <span className="text-teal-600">{myMarket?.name}</span>
               </span>
             </div>
@@ -262,7 +266,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
             <div className="relative p-2.5 bg-slate-50 rounded-xl text-slate-400">
               <Bell size={20} />
               {liveOrdersCount > 0 && (
-                <span className="absolute top-2 right-2 w-2 h-2 bg-orange-500 rounded-full border-2 border-white"></span>
+                <span className="absolute top-2 right-2 w-2 h-2 bg-orange-500 rounded-full border-2 border-white animate-pulse"></span>
               )}
             </div>
 
@@ -270,35 +274,35 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
 
             <div className="flex items-center gap-3 bg-slate-50 pl-4 pr-1.5 py-1.5 rounded-2xl border border-slate-100">
               <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">
-                {profile?.full_name?.split(" ")[0]}
+                {profile?.full_name?.split(" ")[0] || "Admin"}
               </span>
-              <div className="w-8 h-8 bg-teal-600 text-white rounded-xl flex items-center justify-center font-black text-xs shadow-sm uppercase">
-                {profile?.full_name?.charAt(0)}
+              <div className="w-8 h-8 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black text-xs shadow-sm uppercase">
+                {profile?.full_name?.charAt(0) || "A"}
               </div>
             </div>
           </div>
         </header>
 
+        {/* MAIN DASHBOARD CONTENT */}
         <main className="p-10 max-w-7xl mx-auto w-full">
-          {/* TAB NAVIGATION & TITLE */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-            <div>
+            <div className="text-left">
               <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-3">
                 {activeTab === "overview"
-                  ? "Dashboard"
+                  ? "Ringkasan"
                   : activeTab.replace("_", " ")}
               </h1>
               <div className="flex items-center gap-2">
                 <span className="px-3 py-1 bg-teal-600 text-white text-[9px] font-black rounded-lg uppercase tracking-widest shadow-lg shadow-teal-100">
-                  Live
+                  Real-time
                 </span>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-                  Sinkronisasi Satelit Aktif
+                  Data Wilayah Sinkron
                 </p>
               </div>
             </div>
 
-            {/* QUICK ACTIONS BAR (PENGGANTI BANYAK TOMBOL) */}
+            {/* QUICK ACTIONS BAR */}
             <div className="flex bg-white p-2 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-x-auto no-scrollbar">
               <QuickActionBtn
                 active={activeTab === "orders"}
@@ -315,26 +319,26 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
               <QuickActionBtn
                 active={activeTab === "broadcast"}
                 icon={<Megaphone size={18} />}
-                label="Promo"
+                label="Siaran"
                 onClick={() => setActiveTab("broadcast")}
               />
               <QuickActionBtn
                 active={activeTab === "ratings"}
                 icon={<Star size={18} />}
-                label="QC"
+                label="Rating"
                 onClick={() => setActiveTab("ratings")}
               />
               <QuickActionBtn
                 active={activeTab === "resolution"}
                 icon={<AlertCircle size={18} />}
-                label="Kasus"
+                label="Bantuan"
                 onClick={() => setActiveTab("resolution")}
                 color="hover:text-red-500"
               />
             </div>
           </div>
 
-          {/* MAIN DYNAMIC CONTENT */}
+          {/* DYNAMIC TAB RENDERING */}
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             {activeTab === "orders" && (
               <LocalOrdersTab marketId={profile?.managed_market_id || ""} />
@@ -405,7 +409,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
         </main>
       </div>
 
-      {/* --- MODALS --- */}
+      {/* --- MODAL DETAIL PARTNER --- */}
       <PartnerDetailModal
         user={detailModal.user}
         onClose={() => setDetailModal({ isOpen: false, user: null })}

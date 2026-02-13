@@ -13,6 +13,10 @@ import {
   Clock,
   AlertCircle,
   Trash2,
+  ToggleLeft,
+  ToggleRight,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 interface Props {
@@ -27,6 +31,8 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   // Form State
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -41,25 +47,69 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
   const fetchProducts = async () => {
     if (!user) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from("products")
-      .select("*")
-      .eq("merchant_id", merchantProfile?.id || user.id) // Pakai ID dari profile merchant
-      .order("created_at", { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("merchant_id", merchantProfile?.id)
+        .order("created_at", { ascending: false });
 
-    if (!error && data) setProducts(data);
-    setLoading(false);
+      if (!error && data) setProducts(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    fetchProducts();
+    if (merchantProfile?.id) fetchProducts();
   }, [user, merchantProfile]);
+
+  // --- FUNGSI KILAT: QUICK TOGGLE STATUS PRODUK (ON/OFF) ---
+  const handleToggleStatus = async (
+    productId: string,
+    currentStatus: string,
+  ) => {
+    setUpdatingId(productId);
+
+    // Logika: Jika APPROVED (Aktif), maka jadikan OUT_OF_STOCK (Habis).
+    // Jika OUT_OF_STOCK, kembalikan ke APPROVED (Tersedia).
+    const newStatus =
+      currentStatus === "APPROVED" ? "OUT_OF_STOCK" : "APPROVED";
+
+    try {
+      const { error } = await supabase
+        .from("products")
+        .update({ status: newStatus })
+        .eq("id", productId);
+
+      if (error) throw error;
+
+      // Update state lokal agar UI langsung berubah tanpa refresh
+      setProducts(
+        products.map((p) =>
+          p.id === productId ? { ...p, status: newStatus } : p,
+        ),
+      );
+
+      showToast(
+        newStatus === "APPROVED"
+          ? "Produk kini Tersedia"
+          : "Produk diset Habis",
+        "success",
+      );
+    } catch (err: any) {
+      showToast("Gagal update stok: " + err.message, "error");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !merchantProfile) return;
 
-    // 1. VALIDASI PASAR (PENTING!)
     if (!merchantProfile.market_id) {
       showToast(
         "Error: Data Toko tidak memiliki ID Pasar. Hubungi Admin.",
@@ -69,10 +119,8 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
     }
 
     setIsUploading(true);
-
     try {
       let imageUrl = null;
-      // Upload Gambar
       if (imageFile) {
         const fileExt = imageFile.name.split(".").pop();
         const fileName = `${user.id}-${Date.now()}.${fileExt}`;
@@ -87,21 +135,15 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
         imageUrl = urlData.publicUrl;
       }
 
-      // 2. INSERT KE DATABASE (DENGAN PERBAIKAN)
       const { error } = await supabase.from("products").insert({
-        merchant_id: merchantProfile.id, // Pastikan pakai ID Merchant (bukan user_id auth)
-
-        // --- PERBAIKAN UTAMA DI SINI ---
-        market_id: merchantProfile.market_id, // Bukan managed_market_id
-
+        merchant_id: merchantProfile.id,
+        market_id: merchantProfile.market_id,
         name: newProduct.name,
         price: parseInt(newProduct.price),
         stock: parseInt(newProduct.stock),
         description: newProduct.description,
         unit: newProduct.unit,
         image_url: imageUrl,
-
-        // --- STATUS WAJIB PENDING (HURUF BESAR) ---
         status: "PENDING",
       });
 
@@ -113,8 +155,6 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
       );
       setShowAddModal(false);
       fetchProducts();
-
-      // Reset Form
       setNewProduct({
         name: "",
         price: "",
@@ -124,7 +164,6 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
       });
       setImageFile(null);
     } catch (err: any) {
-      console.error(err);
       showToast("Gagal upload: " + err.message, "error");
     } finally {
       setIsUploading(false);
@@ -140,6 +179,10 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
     }
   };
 
+  const filteredProducts = products.filter((p) =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
   return (
     <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 text-left">
       {/* HEADER SECTION */}
@@ -154,13 +197,14 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="hidden md:flex items-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-teal-600/20 hover:bg-teal-700 transition-all active:scale-95"
+          className="flex items-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-teal-600/20 hover:bg-teal-700 transition-all active:scale-95"
         >
-          <Plus size={18} /> Tambah Produk
+          <Plus size={18} />{" "}
+          <span className="hidden md:inline">Tambah Produk</span>
         </button>
       </div>
 
-      {/* SEARCH & FILTER (Placeholder) */}
+      {/* SEARCH BAR */}
       <div className="relative group">
         <Search
           className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-teal-600 transition-colors"
@@ -169,6 +213,8 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
         <input
           type="text"
           placeholder="Cari produk di etalase Anda..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-[1.5rem] outline-none focus:border-teal-500 shadow-sm transition-all font-medium text-sm"
         />
       </div>
@@ -178,29 +224,27 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
         <div className="py-20 text-center">
           <Loader2 className="animate-spin text-teal-600 mx-auto" size={40} />
         </div>
-      ) : products.length === 0 ? (
+      ) : filteredProducts.length === 0 ? (
         <div className="p-20 text-center border-2 border-dashed border-slate-200 rounded-[3rem] bg-white">
           <Package size={48} className="mx-auto text-slate-200 mb-4" />
-          <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mb-6">
-            Etalase masih kosong
+          <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">
+            Etalase Kosong / Tidak Ditemukan
           </p>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="px-8 py-3 bg-teal-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl"
-          >
-            Mulai Jualan
-          </button>
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {products.map((p) => (
+          {filteredProducts.map((p) => (
             <div
               key={p.id}
-              className="bg-white p-3 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group relative overflow-hidden"
+              className={`bg-white p-3 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group relative overflow-hidden ${
+                p.status === "OUT_OF_STOCK" ? "opacity-60 grayscale-[0.5]" : ""
+              }`}
             >
-              <div className="absolute top-4 right-4 z-10">
+              <div className="absolute top-4 left-4 z-10">
                 <StatusBadge status={p.status} />
               </div>
+
+              {/* IMAGE AREA */}
               <div className="aspect-square bg-slate-50 rounded-2xl mb-3 overflow-hidden relative">
                 {p.image_url ? (
                   <img
@@ -214,19 +258,46 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
                   </div>
                 )}
               </div>
+
+              {/* INFO & ACTIONS */}
               <div className="px-1">
                 <h3 className="font-black text-slate-800 text-[11px] uppercase tracking-tight line-clamp-1 mb-1 leading-tight">
                   {p.name}
                 </h3>
-                <div className="flex justify-between items-end">
-                  <div>
-                    <p className="text-sm font-black text-teal-600 tracking-tighter">
-                      Rp {p.price.toLocaleString()}
-                    </p>
-                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
-                      Stok: {p.stock} {p.unit}
-                    </p>
-                  </div>
+                <p className="text-sm font-black text-teal-600 tracking-tighter mb-3">
+                  Rp {p.price.toLocaleString()}
+                </p>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                  {/* TOMBOL KILAT: ON/OFF STOK */}
+                  <button
+                    disabled={updatingId === p.id || p.status === "PENDING"}
+                    onClick={() => handleToggleStatus(p.id, p.status)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${
+                      p.status === "APPROVED"
+                        ? "bg-teal-50 text-teal-600 hover:bg-teal-100"
+                        : p.status === "PENDING"
+                          ? "bg-slate-50 text-slate-300 cursor-not-allowed"
+                          : "bg-orange-50 text-orange-600 hover:bg-orange-100"
+                    }`}
+                  >
+                    {updatingId === p.id ? (
+                      <Loader2 className="animate-spin" size={12} />
+                    ) : p.status === "APPROVED" ? (
+                      <>
+                        <ToggleRight size={16} /> Aktif
+                      </>
+                    ) : p.status === "PENDING" ? (
+                      <>
+                        <Clock size={16} /> Verif
+                      </>
+                    ) : (
+                      <>
+                        <ToggleLeft size={16} /> Habis
+                      </>
+                    )}
+                  </button>
+
                   <button
                     onClick={() => handleDelete(p.id)}
                     className="p-2 text-slate-300 hover:text-red-500 transition-colors"
@@ -240,7 +311,7 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
         </div>
       )}
 
-      {/* MODAL TAMBAH PRODUK */}
+      {/* MODAL TAMBAH PRODUK (TETAP SAMA SEPERTI MILIK JURAGAN) */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white w-full max-w-lg rounded-[3rem] p-8 max-h-[90vh] overflow-y-auto no-scrollbar shadow-2xl animate-in zoom-in-95 text-left">
@@ -257,7 +328,6 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
             </div>
 
             <form onSubmit={handleAddProduct} className="space-y-4">
-              {/* Image Upload */}
               <div className="w-full h-44 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] flex flex-col items-center justify-center text-slate-400 hover:border-teal-400 cursor-pointer relative overflow-hidden group">
                 {imageFile ? (
                   <img
@@ -298,7 +368,6 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
                   set={(v: string) => setNewProduct({ ...newProduct, unit: v })}
                 />
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <Input
                   label="Harga (Rp)"
@@ -317,7 +386,6 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
                   }
                 />
               </div>
-
               <div className="space-y-1">
                 <label className="text-[9px] font-black text-slate-400 uppercase ml-4 tracking-widest">
                   Deskripsi Produk
@@ -334,7 +402,6 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
                   }
                 ></textarea>
               </div>
-
               <button
                 disabled={isUploading}
                 className="w-full py-5 bg-teal-600 text-white rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl hover:bg-teal-700 disabled:bg-slate-300 transition-all flex items-center justify-center gap-2 mt-4 active:scale-95"
@@ -355,9 +422,7 @@ export const MerchantProducts: React.FC<Props> = ({ merchantProfile }) => {
 
 // --- INTERNAL HELPERS ---
 const StatusBadge = ({ status }: { status: string }) => {
-  // Samakan case-nya (biasanya uppercase dari DB)
   const s = status?.toUpperCase();
-
   if (s === "APPROVED")
     return (
       <span className="bg-green-500 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 shadow-md">
@@ -368,6 +433,12 @@ const StatusBadge = ({ status }: { status: string }) => {
     return (
       <span className="bg-orange-400 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 shadow-md">
         <Clock size={8} /> Verifikasi
+      </span>
+    );
+  if (s === "OUT_OF_STOCK")
+    return (
+      <span className="bg-slate-800 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 shadow-md">
+        <EyeOff size={8} /> Habis
       </span>
     );
   return (

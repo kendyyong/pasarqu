@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useJsApiLoader } from "@react-google-maps/api";
 import { useNavigate } from "react-router-dom";
-import { Bell, Search, ArrowLeft } from "lucide-react";
+import { Bell, ArrowLeft, Loader2 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -19,21 +19,22 @@ import { MenuManager } from "./super-features/MenuManager";
 import { GlobalConfig } from "./super-features/GlobalConfig";
 import { NotificationManager } from "./super-features/NotificationManager";
 import { ActivityLogs } from "./super-features/ActivityLogs";
-import { RegionalFinance } from "./super-features/RegionalFinance"; // <--- IMPORT MODUL REGIONAL
+import { RegionalFinance } from "./super-features/RegionalFinance";
+import { ManageAds } from "./super-features/ManageAds"; // <-- IMPORT FITUR IKLAN BARU
 
 const libraries: "places"[] = ["places"];
 
-export const SuperAdminDashboard: React.FC<{ onBack?: () => void }> = ({
-  onBack,
-}) => {
-  const { user, logout } = useAuth();
+export const SuperAdminDashboard: React.FC = () => {
+  const { user, logout, profile } = useAuth();
   const navigate = useNavigate();
+
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
     libraries,
   });
 
+  // State activeTab harus sinkron dengan Sidebar.tsx
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [auditMarket, setAuditMarket] = useState<any>(null);
 
@@ -54,14 +55,17 @@ export const SuperAdminDashboard: React.FC<{ onBack?: () => void }> = ({
     active_markets: 0,
   });
 
+  // Ambil data utama dari Database
   const fetchData = async () => {
     try {
       const { data: mData } = await supabase.from("markets").select("*");
       setMarkets(mData || []);
+
       const { data: uData } = await supabase
         .from("profiles")
         .select("*, markets(name)");
       setAllUsers(uData || []);
+
       setCandidates(
         uData?.filter(
           (u: any) =>
@@ -69,36 +73,41 @@ export const SuperAdminDashboard: React.FC<{ onBack?: () => void }> = ({
             (u.role === "LOCAL_ADMIN" && !u.is_verified),
         ) || [],
       );
+
       const { data: fData } = await supabase.rpc("get_financial_summary");
       if (fData?.[0]) setFinance(fData[0]);
+
       const { data: cData } = await supabase
         .from("complaints")
         .select("*")
         .eq("status", "open");
       setComplaints(cData || []);
     } catch (err) {
-      console.error(err);
+      console.error("Gagal memuat data dashboard:", err);
     }
   };
 
   useEffect(() => {
-    const isMaster = sessionStorage.getItem("isMasterAuthenticated");
-    if (isMaster !== "true") {
-      navigate("/");
-      return;
+    if (user) {
+      fetchData();
     }
-    if (user) fetchData();
-  }, [user, navigate]);
+  }, [user]);
 
   const handleLogout = async () => {
-    sessionStorage.removeItem("isMasterAuthenticated");
     await logout();
     navigate("/");
   };
 
+  if (!isLoaded)
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-teal-600" size={40} />
+      </div>
+    );
+
   return (
     <div className="min-h-screen bg-[#f5f5f5] font-sans flex text-left">
-      {/* 1. SIDEBAR */}
+      {/* 1. SIDEBAR NAVIGATION */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -114,34 +123,40 @@ export const SuperAdminDashboard: React.FC<{ onBack?: () => void }> = ({
 
       {/* 2. MAIN CONTENT AREA */}
       <div className="flex-1 ml-72 flex flex-col min-h-screen">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-40">
+        {/* TOPBAR / HEADER */}
+        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-40">
           <div>
-            <h2 className="text-sm font-black text-slate-400 uppercase tracking-[0.3em]">
+            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
               Master Control /{" "}
-              <span className="text-teal-600">{activeTab}</span>
+              <span className="text-teal-600">
+                {activeTab.replace("-", " ")}
+              </span>
             </h2>
           </div>
           <div className="flex items-center gap-6">
             <button className="relative text-slate-400 hover:text-teal-600 transition-colors">
               <Bell size={20} />
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full border-2 border-white"></span>
+              {complaints.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full border-2 border-white animate-pulse"></span>
+              )}
             </button>
             <div className="flex items-center gap-3 pl-6 border-l border-slate-100">
               <div className="text-right hidden md:block">
                 <p className="text-xs font-black text-slate-800 leading-none">
-                  ROOT ADMIN
+                  {profile?.full_name || "ROOT ADMIN"}
                 </p>
-                <p className="text-[9px] text-teal-600 font-bold uppercase mt-1">
-                  Full Access
+                <p className="text-[9px] text-teal-600 font-bold uppercase mt-1 tracking-widest">
+                  Super User
                 </p>
               </div>
-              <div className="w-9 h-9 bg-teal-600 text-white rounded-xl flex items-center justify-center font-black">
-                P
+              <div className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black shadow-lg shadow-slate-900/20 uppercase">
+                {profile?.full_name?.charAt(0) || "S"}
               </div>
             </div>
           </div>
         </header>
 
+        {/* CONTENT RENDERER */}
         <main className="p-8">
           {auditMarket ? (
             <div className="animate-in fade-in slide-in-from-bottom-2">
@@ -169,6 +184,7 @@ export const SuperAdminDashboard: React.FC<{ onBack?: () => void }> = ({
                   setAuditMarket={setAuditMarket}
                 />
               )}
+
               {activeTab === "markets" && (
                 <MarketManager
                   markets={markets}
@@ -179,10 +195,16 @@ export const SuperAdminDashboard: React.FC<{ onBack?: () => void }> = ({
                   setAuditMarket={setAuditMarket}
                 />
               )}
+
               {activeTab === "menus" && <MenuManager />}
+
+              {/* INTEGRASI MANAJEMEN IKLAN */}
+              {activeTab === "manage-ads" && <ManageAds />}
+
               {activeTab === "users" && (
                 <UserManager allUsers={allUsers} theme={shopeeTheme} />
               )}
+
               {activeTab === "verification" && (
                 <VerificationCenter
                   candidates={candidates}
@@ -191,15 +213,23 @@ export const SuperAdminDashboard: React.FC<{ onBack?: () => void }> = ({
                   refreshData={fetchData}
                 />
               )}
+
+              {/* FINANCE CENTER (Terpadu) */}
               {activeTab === "finance" && (
                 <FinanceManager finance={finance} theme={shopeeTheme} />
               )}
 
-              {/* --- FITUR BARU: REGIONAL FINANCE --- */}
+              {/* Jika user klik tab laporan profit di sidebar, arahkan juga ke FinanceManager */}
+              {activeTab === "finance-report" && (
+                <FinanceManager finance={finance} theme={shopeeTheme} />
+              )}
+
               {activeTab === "regional-finance" && <RegionalFinance />}
 
               {activeTab === "settings" && <GlobalConfig />}
+
               {activeTab === "broadcast" && <NotificationManager />}
+
               {activeTab === "logs" && <ActivityLogs />}
             </div>
           )}
@@ -208,3 +238,5 @@ export const SuperAdminDashboard: React.FC<{ onBack?: () => void }> = ({
     </div>
   );
 };
+
+export default SuperAdminDashboard;

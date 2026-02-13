@@ -1,14 +1,25 @@
-import React, { useState } from "react";
-import { X, MapPin, Loader2, Save } from "lucide-react";
+import React, { useState, useCallback } from "react";
+import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api";
+import { X, MapPin, Loader2, Navigation, CheckCircle } from "lucide-react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useToast } from "../../../contexts/ToastContext";
-import { LocationPicker } from "../../../components/LocationPicker";
 
 interface Props {
-  merchantProfile: any;
+  merchantProfile: any; // Bisa profile toko, kurir, atau pembeli
   onClose: () => void;
-  onUpdate: (lat: number, lng: number, address: string) => void;
+  onUpdate: () => void;
 }
+
+const containerStyle = {
+  width: "100%",
+  height: "400px",
+};
+
+// Default Center (Misal: Balikpapan)
+const defaultCenter = {
+  lat: -1.242,
+  lng: 116.852,
+};
 
 export const LocationPickerModal: React.FC<Props> = ({
   merchantProfile,
@@ -16,134 +27,173 @@ export const LocationPickerModal: React.FC<Props> = ({
   onUpdate,
 }) => {
   const { showToast } = useToast();
-  const [isSaving, setIsSaving] = useState(false);
+  const { isLoaded } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+  });
 
-  // State lokal untuk menampung lokasi sebelum disimpan
-  const [tempLocation, setTempLocation] = useState<{
-    lat: number;
-    lng: number;
-    address: string;
-  } | null>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [position, setPosition] = useState({
+    lat: merchantProfile?.latitude || defaultCenter.lat,
+    lng: merchantProfile?.longitude || defaultCenter.lng,
+  });
 
-  const handleSave = async () => {
-    // 1. CEK KEAMANAN: Pastikan profil tidak null
-    if (!merchantProfile) {
-      showToast("Data profil tidak ditemukan, silakan refresh.", "error");
-      return;
+  const onMapClick = useCallback((e: google.maps.MapMouseEvent) => {
+    if (e.latLng) {
+      setPosition({
+        lat: e.latLng.lat(),
+        lng: e.latLng.lng(),
+      });
     }
+  }, []);
 
-    // Ambil ID yang benar (id atau user_id tergantung struktur tabel Anda)
-    const targetId = merchantProfile.id || merchantProfile.user_id;
-
-    if (!targetId) {
-      showToast("ID Toko tidak valid.", "error");
-      return;
-    }
-
-    // 2. Tentukan data lokasi yang akan dikirim
-    const locationToSave = tempLocation || {
-      lat: merchantProfile.latitude,
-      lng: merchantProfile.longitude,
-      address: merchantProfile.address,
-    };
-
-    if (!locationToSave.lat || !locationToSave.lng) {
-      showToast("Silakan tentukan titik lokasi pada peta", "error");
-      return;
-    }
-
-    setIsSaving(true);
+  const handleSaveLocation = async () => {
+    setLoading(true);
     try {
-      // 3. Eksekusi Update ke tabel 'merchants'
+      // LOGIKA: Deteksi tabel berdasarkan role user
+      const tableName = merchantProfile?.shop_name ? "merchants" : "profiles";
+
       const { error } = await supabase
-        .from("merchants")
+        .from(tableName)
         .update({
-          latitude: locationToSave.lat,
-          longitude: locationToSave.lng,
-          address: locationToSave.address,
+          latitude: position.lat,
+          longitude: position.lng,
+          // Update timestamp jika perlu
+          updated_at: new Date().toISOString(),
         })
-        .eq("id", targetId); // Menggunakan ID yang sudah divalidasi
+        .eq("id", merchantProfile.id);
 
       if (error) throw error;
 
-      showToast("Lokasi jualan berhasil diperbarui!", "success");
-      onUpdate(locationToSave.lat, locationToSave.lng, locationToSave.address);
+      showToast("Lokasi Berhasil Dipasang!", "success");
+      onUpdate();
       onClose();
     } catch (err: any) {
-      console.error("Save Location Error:", err);
-      showToast("Gagal simpan lokasi: " + err.message, "error");
+      showToast(err.message, "error");
     } finally {
-      setIsSaving(false);
+      setLoading(false);
+    }
+  };
+
+  const getMyLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const newPos = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        };
+        setPosition(newPos);
+        map?.panTo(newPos);
+      });
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+    <div className="fixed inset-0 z-[200] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
+      <div className="bg-white w-full max-w-2xl rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-500">
         {/* HEADER */}
-        <div className="p-8 border-b border-slate-50 flex justify-between items-center text-left">
-          <div>
-            <h2 className="text-xl font-black uppercase text-slate-800 tracking-tight leading-none">
-              Atur Titik Toko
-            </h2>
-            <p className="text-[10px] text-slate-400 font-bold uppercase mt-2 tracking-widest">
-              Geser pin ke titik tepat lokasi jualan Anda
-            </p>
+        <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-white">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-2xl flex items-center justify-center">
+              <MapPin size={24} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter">
+                Pasang Titik Presisi
+              </h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                Geser peta untuk menentukan lokasi
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+            className="p-3 hover:bg-slate-50 rounded-full text-slate-400 transition-colors"
           >
-            <X className="text-slate-400" size={24} />
+            <X size={24} />
           </button>
         </div>
 
         {/* MAP AREA */}
-        <div className="h-[400px] bg-slate-100 relative z-0">
-          <LocationPicker
-            onLocationSelected={(lat, lng, addr) =>
-              setTempLocation({ lat, lng, address: addr })
-            }
-            initialPos={
-              merchantProfile?.latitude
-                ? [merchantProfile.latitude, merchantProfile.longitude]
-                : undefined
-            }
-          />
+        <div className="relative">
+          {isLoaded ? (
+            <GoogleMap
+              mapContainerStyle={containerStyle}
+              center={position}
+              zoom={15}
+              onClick={onMapClick}
+              onLoad={(map) => setMap(map)}
+              options={{
+                disableDefaultUI: true,
+                zoomControl: true,
+                styles: mapStyle, // Gaya peta bersih di bawah
+              }}
+            >
+              <Marker
+                position={position}
+                draggable={true}
+                onDragEnd={(e) => {
+                  if (e.latLng)
+                    setPosition({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+                }}
+              />
+            </GoogleMap>
+          ) : (
+            <div className="h-[400px] flex items-center justify-center bg-slate-50">
+              <Loader2 className="animate-spin text-teal-600" size={40} />
+            </div>
+          )}
+
+          {/* MY LOCATION BUTTON */}
+          <button
+            onClick={getMyLocation}
+            className="absolute bottom-6 right-6 p-4 bg-white text-slate-700 rounded-2xl shadow-xl border border-slate-100 hover:text-teal-600 transition-all active:scale-90"
+          >
+            <Navigation size={20} />
+          </button>
         </div>
 
-        {/* FOOTER */}
-        <div className="p-8 bg-slate-50/50 flex flex-col md:flex-row items-center justify-between gap-4 text-left">
-          <div className="flex items-start gap-3 flex-1">
-            <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600 shrink-0">
-              <MapPin size={20} />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                Alamat Terdeteksi
-              </p>
-              <p className="text-xs font-bold text-slate-700 truncate w-full md:max-w-[300px]">
-                {tempLocation?.address ||
-                  merchantProfile?.address ||
-                  "Belum memilih titik baru..."}
-              </p>
-            </div>
+        {/* FOOTER INFO */}
+        <div className="p-8 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="space-y-1 text-center md:text-left">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
+              Koordinat Terpilih
+            </p>
+            <p className="text-xs font-mono font-bold text-teal-600">
+              {position.lat.toFixed(6)}, {position.lng.toFixed(6)}
+            </p>
           </div>
 
           <button
-            disabled={isSaving || !merchantProfile}
-            onClick={handleSave}
-            className="w-full md:w-auto px-10 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl hover:bg-teal-600 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+            disabled={loading}
+            onClick={handleSaveLocation}
+            className="w-full md:w-auto px-10 py-5 bg-slate-900 text-white rounded-[2rem] font-black uppercase text-xs tracking-[0.2em] shadow-xl hover:bg-teal-600 transition-all flex items-center justify-center gap-3 active:scale-95"
           >
-            {isSaving ? (
-              <Loader2 className="animate-spin" size={16} />
+            {loading ? (
+              <Loader2 className="animate-spin" />
             ) : (
-              <Save size={16} />
+              <>
+                <CheckCircle size={18} /> Simpan Lokasi
+              </>
             )}
-            Simpan Lokasi
           </button>
         </div>
       </div>
     </div>
   );
 };
+
+// GAYA PETA MODERN (Clean & Professional)
+const mapStyle = [
+  {
+    featureType: "poi",
+    elementType: "labels",
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "transit",
+    elementType: "labels.icon",
+    stylers: [{ visibility: "off" }],
+  },
+];

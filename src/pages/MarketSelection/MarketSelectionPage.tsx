@@ -1,109 +1,179 @@
-import React, { useState, useEffect } from 'react';
-import { MapPin, ChevronRight, Loader2, Globe, ShieldCheck, Zap } from 'lucide-react';
-import { useMarket } from '../../contexts/MarketContext';
-import { supabase } from '../../lib/supabaseClient';
-import { AppLogo } from '../../components/AppLogo';
+import React, { useState, useEffect } from "react";
+import {
+  MapPin,
+  ChevronRight,
+  Loader2,
+  Search,
+  Store,
+  ArrowRight,
+  Map,
+} from "lucide-react";
+import { useMarket } from "../../contexts/MarketContext";
+import { supabase } from "../../lib/supabaseClient";
+import { AppLogo } from "../../components/AppLogo";
 
 export const MarketSelectionPage: React.FC = () => {
-    const { setSelectedMarket } = useMarket();
-    const [markets, setMarkets] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+  const { setSelectedMarket } = useMarket();
+  const [markets, setMarkets] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
 
-    // KONEKSI KE DATABASE: Mengambil data pasar yang dibuat Super Admin
-    useEffect(() => {
-        const fetchMarketsFromDB = async () => {
-            try {
-                // Mengambil pasar yang statusnya 'is_active' = true
-                const { data, error } = await supabase
-                    .from('markets')
-                    .select('*')
-                    .eq('is_active', true) 
-                    .order('name', { ascending: true });
+  // --- LOGIKA DATABASE (SAMA SEPERTI SEBELUMNYA) ---
+  useEffect(() => {
+    const fetchMarketsFromDB = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("markets")
+          .select("*")
+          .eq("is_active", true)
+          .order("name", { ascending: true });
 
-                if (error) throw error;
-                if (data) setMarkets(data);
-            } catch (error) {
-                console.error("Gagal memuat data pasar:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchMarketsFromDB();
-    }, []);
-
-    const handleSelect = (market: any) => {
-        // Simpan ke local storage agar user tidak perlu pilih lagi saat refresh
-        localStorage.setItem('selected_market_id', market.id);
-        setSelectedMarket(market);
+        if (error) throw error;
+        if (data) setMarkets(data);
+      } catch (error) {
+        console.error("Gagal memuat data pasar:", error);
+      } finally {
+        setIsLoading(false);
+      }
     };
+    fetchMarketsFromDB();
+  }, []);
 
-    if (isLoading) {
-        return (
-            <div className="h-screen flex flex-col items-center justify-center bg-white">
-                <Loader2 className="animate-spin text-orange-600 mb-4" size={40} />
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Menghubungkan ke Server MJ...</p>
-            </div>
-        );
-    }
+  const handleSelect = (market: any) => {
+    localStorage.setItem("selected_market_id", market.id);
+    setSelectedMarket(market);
+  };
 
+  const filteredMarkets = markets.filter((market) =>
+    market.name.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
+
+  // --- TAMPILAN LOADING ---
+  if (isLoading) {
     return (
-        <div className="h-screen bg-orange-600 flex flex-col items-center justify-center p-6 text-white font-sans overflow-hidden relative">
-            {/* Dekorasi Background */}
-            <div className="absolute top-[-5%] right-[-5%] w-72 h-72 bg-white/10 rounded-full blur-3xl"></div>
-            <div className="absolute bottom-[-10%] left-[-5%] w-96 h-96 bg-black/10 rounded-full blur-3xl"></div>
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 relative overflow-hidden">
+        {/* Background Pulse */}
+        <div className="absolute w-64 h-64 bg-emerald-400/20 rounded-full blur-3xl animate-pulse"></div>
 
-            <div className="mb-10 scale-[1.8] drop-shadow-2xl animate-in fade-in slide-in-from-top duration-1000">
-                <AppLogo size="sm" regionName="MJ" className="text-white" />
-            </div>
-            
-            <div className="bg-white w-full max-w-md rounded-[40px] p-8 md:p-10 shadow-[0_25px_60px_rgba(0,0,0,0.3)] text-left text-slate-800 relative z-10 animate-in zoom-in-95 fade-in duration-500">
-                <div className="flex items-center gap-4 mb-6">
-                   <div className="p-3 bg-orange-50 rounded-2xl shrink-0">
-                        <MapPin className="text-orange-600" size={32}/>
-                   </div>
-                   <div>
-                        <h2 className="text-2xl font-black uppercase tracking-tighter leading-none">
-                            Pilih <span className="text-orange-600">Wilayah</span>
-                        </h2>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-widest italic">Pilih Kecamatan Anda</p>
-                   </div>
-                </div>
-                
-                <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
-                    {markets.length > 0 ? (
-                        markets.map((market) => (
-                            <button 
-                                key={market.id} 
-                                onClick={() => handleSelect(market)} 
-                                className="w-full p-5 bg-slate-50 rounded-[24px] font-black flex justify-between items-center hover:bg-orange-600 hover:text-white transition-all duration-300 border-2 border-transparent hover:border-orange-400 uppercase tracking-tight group shadow-sm"
-                            >
-                                <div className="flex flex-col text-left">
-                                    <span className="text-sm">{market.name}</span>
-                                    <span className="text-[9px] opacity-50 font-medium normal-case group-hover:text-white">Wilayah MJ {market.name}</span>
-                                </div>
-                                <ChevronRight size={18} className="text-slate-300 group-hover:text-white group-hover:translate-x-1 transition-all"/>
-                            </button>
-                        ))
-                    ) : (
-                        <div className="text-center py-10 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-                            <p className="text-slate-400 font-bold italic text-sm">Belum ada kecamatan aktif.</p>
-                        </div>
-                    )}
-                </div>
-
-                <div className="mt-8 grid grid-cols-3 gap-2 border-t pt-6 opacity-30">
-                    <div className="flex flex-col items-center gap-1"><Zap size={14} /><span className="text-[8px] font-bold">CEPAT</span></div>
-                    <div className="flex flex-col items-center gap-1"><ShieldCheck size={14} /><span className="text-[8px] font-bold">AMAN</span></div>
-                    <div className="flex flex-col items-center gap-1"><Globe size={14} /><span className="text-[8px] font-bold">LOKAL</span></div>
-                </div>
-            </div>
-
-            <p className="mt-8 text-[9px] text-white/50 font-black uppercase tracking-[0.3em]">
-                Pasarqu Mulyojati Digital System
-            </p>
+        <div className="relative z-10 flex flex-col items-center">
+          <Loader2 className="animate-spin text-emerald-600 mb-4" size={50} />
+          <p className="text-xs font-bold uppercase tracking-[0.3em] text-emerald-800">
+            Memuat Wilayah...
+          </p>
         </div>
+      </div>
     );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 relative font-sans overflow-hidden">
+      {/* --- BACKGROUND DECORATION (THEMA PASARQU) --- */}
+      {/* Lingkaran Hijau Segar (Emerald) */}
+      <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"></div>
+      {/* Lingkaran Orange Semangat */}
+      <div className="absolute bottom-[-10%] left-[-10%] w-80 h-80 bg-orange-500/10 rounded-full blur-3xl"></div>
+
+      {/* --- MAIN CARD --- */}
+      <div className="w-full max-w-md bg-white/80 backdrop-blur-md rounded-[32px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white p-6 md:p-8 relative z-10 animate-in zoom-in-95 duration-500">
+        {/* Header: Logo & Title */}
+        <div className="text-center mb-8">
+          <div className="inline-flex justify-center mb-4 p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
+            {/* Logo Pasarqu (Asumsi AppLogo menyesuaikan warna parent) */}
+            <div className="text-emerald-600">
+              <AppLogo size="md" regionName="ID" />
+            </div>
+          </div>
+          <h1 className="text-2xl font-black text-slate-800 tracking-tight">
+            Pilih Lokasi <span className="text-emerald-600">Pasar</span>
+          </h1>
+          <p className="text-slate-400 text-xs font-medium mt-1">
+            Temukan produk segar langsung dari petani lokal.
+          </p>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative mb-6 group">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <Search
+              className="text-slate-400 group-focus-within:text-emerald-500 transition-colors"
+              size={18}
+            />
+          </div>
+          <input
+            type="text"
+            placeholder="Cari kecamatan kamu..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all placeholder:font-normal placeholder:text-slate-400"
+          />
+        </div>
+
+        {/* LIST KECAMATAN */}
+        <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
+          {filteredMarkets.length > 0 ? (
+            filteredMarkets.map((market) => (
+              <button
+                key={market.id}
+                onClick={() => handleSelect(market)}
+                className="group w-full bg-white hover:bg-emerald-600 border border-slate-100 hover:border-emerald-600 rounded-2xl p-4 flex items-center justify-between transition-all duration-300 hover:shadow-lg hover:shadow-emerald-600/20 hover:-translate-y-1"
+              >
+                <div className="flex items-center gap-4">
+                  {/* Icon Map Pin */}
+                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-white/20 group-hover:text-white transition-colors">
+                    <MapPin size={20} strokeWidth={2.5} />
+                  </div>
+
+                  {/* Text Info */}
+                  <div className="text-left">
+                    <h3 className="text-sm font-bold text-slate-700 group-hover:text-white transition-colors">
+                      {market.name}
+                    </h3>
+                    <p className="text-[10px] font-medium text-slate-400 group-hover:text-emerald-100 uppercase tracking-wide">
+                      Area {market.name}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Arrow Icon */}
+                <div className="text-slate-300 group-hover:text-white transition-colors">
+                  <ChevronRight size={20} />
+                </div>
+              </button>
+            ))
+          ) : (
+            // State Kosong
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-300">
+                <Store size={24} />
+              </div>
+              <p className="text-slate-500 font-bold text-sm">
+                Lokasi tidak ditemukan
+              </p>
+              <p className="text-xs text-slate-400">
+                Coba cari kata kunci lain.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Info */}
+        <div className="mt-8 border-t border-slate-100 pt-5 flex justify-between items-center">
+          <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
+            <Map size={12} />
+            <span>{markets.length} Area Tersedia</span>
+          </div>
+          <span className="text-[10px] text-slate-400 font-medium">
+            v1.0 Pasarqu
+          </span>
+        </div>
+      </div>
+
+      {/* Copyright */}
+      <p className="absolute bottom-6 text-[10px] text-slate-400 font-medium text-center opacity-60">
+        &copy; 2026 Pasarqu Ecosystem. Tumbuh Bersama.
+      </p>
+    </div>
+  );
 };
 
 export default MarketSelectionPage;

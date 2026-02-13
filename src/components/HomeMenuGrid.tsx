@@ -1,49 +1,37 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import * as Icons from "lucide-react";
-import { supabase } from "../lib/supabaseClient"; // Path sudah diperbaiki
-import { useMarket } from "../contexts/MarketContext"; // Path sudah diperbaiki
+import { supabase } from "../lib/supabaseClient";
+import { useMarket } from "../contexts/MarketContext";
 
-// Komponen Sederhana untuk Icon Menu
 const MenuIcon = ({ icon, label, color, onClick }: any) => (
   <div
     onClick={onClick}
-    className="flex flex-col items-center gap-2 cursor-pointer active:scale-95 transition-transform"
+    className="flex flex-col items-center gap-1.5 cursor-pointer active:scale-90 transition-all flex-shrink-0 w-[72px] group"
   >
     <div
-      className={`w-12 h-12 ${color ? color.replace("text-", "bg-").replace("600", "100").replace("500", "100") : "bg-slate-100"} rounded-2xl flex items-center justify-center ${color || "text-slate-600"}`}
+      className={`w-12 h-12 ${
+        color
+          ? color
+              .replace("text-", "bg-")
+              .replace("600", "100")
+              .replace("500", "100")
+          : "bg-slate-50"
+      } rounded-xl flex items-center justify-center ${color || "text-slate-600"}`}
     >
       {icon}
     </div>
-    <span className="text-[10px] font-bold text-slate-600 text-center leading-tight px-1 line-clamp-2">
+    <span className="text-[10px] font-black text-slate-500 text-center leading-tight truncate w-full px-1 uppercase tracking-tighter">
       {label}
     </span>
   </div>
 );
 
-// Komponen Sederhana untuk Promo Box
-const PromoBox = ({ onClick, icon, label, color, borderColor }: any) => (
-  <button
-    onClick={onClick}
-    className={`flex items-center gap-2 p-3 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition-all w-full text-left group ${borderColor} hover:border`}
-  >
-    <div
-      className={`${color} bg-slate-50 p-1.5 rounded-lg group-hover:scale-110 transition-transform`}
-    >
-      {icon}
-    </div>
-    <span className="text-[10px] font-black uppercase tracking-widest text-slate-700">
-      {label}
-    </span>
-  </button>
-);
-
-// Helper: Ubah String nama icon menjadi Komponen
-const DynamicIcon = ({ name, size = 20 }: { name: string; size?: number }) => {
+const DynamicIcon = ({ name, size = 22 }: { name: string; size?: number }) => {
   // @ts-ignore
   const IconComponent = Icons[name];
   return IconComponent ? (
-    <IconComponent size={size} />
+    <IconComponent size={size} strokeWidth={2.5} />
   ) : (
     <Icons.HelpCircle size={size} />
   );
@@ -55,7 +43,6 @@ export const HomeMenuGrid = () => {
   const [menus, setMenus] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 1. Ambil Data Menu dari Database
   useEffect(() => {
     const fetchMenus = async () => {
       try {
@@ -73,11 +60,9 @@ export const HomeMenuGrid = () => {
         setLoading(false);
       }
     };
-
     fetchMenus();
   }, []);
 
-  // 2. Logic Klik Menu
   const handleMenuClick = (path: string) => {
     if (path === "#RESET") {
       marketContext?.setSelectedMarket(null);
@@ -89,57 +74,42 @@ export const HomeMenuGrid = () => {
   };
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 relative z-10 -mt-2">
-      {/* GRID MENU DINAMIS */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-4 min-h-[100px]">
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-y-6 gap-x-2">
+    /**
+     * KALIBRASI POSISI TURUN (GIVE SOME SPACE):
+     * mt-2: Di ponsel, memberikan jarak 8px dari iklan (sebelumnya negatif/nempel).
+     * md:mt-6: Di desktop, memberikan jarak 24px agar lebih elegan dan lega.
+     */
+    <div className="-mx-5 md:mx-0 relative z-10 mt-2 md:mt-6 pb-2">
+      {/* py-4: Padding vertikal dikembalikan sedikit lebih longgar agar tidak terlihat pesek */}
+      <div className="w-full bg-white py-4 px-4 md:p-5 rounded-none md:rounded-xl border-b md:border border-slate-50 shadow-none md:shadow-sm">
+        <div
+          className="flex flex-nowrap items-center gap-4 overflow-x-auto no-scrollbar"
+          style={{
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
           {loading
-            ? // Skeleton Loading
-              [...Array(8)].map((_, i) => (
+            ? [...Array(5)].map((_, i) => (
                 <div
                   key={i}
-                  className="flex flex-col items-center gap-2 animate-pulse"
+                  className="flex flex-col items-center gap-2 flex-shrink-0 w-[72px] animate-pulse"
                 >
-                  <div className="w-12 h-12 bg-slate-100 rounded-2xl"></div>
-                  <div className="w-10 h-2 bg-slate-100 rounded"></div>
+                  <div className="w-12 h-12 bg-slate-50 rounded-xl"></div>
+                  <div className="w-10 h-2 bg-slate-50 rounded"></div>
                 </div>
               ))
-            : // Render Menu Asli
-              menus.map((menu) => (
+            : menus.map((menu) => (
                 <MenuIcon
                   key={menu.id}
                   icon={<DynamicIcon name={menu.icon_name} />}
                   label={menu.label}
-                  color={menu.color_class} // Sesuaikan dengan nama kolom di DB (color atau color_class)
-                  onClick={() => handleMenuClick(menu.target_url || menu.path)} // Support kedua nama kolom
+                  color={menu.color_class}
+                  onClick={() => handleMenuClick(menu.target_url || menu.path)}
                 />
               ))}
         </div>
-      </div>
-
-      {/* PROMO BOX STATIC (Shortcut Pendaftaran) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-        <PromoBox
-          onClick={() => navigate("/promo/toko")}
-          icon={<Icons.Store size={16} />}
-          label="Buka Toko"
-          color="text-orange-600"
-          borderColor="hover:border-orange-200"
-        />
-        <PromoBox
-          onClick={() => navigate("/promo/kurir")}
-          icon={<Icons.Bike size={16} />}
-          label="Jadi Kurir"
-          color="text-blue-600"
-          borderColor="hover:border-blue-200"
-        />
-        <PromoBox
-          onClick={() => navigate("/promo/admin")}
-          icon={<Icons.Globe size={16} />}
-          label="Mitra Wilayah"
-          color="text-teal-600"
-          borderColor="hover:border-teal-200"
-        />
       </div>
     </div>
   );

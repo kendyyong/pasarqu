@@ -5,6 +5,7 @@ import {
   Route,
   useNavigate,
   useLocation,
+  Navigate,
 } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
@@ -14,6 +15,8 @@ import { MarketProvider, useMarket } from "./contexts/MarketContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ChatProvider } from "./contexts/ChatContext";
 import { ToastProvider, useToast } from "./contexts/ToastContext";
+
+// PERBAIKAN DI SINI: Alamat disetel ke level yang benar
 import { supabase } from "./lib/supabaseClient";
 
 // --- HOOKS ---
@@ -37,6 +40,7 @@ import { CourierDashboard } from "./pages/courier/CourierDashboard";
 import { CustomerDashboard } from "./pages/customer/CustomerDashboard";
 import { ShopDetail } from "./pages/customer/ShopDetail";
 import { ProductDetail } from "./pages/customer/ProductDetail";
+import { OrderTrackingPage } from "./pages/customer/OrderTrackingPage";
 import { AuthPage } from "./pages/auth/AuthPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
 import { WaitingApprovalPage } from "./pages/auth/WaitingApprovalPage";
@@ -47,15 +51,42 @@ import { AdminPromoPage } from "./pages/promo/AdminPromoPage";
 import { MarketSelectionPage } from "./pages/MarketSelection/MarketSelectionPage";
 import { CheckoutPaymentPage } from "./pages/checkout/CheckoutPaymentPage";
 
-// IMPORT HALAMAN MASTER ADMIN
-import { ManageQuickActions } from "./pages/admin/super-features/ManageQuickActions";
+// --- NEW FEATURES ---
+import { ManageAds } from "./pages/admin/super-features/ManageAds";
 
 import {
   MerchantLogin,
   CourierLogin,
   AdminLogin,
-  SuperAdminLogin, // <--- INI ADALAH KOMPONEN GOD MODE
+  SuperAdminLogin,
 } from "./pages/auth/PartnerLoginPages";
+
+// --- PENGARAH JALAN OTOMATIS ---
+const RoleBasedRedirect = () => {
+  const { profile, loading, user } = useAuth();
+
+  if (loading)
+    return (
+      <div className="h-screen flex items-center justify-center bg-white">
+        <Loader2 className="animate-spin text-teal-600" size={40} />
+      </div>
+    );
+
+  if (!user) return <MarketplaceApp />;
+
+  switch (profile?.role) {
+    case "SUPER_ADMIN":
+      return <Navigate to="/super-admin" replace />;
+    case "MERCHANT":
+      return <Navigate to="/merchant-dashboard" replace />;
+    case "COURIER":
+      return <Navigate to="/courier-dashboard" replace />;
+    case "LOCAL_ADMIN":
+      return <Navigate to="/admin-wilayah" replace />;
+    default:
+      return <MarketplaceApp />;
+  }
+};
 
 // --- KOMPONEN MARKETPLACE (HOME) ---
 const MarketplaceApp = () => {
@@ -73,7 +104,6 @@ const MarketplaceApp = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-
   const [userName, setUserName] = useState<string>("Tamu");
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
@@ -84,37 +114,29 @@ const MarketplaceApp = () => {
       if (user?.id) {
         const { data: profileData } = await supabase
           .from("profiles")
-          .select("name, avatar_url")
+          .select("full_name, avatar_url")
           .eq("id", user.id)
           .maybeSingle();
 
-        setUserName(profileData?.name || user.email?.split("@")[0] || "User");
+        setUserName(
+          profileData?.full_name || user.email?.split("@")[0] || "User",
+        );
         setUserAvatar(profileData?.avatar_url || null);
       }
     };
     fetchUserData();
   }, [user]);
 
-  const handleCheckoutProcess = () => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
-    setIsCartOpen(false);
-    setTimeout(() => {
-      setIsCheckoutOpen(true);
-    }, 300);
-  };
-
   return (
-    <MobileLayout
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      onSearch={setSearchQuery}
-      onCartClick={() => setIsCartOpen(true)}
-      cartCount={totalCartCount}
-    >
-      <div className="bg-[#f5f5f5] min-h-screen text-left pt-[86px] md:pt-[105px]">
+    /* PERBAIKAN BACKGROUND: bg-white untuk menghapus warna abu-abu */
+    <div className="bg-white min-h-screen">
+      <MobileLayout
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onSearch={setSearchQuery}
+        onCartClick={() => setIsCartOpen(true)}
+        cartCount={totalCartCount}
+      >
         <AppHeader
           userName={userName}
           userAvatar={userAvatar}
@@ -125,13 +147,28 @@ const MarketplaceApp = () => {
             user ? navigate("/customer-dashboard") : navigate("/login")
           }
         />
-        {!searchQuery && (
-          <>
-            <HeroOnboarding />
-            <HomeMenuGrid />
-          </>
-        )}
-        <Home searchQuery={searchQuery} />
+
+        {/* STRUKTUR FULL LEBAR (PONSEL):
+            - px-0: Menghapus sisa ruang di kiri kanan ponsel secara total.
+            - md:px-5: Hanya memberikan jarak/sejajar saat di layar desktop.
+            - bg-white: Memastikan latar belakang bersih.
+        */}
+        <div className="w-full max-w-[1200px] mx-auto px-0 md:px-5 bg-white">
+          {!searchQuery && (
+            <>
+              {/* Iklan Utama - Full Mentok */}
+              <HeroOnboarding />
+
+              {/* Panel Cepat - Full Lebar di HP */}
+              <div className="mt-0">
+                <HomeMenuGrid />
+              </div>
+            </>
+          )}
+
+          {/* Katalog Produk & Portal - Full Lebar di HP */}
+          <Home searchQuery={searchQuery} />
+        </div>
 
         <CartDrawer
           isOpen={isCartOpen}
@@ -139,19 +176,21 @@ const MarketplaceApp = () => {
           cart={cart}
           onUpdateQty={updateQty}
           onRemove={removeFromCart}
-          onCheckout={handleCheckoutProcess}
+          onCheckout={() => {
+            setIsCartOpen(false);
+            setTimeout(() => setIsCheckoutOpen(true), 300);
+          }}
         />
-
         <CheckoutPaymentPage
           isOpen={isCheckoutOpen}
           onClose={() => setIsCheckoutOpen(false)}
         />
-      </div>
-    </MobileLayout>
+      </MobileLayout>
+    </div>
   );
 };
 
-// --- MAIN ROUTING LOGIC ---
+// --- LOGIKA ROUTING UTAMA ---
 const MainContent = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -172,48 +211,40 @@ const MainContent = () => {
     "/super-admin",
     "/waiting-approval",
     "/login/master",
+    "/track-order",
   ];
   const isBypassRoute = bypassRoutes.some((route) =>
     location.pathname.startsWith(route),
   );
 
-  // LOGIKA BYPASS UNTUK RUTE RAHASIA (LANGSUNG KE GOD MODE)
-  if (location.pathname === "/login/master") {
-    return (
-      <Routes>
-        <Route path="/login/master" element={<SuperAdminLogin />} />
-      </Routes>
-    );
-  }
-
   if (!selectedMarket && !isBypassRoute) return <MarketSelectionPage />;
 
   return (
     <Routes>
-      <Route path="/" element={<MarketplaceApp />} />
-      <Route path="/shop/:merchantId" element={<ShopDetail />} />
-      <Route path="/product/:productId" element={<ProductDetail />} />
+      <Route path="/" element={<RoleBasedRedirect />} />
       <Route path="/portal" element={<PortalLoginPage />} />
       <Route path="/login" element={<AuthPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/waiting-approval" element={<WaitingApprovalPage />} />
-
-      {/* --- RUTE RAHASIA: MENGARAH KE GOD MODE LOGIN --- */}
       <Route path="/login/master" element={<SuperAdminLogin />} />
-
-      {/* LOGIN PARTNER */}
       <Route path="/login/toko" element={<MerchantLogin />} />
       <Route path="/login/kurir" element={<CourierLogin />} />
       <Route path="/login/admin" element={<AdminLogin />} />
-      <Route path="/admin/login" element={<AdminLogin />} />
-
-      {/* PROMO/PENDAFTARAN */}
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/waiting-approval" element={<WaitingApprovalPage />} />
       <Route path="/promo/toko" element={<MerchantPromoPage />} />
       <Route path="/promo/kurir" element={<CourierPromoPage />} />
       <Route path="/promo/admin" element={<AdminPromoPage />} />
-      <Route path="/admin/register" element={<AdminPromoPage />} />
+      <Route path="/shop/:merchantId" element={<ShopDetail />} />
+      <Route path="/product/:productId" element={<ProductDetail />} />
 
-      {/* DASHBOARD DASHBOARD */}
+      <Route
+        path="/track-order/:orderId"
+        element={
+          <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN", "COURIER"]}>
+            <OrderTrackingPage />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/merchant-dashboard"
         element={
@@ -233,7 +264,7 @@ const MainContent = () => {
       <Route
         path="/customer-dashboard"
         element={
-          <ProtectedRoute allowedRoles={["CUSTOMER"]}>
+          <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN"]}>
             <CustomerDashboard />
           </ProtectedRoute>
         }
@@ -247,9 +278,17 @@ const MainContent = () => {
         }
       />
 
-      {/* PUSAT KENDALI SUPER ADMIN */}
       <Route
-        path="/super-admin"
+        path="/super-admin/manage-ads"
+        element={
+          <ProtectedRoute allowedRoles={["SUPER_ADMIN"]}>
+            <ManageAds />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/super-admin/*"
         element={
           <ProtectedRoute allowedRoles={["SUPER_ADMIN"]}>
             <SuperAdminDashboard />
@@ -257,7 +296,7 @@ const MainContent = () => {
         }
       />
 
-      <Route path="*" element={<MarketplaceApp />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 };

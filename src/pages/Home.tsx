@@ -1,16 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Plus,
-  MapPin,
   Search as SearchIcon,
-  Loader2,
   ShoppingBasket,
-  User,
   Zap,
   ArrowRight,
   Flame,
   Star,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useMarket } from "../contexts/MarketContext";
@@ -22,17 +19,45 @@ interface HomeProps {
   searchQuery: string;
 }
 
+const SkeletonCard = () => (
+  /* Skeleton juga disamakan sudutnya menjadi tidak terlalu bulat */
+  <div className="flex flex-col h-full bg-white border border-slate-100 rounded-xl overflow-hidden animate-pulse">
+    <div className="aspect-square w-full bg-slate-200" />
+    <div className="p-4 flex flex-col flex-1">
+      <div className="h-2 w-12 bg-slate-100 mb-2 rounded" />
+      <div className="h-3 w-full bg-slate-200 mb-1 rounded" />
+      <div className="h-3 w-3/4 bg-slate-200 mb-4 rounded" />
+      <div className="mt-auto h-5 w-24 bg-slate-100 mb-3 rounded" />
+      <div className="h-10 w-full bg-slate-200 rounded-lg" />
+    </div>
+  </div>
+);
+
 export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { selectedMarket, addToCart } = useMarket();
   const { showToast } = useToast();
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [quickActions, setQuickActions] = useState<any[]>([]); // State untuk Tombol Cepat
+  const [quickActions, setQuickActions] = useState<any[]>([]);
+  const [ads, setAds] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeSlide, setActiveSlide] = useState(0);
 
-  // 1. Fungsi Ambil Data Produk
+  const fetchAds = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("ads")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      setAds(data || []);
+    } catch (err) {
+      console.error("Gagal mengambil iklan:", err);
+    }
+  };
+
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
@@ -52,11 +77,10 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
     } catch (err: any) {
       console.error("Gagal mengambil produk:", err.message);
     } finally {
-      setIsLoading(false);
+      setTimeout(() => setIsLoading(false), 500);
     }
   };
 
-  // 2. Fungsi Ambil Data Tombol Cepat (Quick Actions)
   const fetchQuickActions = async () => {
     try {
       const { data, error } = await supabase
@@ -64,7 +88,6 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
         .select("*")
         .eq("is_active", true)
         .order("sort_order", { ascending: true });
-
       if (error) throw error;
       setQuickActions(data || []);
     } catch (err) {
@@ -73,15 +96,24 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   };
 
   useEffect(() => {
+    fetchAds();
     fetchProducts();
     fetchQuickActions();
   }, [selectedMarket, searchQuery]);
+
+  useEffect(() => {
+    if (ads.length > 1) {
+      const interval = setInterval(() => {
+        setActiveSlide((prev) => (prev === ads.length - 1 ? 0 : prev + 1));
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [ads]);
 
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  // Helper untuk menentukan icon mana yang tampil
   const renderIcon = (iconName: string) => {
     switch (iconName) {
       case "Flame":
@@ -96,165 +128,154 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   };
 
   return (
-    <div className="w-full font-sans text-left bg-white min-h-screen pb-24">
-      {/* 1. TOP HEADER */}
-      <header className="h-16 bg-white border-b border-slate-100 sticky top-0 z-40 px-6 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white shadow-lg">
-            <ShoppingBasket size={18} />
-          </div>
-          <span className="text-lg font-black text-slate-800 tracking-tighter uppercase leading-none">
-            Pasarqu
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {selectedMarket && (
-            <div className="flex items-center gap-1 text-[9px] font-black text-teal-600 bg-teal-50 px-2.5 py-1.5 rounded-full border border-teal-100">
-              <MapPin size={10} /> {selectedMarket.name}
-            </div>
-          )}
-
-          <button
-            onClick={() => navigate("/portal")}
-            className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-xl hover:bg-slate-100 transition-all border border-slate-100 ml-2 shadow-sm active:scale-95"
-          >
-            <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center text-teal-600 border border-slate-200">
-              <User size={14} />
-            </div>
-            <div className="text-right leading-none">
-              <span className="block text-[8px] font-bold text-slate-400 uppercase">
-                Status
-              </span>
-              <span className="block text-[10px] font-black uppercase text-slate-800">
-                {user ? "Dashboard" : "Tamu"}
-              </span>
-            </div>
-          </button>
-        </div>
-      </header>
-
-      {/* 2. TOMBOL CEPAT (Dinamis dari Super Admin) */}
-      {!searchQuery && quickActions.length > 0 && (
-        <div className="px-4 py-6 overflow-x-auto no-scrollbar flex gap-6 border-b border-slate-50">
-          {quickActions.map((action) => (
-            <button
-              key={action.id}
-              onClick={() => navigate(action.link_to)}
-              className="flex flex-col items-center gap-2 group shrink-0"
-            >
-              <div
-                className={`${action.bg_color || "bg-teal-500"} w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform duration-300`}
-              >
-                {renderIcon(action.icon_name)}
-              </div>
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center leading-none">
-                {action.label}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* 3. PRODUK GRID */}
-      <div className="p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {isLoading ? (
-          <div className="col-span-full py-20 text-center">
-            <Loader2 className="animate-spin mx-auto text-teal-600" size={32} />
-          </div>
-        ) : filteredProducts.length === 0 ? (
-          <div className="col-span-full py-20 text-center bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
-            <SearchIcon className="mx-auto text-slate-200 mb-2" size={40} />
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
-              Produk belum tersedia
-            </p>
-          </div>
-        ) : (
-          filteredProducts.map((product) => (
-            <div
-              key={product.id}
-              className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col h-full hover:shadow-md transition-all group"
-            >
-              <div
-                onClick={() => navigate(`/product/${product.id}`)}
-                className="aspect-square m-2 rounded-[1.5rem] overflow-hidden relative bg-slate-50 cursor-pointer"
-              >
-                <img
-                  src={
-                    product.image_url ||
-                    "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400"
-                  }
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  alt={product.name}
-                />
-                <div className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm text-teal-600 text-[8px] font-black px-2 py-1 rounded-lg">
-                  FRESH
+    <div className="w-full font-sans text-left bg-white min-h-screen pb-16 pt-[10px]">
+      <div className="max-w-[1200px] mx-auto px-0 md:px-0">
+        {/* 1. IKLAN SLIDE */}
+        {!searchQuery && ads.length > 0 && (
+          <div className="mt-0">
+            <div className="relative h-44 md:h-72 w-full overflow-hidden rounded-none md:rounded-xl group border-none">
+              {ads.map((ad, index) => (
+                <div
+                  key={ad.id}
+                  onClick={() => navigate(ad.link_to)}
+                  className={`absolute inset-0 cursor-pointer transition-opacity duration-1000 ease-in-out ${index === activeSlide ? "opacity-100 scale-100" : "opacity-0 scale-105"}`}
+                >
+                  <img
+                    src={ad.image_url}
+                    className="w-full h-full object-cover"
+                    alt={ad.title}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-6">
+                    <h2 className="text-white text-xl md:text-4xl font-black uppercase italic tracking-tighter leading-none">
+                      {ad.title}
+                    </h2>
+                  </div>
                 </div>
-              </div>
-              <div className="p-4 pt-0 flex flex-col flex-1">
-                <p className="text-[8px] font-black text-slate-300 uppercase truncate mb-1">
-                  {product.merchants?.name || "Toko Pasarqu"}
-                </p>
-                <h4 className="text-[11px] font-bold text-slate-800 line-clamp-2 mb-4 leading-tight min-h-[32px]">
-                  {product.name}
-                </h4>
-                <div className="mt-auto flex justify-between items-center">
-                  <span className="text-sm font-black text-slate-900 tracking-tighter">
-                    Rp {product.price.toLocaleString()}
-                  </span>
-                  <button
-                    onClick={() => {
-                      addToCart(product);
-                      showToast("Masuk Keranjang", "success");
-                    }}
-                    className="w-10 h-10 bg-teal-600 text-white rounded-2xl flex items-center justify-center shadow-lg active:scale-90 transition-all hover:bg-teal-700"
-                  >
-                    <Plus size={20} />
-                  </button>
-                </div>
-              </div>
+              ))}
             </div>
-          ))
+          </div>
         )}
-      </div>
 
-      {/* 4. PORTAL PARTNER FOOTER */}
-      <div className="px-4 mt-12">
-        <div className="bg-slate-900 rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
-          <div className="relative z-10 text-center md:text-left">
-            <div className="flex items-center justify-center md:justify-start gap-2 mb-3">
-              <div className="bg-white/10 p-1.5 rounded-lg text-orange-400">
-                <Zap size={16} fill="currentColor" />
-              </div>
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                Kesempatan Bermitra
-              </span>
+        {/* 2. QUICK ACTIONS */}
+        {!searchQuery && quickActions.length > 0 && (
+          <div className="mt-5 px-4 md:px-0">
+            {/* Sudut Panel Cepat juga diubah menjadi rounded-xl agar serasi */}
+            <div className="bg-white p-5 overflow-x-auto no-scrollbar flex gap-6 rounded-xl border border-slate-100 shadow-sm">
+              {quickActions.map((action) => (
+                <button
+                  key={action.id}
+                  onClick={() => navigate(action.link_to)}
+                  className="flex flex-col items-center gap-2 group shrink-0"
+                >
+                  <div
+                    className={`${action.bg_color || "bg-teal-500"} w-14 h-14 rounded-xl flex items-center justify-center text-white shadow-lg transition-transform`}
+                  >
+                    {renderIcon(action.icon_name)}
+                  </div>
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-center leading-none">
+                    {action.label}
+                  </span>
+                </button>
+              ))}
             </div>
-            <h3 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight leading-tight">
-              Gabung Jadi Mitra <br />{" "}
-              <span className="text-teal-400 font-black">Pasar Digital</span>
-            </h3>
-            <p className="text-[11px] text-slate-400 font-medium mt-3 max-w-xs mx-auto md:mx-0 leading-relaxed">
-              Dapatkan akses ke dashboard toko atau ambil pesanan sebagai kurir
-              langsung lewat aplikasi.
-            </p>
           </div>
-          <button
-            onClick={() => navigate("/portal")}
-            className="relative z-10 px-8 py-4 bg-teal-500 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest flex items-center gap-2 hover:bg-white hover:text-teal-900 transition-all active:scale-95 shadow-lg shadow-teal-500/20"
-          >
-            Buka Portal Mitra <ArrowRight size={14} />
-          </button>
-        </div>
-      </div>
+        )}
 
-      {/* 5. FOOTER COPYRIGHT */}
-      <div className="mt-8 mb-24 px-6 py-12 border-t border-slate-50 text-center opacity-30">
-        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.4em]">
-          © 2026 Pasarqu Ecosystem • Digitalizing Traditional Markets
-        </p>
+        {/* 3. PRODUK GRID */}
+        <div className="mt-8 mb-8 px-4 md:px-0">
+          <div className="flex items-center justify-between mb-4 px-1">
+            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
+              Katalog Produk
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {isLoading ? (
+              <>
+                {[...Array(6)].map((_, i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </>
+            ) : (
+              filteredProducts.map((product) => (
+                <div
+                  key={product.id}
+                  /* PERBAIKAN: rounded-xl agar tidak membulat ekstrim */
+                  className="flex flex-col h-full bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden group transition-all"
+                >
+                  <div
+                    onClick={() => navigate(`/product/${product.id}`)}
+                    className="aspect-square w-full overflow-hidden bg-slate-50 cursor-pointer relative"
+                  >
+                    <img
+                      src={
+                        product.image_url ||
+                        "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400"
+                      }
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      alt={product.name}
+                    />
+                  </div>
+                  <div className="p-3 flex flex-col flex-1">
+                    <p className="text-[8px] font-black text-slate-300 uppercase truncate mb-1">
+                      {product.merchants?.name || "Toko Pasarqu"}
+                    </p>
+                    <h4 className="text-[11px] font-bold text-slate-800 line-clamp-2 mb-2 leading-tight min-h-[32px]">
+                      {product.name}
+                    </h4>
+                    <div className="mt-auto mb-3">
+                      <span className="text-[15px] font-black text-[#FF6600] tracking-tighter">
+                        Rp {product.price.toLocaleString()}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        addToCart(product);
+                        showToast("Masuk Keranjang", "success");
+                      }}
+                      /* Tombol juga dibuat rounded-lg agar serasi */
+                      className="w-full bg-teal-600 hover:bg-teal-700 text-white py-2.5 rounded-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
+                    >
+                      <ShoppingBasket size={14} />
+                      <span className="text-[10px] font-black uppercase tracking-widest">
+                        Tambah
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* 4. PORTAL MITRA */}
+        <div className="mt-8 mb-10 px-4 md:px-0">
+          {/* Sudut Portal juga diubah menjadi rounded-xl */}
+          <div className="bg-slate-900 p-6 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden shadow-2xl rounded-xl">
+            <div className="relative z-10 flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
+              <div className="bg-white/10 p-2 rounded-lg text-orange-400">
+                <Zap size={22} fill="currentColor" />
+              </div>
+              <div>
+                <h3 className="text-sm md:text-lg font-black text-white uppercase tracking-tight mb-1">
+                  Gabung Mitra Pasarqu
+                </h3>
+                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
+                  Kelola toko atau jadi kurir sekarang
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate("/portal")}
+              className="relative z-10 px-8 py-3 bg-teal-500 text-white rounded-lg font-black text-[9px] uppercase tracking-widest shadow-lg"
+            >
+              Buka Portal <ArrowRight size={12} />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
+
+export default Home;

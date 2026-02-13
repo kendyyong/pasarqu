@@ -9,17 +9,30 @@ import {
   MessageCircle,
   AlertTriangle,
   Loader2,
+  Image as ImageIcon,
+  Upload,
+  Palette,
+  LayoutTemplate,
 } from "lucide-react";
 import { useToast } from "../../../contexts/ToastContext";
-import { createAuditLog } from "../../../lib/auditHelper"; // <--- Import Helper Audit
+import { createAuditLog } from "../../../lib/auditHelper";
+import { useConfig } from "../../../contexts/ConfigContext"; // <--- Import Config Context
 
 export const GlobalConfig = () => {
   const { showToast } = useToast();
+  const { refreshConfig } = useConfig(); // <--- Untuk update logo realtime tanpa refresh
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   // State untuk menyimpan nilai form
   const [formData, setFormData] = useState({
+    // --- BRANDING ---
+    app_name: "Pasarqu",
+    logo_url: "",
+    primary_color: "#059669",
+
+    // --- SYSTEM ---
     platform_fee: 0,
     tax_percent: 0,
     max_distance_km: 0,
@@ -36,19 +49,22 @@ export const GlobalConfig = () => {
       const { data, error } = await supabase
         .from("app_settings")
         .select("*")
-        .eq("id", 1) // Kita hanya pakai ID 1
+        .eq("id", 1)
         .single();
 
       if (error) throw error;
       if (data) {
         setFormData({
-          platform_fee: data.platform_fee,
-          tax_percent: data.tax_percent,
-          max_distance_km: data.max_distance_km,
-          min_withdraw: data.min_withdraw,
-          min_app_version: data.min_app_version,
-          is_maintenance: data.is_maintenance,
-          cs_whatsapp: data.cs_whatsapp,
+          app_name: data.app_name || "Pasarqu",
+          logo_url: data.logo_url || "",
+          primary_color: data.primary_color || "#059669",
+          platform_fee: data.platform_fee || 0,
+          tax_percent: data.tax_percent || 0,
+          max_distance_km: data.max_distance_km || 0,
+          min_withdraw: data.min_withdraw || 0,
+          min_app_version: data.min_app_version || "",
+          is_maintenance: data.is_maintenance || false,
+          cs_whatsapp: data.cs_whatsapp || "",
         });
       }
     } catch (err: any) {
@@ -62,7 +78,45 @@ export const GlobalConfig = () => {
     fetchSettings();
   }, []);
 
-  // 2. Simpan Perubahan
+  // 2. Handle Upload Logo
+  const handleLogoUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    try {
+      setUploading(true);
+      if (!event.target.files || event.target.files.length === 0) return;
+
+      const file = event.target.files[0];
+      const fileExt = file.name.split(".").pop();
+      const fileName = `app-logo-${Math.random()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // Upload ke Bucket 'app-assets'
+      const { error: uploadError } = await supabase.storage
+        .from("app-assets")
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Dapatkan Public URL
+      const { data } = supabase.storage
+        .from("app-assets")
+        .getPublicUrl(filePath);
+
+      // Update State Preview
+      setFormData((prev) => ({ ...prev, logo_url: data.publicUrl }));
+      showToast(
+        "Logo berhasil diupload (Klik Simpan untuk menerapkan)",
+        "success",
+      );
+    } catch (error: any) {
+      showToast("Gagal upload gambar: " + error.message, "error");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // 3. Simpan Perubahan
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -73,11 +127,14 @@ export const GlobalConfig = () => {
 
       if (error) throw error;
 
+      // --- Refresh Context agar Logo berubah di seluruh aplikasi ---
+      await refreshConfig();
+
       // --- OTOMATIS CATAT KE CCTV (AUDIT LOGS) ---
       await createAuditLog(
         "UPDATE_GLOBAL_SETTINGS",
         "SYSTEM",
-        `Mengubah pengaturan aplikasi (Fee: ${formData.platform_fee}, Maintenance: ${formData.is_maintenance}, Versi: ${formData.min_app_version})`,
+        `Mengubah pengaturan aplikasi (App: ${formData.app_name}, Fee: ${formData.platform_fee}, Ver: ${formData.min_app_version})`,
       );
 
       showToast("Pengaturan Global berhasil diperbarui!", "success");
@@ -113,12 +170,12 @@ export const GlobalConfig = () => {
             Konfigurasi Sistem
           </h2>
           <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
-            Variabel Global Aplikasi Pasarqu
+            Branding & Variabel Global Aplikasi
           </p>
         </div>
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || uploading}
           className="bg-teal-600 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-teal-700 active:scale-95 transition-all shadow-lg shadow-teal-600/20 disabled:opacity-50"
         >
           {saving ? (
@@ -130,7 +187,90 @@ export const GlobalConfig = () => {
         </button>
       </div>
 
-      {/* 1. PENGATURAN KEUANGAN */}
+      {/* 1. BRANDING & IDENTITAS (BARU) */}
+      <section className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
+        <div className="absolute top-0 right-0 p-6 text-slate-100 group-hover:text-pink-50 transition-colors">
+          <LayoutTemplate size={64} />
+        </div>
+        <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-6 flex items-center gap-2 relative z-10">
+          <Palette size={18} className="text-pink-500" /> Branding & Identitas
+        </h3>
+
+        <div className="flex flex-col md:flex-row gap-8 items-center relative z-10">
+          {/* Logo Upload */}
+          <div className="text-center">
+            <div className="relative w-32 h-32 mx-auto bg-slate-50 rounded-full border-4 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group/img cursor-pointer">
+              {formData.logo_url ? (
+                <img
+                  src={formData.logo_url}
+                  alt="Logo"
+                  className="w-full h-full object-contain p-2"
+                />
+              ) : (
+                <ImageIcon className="text-slate-300" size={32} />
+              )}
+
+              {/* Overlay */}
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
+                <Upload className="text-white" size={20} />
+              </div>
+
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleLogoUpload}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              />
+            </div>
+            {uploading && (
+              <p className="text-[10px] text-orange-500 font-bold mt-2 animate-pulse">
+                Mengupload...
+              </p>
+            )}
+            <p className="text-[9px] text-slate-400 mt-2 font-medium">
+              Klik untuk ganti logo
+            </p>
+          </div>
+
+          {/* Input Fields */}
+          <div className="flex-1 w-full space-y-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                Nama Aplikasi
+              </label>
+              <input
+                type="text"
+                name="app_name"
+                value={formData.app_name}
+                onChange={handleChange}
+                className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-pink-500 transition-all outline-none"
+                placeholder="Contoh: Pasarqu"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                Warna Utama (Hex)
+              </label>
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-lg shadow-sm border border-slate-200"
+                  style={{ backgroundColor: formData.primary_color }}
+                ></div>
+                <input
+                  type="text"
+                  name="primary_color"
+                  value={formData.primary_color}
+                  onChange={handleChange}
+                  className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-pink-500 transition-all outline-none"
+                  placeholder="#059669"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 2. PENGATURAN KEUANGAN */}
       <section className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
         <div className="absolute top-0 right-0 p-6 text-slate-100 group-hover:text-teal-50 transition-colors">
           <DollarSign size={64} />
@@ -189,7 +329,7 @@ export const GlobalConfig = () => {
         </div>
       </section>
 
-      {/* 2. PENGATURAN OPERASIONAL */}
+      {/* 3. PENGATURAN OPERASIONAL */}
       <section className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
         <div className="absolute top-0 right-0 p-6 text-slate-100 group-hover:text-blue-50 transition-colors">
           <MapPin size={64} />
@@ -233,7 +373,7 @@ export const GlobalConfig = () => {
         </div>
       </section>
 
-      {/* 3. PENGATURAN SISTEM (DANGER ZONE) */}
+      {/* 4. PENGATURAN SISTEM (DANGER ZONE) */}
       <section className="bg-white p-8 rounded-[2rem] shadow-sm border border-red-100 relative overflow-hidden group hover:shadow-md transition-all text-left">
         <div className="absolute top-0 right-0 p-6 text-slate-100 group-hover:text-red-50 transition-colors">
           <Server size={64} />
