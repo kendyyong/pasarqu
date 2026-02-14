@@ -17,9 +17,9 @@ interface MarketContextType {
   setSelectedMarket: (market: Market | null) => void;
 
   cart: CartItem[];
-  addToCart: (product: Product) => void;
+  addToCart: (product: Product, quantity?: number) => void; // Tambah parameter quantity opsional
   removeFromCart: (productId: string) => void;
-  updateQty: (productId: string, newQty: number) => void; // Diubah: menerima angka pasti
+  updateQty: (productId: string, newQty: number) => void;
   clearCart: () => void;
   cartTotal: number;
 }
@@ -37,8 +37,35 @@ export const MarketProvider: React.FC<{ children: ReactNode }> = ({
   // --- LOGIKA KERANJANG (DENGAN PENYIMPANAN OTOMATIS) ---
   const [cart, setCart] = useState<CartItem[]>(() => {
     const savedCart = localStorage.getItem("pasarqu_cart");
-    return savedCart ? JSON.parse(savedCart) : [];
+    try {
+      return savedCart ? JSON.parse(savedCart) : [];
+    } catch (e) {
+      return [];
+    }
   });
+
+  // Ambil data pasar saat pertama kali load
+  useEffect(() => {
+    const fetchMarkets = async () => {
+      const { data, error } = await supabase
+        .from("markets")
+        .select("*")
+        .eq("is_active", true)
+        .order("name");
+
+      if (!error && data) {
+        setMarkets(data);
+
+        // Cek jika ada pasar yang tersimpan di LocalStorage
+        const savedMarketId = localStorage.getItem("selected_market_id");
+        if (savedMarketId) {
+          const found = data.find((m) => m.id === savedMarketId);
+          if (found) setSelectedMarketState(found);
+        }
+      }
+    };
+    fetchMarkets();
+  }, []);
 
   // Setiap kali keranjang berubah, simpan ke HP
   useEffect(() => {
@@ -61,58 +88,62 @@ export const MarketProvider: React.FC<{ children: ReactNode }> = ({
 
   // --- FUNGSI KERANJANG ---
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: any, quantity: number = 1) => {
     setCart((prev) => {
       const existingItem = prev.find((item) => item.id === product.id);
+
       if (existingItem) {
+        // Jika sudah ada, tambahkan sesuai quantity yang dikirim
         return prev.map((item) =>
           item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? { ...item, quantity: item.quantity + quantity }
             : item,
         );
       } else {
+        // Jika baru, masukkan semua data termasuk is_po dan po_days (Fitur Baru)
         return [
           ...prev,
           {
             ...product,
-            quantity: 1,
-            unit: product.unit || "pcs",
+            quantity: quantity,
+            unit: product.unit || "Pcs",
             image_url: product.image_url || "",
+            // Pastikan data PO ikut masuk agar bisa diproses di Checkout
+            is_po: product.is_po || false,
+            po_days: product.po_days || 0,
+            merchant_name:
+              product.merchants?.shop_name || product.merchants?.name || "Toko",
           },
         ];
       }
     });
   };
 
-  // Menghapus item secara total
   const removeFromCart = (productId: string) => {
     setCart((prev) => prev.filter((item) => item.id !== productId));
   };
 
-  // PERBAIKAN LOGIKA: Mengatur angka kuantitas secara langsung (Absolute)
-  // Cara ini mencegah angka bertambah berkali lipat saat tombol minus ditekan
   const updateQty = (productId: string, newQty: number) => {
     setCart((prev) => {
-      return (
-        prev
-          .map((item) => {
-            if (item.id === productId) {
-              // Pastikan input adalah angka murni dan minimal 0
-              const safeQty = Math.max(0, Number(newQty));
-              return { ...item, quantity: safeQty };
-            }
-            return item;
-          })
-          // Jika kuantitas 0, otomatis dihapus dari daftar
-          .filter((item) => item.quantity > 0)
-      );
+      return prev
+        .map((item) => {
+          if (item.id === productId) {
+            const safeQty = Math.max(0, Number(newQty));
+            return { ...item, quantity: safeQty };
+          }
+          return item;
+        })
+        .filter((item) => item.quantity > 0);
     });
   };
 
-  const clearCart = () => setCart([]);
+  const clearCart = () => {
+    setCart([]);
+    localStorage.removeItem("pasarqu_cart");
+  };
 
   const cartTotal = cart.reduce(
-    (sum, item) => sum + item.price * item.quantity,
+    (sum, item) => sum + Number(item.price) * Number(item.quantity),
     0,
   );
 

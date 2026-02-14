@@ -14,7 +14,7 @@ import { ConfigProvider } from "./contexts/ConfigContext";
 import { MarketProvider, useMarket } from "./contexts/MarketContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ChatProvider } from "./contexts/ChatContext";
-import { ToastProvider, useToast } from "./contexts/ToastContext";
+import { ToastProvider } from "./contexts/ToastContext";
 
 // LEVEL AKSES DB
 import { supabase } from "./lib/supabaseClient";
@@ -33,27 +33,37 @@ import { HomeMenuGrid } from "./components/HomeMenuGrid";
 
 // --- PAGES ---
 import { Home } from "./pages/Home";
-import { LocalAdminDashboard } from "./pages/admin/LocalAdminDashboard";
-import { SuperAdminDashboard } from "./pages/admin/SuperAdminDashboard";
-import { MerchantDashboard } from "./pages/merchant/MerchantDashboard";
-import { CourierDashboard } from "./pages/courier/CourierDashboard";
-import { CustomerDashboard } from "./pages/customer/CustomerDashboard";
-import { ShopDetail } from "./pages/customer/ShopDetail";
-import { ProductDetail } from "./pages/customer/ProductDetail";
-import { OrderTrackingPage } from "./pages/customer/OrderTrackingPage";
 import { AuthPage } from "./pages/auth/AuthPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
 import { WaitingApprovalPage } from "./pages/auth/WaitingApprovalPage";
 import { PortalLoginPage } from "./pages/auth/PortalLoginPage";
-import { MerchantPromoPage } from "./pages/promo/MerchantPromoPage";
-import { CourierPromoPage } from "./pages/promo/CourierPromoPage";
-import { AdminPromoPage } from "./pages/promo/AdminPromoPage";
+import { ShopDetail } from "./pages/customer/ShopDetail";
+import { ProductDetail } from "./pages/customer/ProductDetail";
+import { OrderTrackingPage } from "./pages/customer/OrderTrackingPage";
 import { MarketSelectionPage } from "./pages/MarketSelection/MarketSelectionPage";
 import { CheckoutPaymentPage } from "./pages/checkout/CheckoutPaymentPage";
 
-// --- NEW FEATURES ---
-import { ManageAds } from "./pages/admin/super-features/ManageAds";
+// --- DASHBOARDS ---
+import { LocalAdminDashboard } from "./pages/admin/LocalAdminDashboard";
+import { AdminProductVerification } from "./pages/admin/AdminProductVerification";
+import { SuperAdminDashboard } from "./pages/admin/SuperAdminDashboard";
+import { MerchantDashboard } from "./pages/merchant/MerchantDashboard";
+import { CourierDashboard } from "./pages/courier/CourierDashboard";
+import { CustomerDashboard } from "./pages/customer/CustomerDashboard";
 
+// --- PROMO ---
+import { MerchantPromoPage } from "./pages/promo/MerchantPromoPage";
+import { CourierPromoPage } from "./pages/promo/CourierPromoPage";
+import { AdminPromoPage } from "./pages/promo/AdminPromoPage";
+
+// --- ADMIN FEATURES ---
+import { ManageAds } from "./pages/admin/super-features/ManageAds";
+import { ManageCategories } from "./pages/admin/super-features/ManageCategories";
+
+// ✅ FIX IMPORT BARIS 62 (PASTIKAN TANPA KURUNG KURAWAL)
+import RegionalFinance from "./pages/admin/finance/RegionalFinance";
+
+// --- LOGIN KHUSUS ---
 import {
   MerchantLogin,
   CourierLogin,
@@ -61,7 +71,7 @@ import {
   SuperAdminLogin,
 } from "./pages/auth/PartnerLoginPages";
 
-// --- PENGARAH JALAN OTOMATIS ---
+// --- REDIRECT LOGIC ---
 const RoleBasedRedirect = () => {
   const { profile, loading, user } = useAuth();
 
@@ -88,12 +98,12 @@ const RoleBasedRedirect = () => {
   }
 };
 
-// --- KOMPONEN MARKETPLACE (HOME) ---
 const MarketplaceApp = () => {
   const { user } = useAuth();
   const marketContext = useMarket();
   const navigate = useNavigate();
 
+  // Tambahkan Optional Chaining (?.) agar tidak crash jika context belum siap
   const cart = marketContext?.cart || [];
   const updateQty = marketContext?.updateQty || (() => {});
   const removeFromCart = marketContext?.removeFromCart || (() => {});
@@ -107,21 +117,23 @@ const MarketplaceApp = () => {
   const [userName, setUserName] = useState<string>("Tamu");
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
-  const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-
   useEffect(() => {
     const fetchUserData = async () => {
       if (user?.id) {
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("full_name, avatar_url")
-          .eq("id", user.id)
-          .maybeSingle();
+        try {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("full_name, avatar_url")
+            .eq("id", user.id)
+            .maybeSingle();
 
-        setUserName(
-          profileData?.full_name || user.email?.split("@")[0] || "User",
-        );
-        setUserAvatar(profileData?.avatar_url || null);
+          setUserName(
+            profileData?.full_name || user.email?.split("@")[0] || "User",
+          );
+          setUserAvatar(profileData?.avatar_url || null);
+        } catch (e) {
+          console.error("User fetch error", e);
+        }
       }
     };
     fetchUserData();
@@ -134,19 +146,18 @@ const MarketplaceApp = () => {
         onTabChange={setActiveTab}
         onSearch={setSearchQuery}
         onCartClick={() => setIsCartOpen(true)}
-        cartCount={totalCartCount}
+        cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
       >
         <AppHeader
           userName={userName}
           userAvatar={userAvatar}
-          cartCount={totalCartCount}
+          cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
           onCartClick={() => setIsCartOpen(true)}
           onSearch={setSearchQuery}
           onUserClick={() =>
             user ? navigate("/customer-dashboard") : navigate("/login")
           }
         />
-
         <div className="w-full max-w-[1200px] mx-auto px-0 md:px-5 bg-white">
           {!searchQuery && (
             <>
@@ -158,7 +169,6 @@ const MarketplaceApp = () => {
           )}
           <Home searchQuery={searchQuery} />
         </div>
-
         <CartDrawer
           isOpen={isCartOpen}
           onClose={() => setIsCartOpen(false)}
@@ -179,7 +189,6 @@ const MarketplaceApp = () => {
   );
 };
 
-// --- LOGIKA ROUTING UTAMA ---
 const MainContent = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -187,8 +196,8 @@ const MainContent = () => {
 
   if (isChecking)
     return (
-      <div className="h-screen flex items-center justify-center bg-white">
-        <Loader2 className="animate-spin text-teal-600" size={40} />
+      <div className="h-screen flex items-center justify-center bg-white font-sans text-teal-600">
+        <Loader2 className="animate-spin" size={40} />
       </div>
     );
 
@@ -199,8 +208,6 @@ const MainContent = () => {
     "/promo",
     "/super-admin",
     "/waiting-approval",
-    "/login/master",
-    "/login/admin-wilayah", // Tambahkan rute ini agar tidak terhalang pemilihan pasar
     "/track-order",
   ];
   const isBypassRoute = bypassRoutes.some((route) =>
@@ -217,18 +224,13 @@ const MainContent = () => {
       <Route path="/login/master" element={<SuperAdminLogin />} />
       <Route path="/login/toko" element={<MerchantLogin />} />
       <Route path="/login/kurir" element={<CourierLogin />} />
-
-      {/* PENYESUAIAN RUTE ADMIN WILAYAH AGAR SESUAI DENGAN TOMBOL RAHASIA DI PORTAL */}
       <Route path="/login/admin-wilayah" element={<AdminLogin />} />
-
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/waiting-approval" element={<WaitingApprovalPage />} />
-      <Route path="/promo/toko" element={<MerchantPromoPage />} />
-      <Route path="/promo/kurir" element={<CourierPromoPage />} />
-      <Route path="/promo/admin" element={<AdminPromoPage />} />
+
+      {/* PELANGGAN */}
       <Route path="/shop/:merchantId" element={<ShopDetail />} />
       <Route path="/product/:productId" element={<ProductDetail />} />
-
       <Route
         path="/track-order/:orderId"
         element={
@@ -238,6 +240,7 @@ const MainContent = () => {
         }
       />
 
+      {/* MITRA DASHBOARD */}
       <Route
         path="/merchant-dashboard"
         element={
@@ -262,6 +265,8 @@ const MainContent = () => {
           </ProtectedRoute>
         }
       />
+
+      {/* ADMIN WILAYAH */}
       <Route
         path="/admin-wilayah"
         element={
@@ -271,20 +276,20 @@ const MainContent = () => {
         }
       />
 
+      {/* SUPER ADMIN */}
       <Route
-        path="/super-admin/manage-ads"
-        element={
-          <ProtectedRoute allowedRoles={["SUPER_ADMIN"]}>
-            <ManageAds />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/super-admin/*"
+        path="/super-admin"
         element={
           <ProtectedRoute allowedRoles={["SUPER_ADMIN"]}>
             <SuperAdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super-admin/finance"
+        element={
+          <ProtectedRoute allowedRoles={["SUPER_ADMIN"]}>
+            <RegionalFinance />
           </ProtectedRoute>
         }
       />

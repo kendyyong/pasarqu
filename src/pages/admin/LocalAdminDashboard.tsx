@@ -3,6 +3,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
 import { useJsApiLoader } from "@react-google-maps/api";
+import { useNavigate } from "react-router-dom"; // IMPORT BARU
 import {
   Loader2,
   Bell,
@@ -17,13 +18,15 @@ import {
   Megaphone,
   ShoppingBag,
   ArrowLeft,
+  BellRing,
+  AlertTriangle,
+  BarChart3,
+  Radio,
+  ClipboardCheck, // ICON BARU
 } from "lucide-react";
 
-// --- IMPORT KOMPONEN MODULAR ---
 import { LocalSidebar } from "./components/LocalSidebar";
 import { PartnerDetailModal } from "./components/PartnerDetailModal";
-
-// --- IMPORT TABS ---
 import { LocalOverviewTab } from "./tabs/LocalOverviewTab";
 import { LocalProductsTab } from "./tabs/LocalProductsTab";
 import { LocalUsersTab } from "./tabs/LocalUsersTab";
@@ -56,6 +59,7 @@ interface Props {
 export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
   const { profile, logout } = useAuth();
   const { showToast } = useToast();
+  const navigate = useNavigate(); // HOOK NAVIGASI
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
@@ -67,8 +71,9 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [newOrderPopup, setNewOrderPopup] = useState<any>(null);
+  // --- STATE ALARM ---
+  const [isAlarmActive, setIsAlarmActive] = useState(false);
+  const alarmAudio = useRef<HTMLAudioElement | null>(null);
 
   const [myMarket, setMyMarket] = useState<any>(null);
   const [myMerchants, setMyMerchants] = useState<any[]>([]);
@@ -87,7 +92,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
       setIsLoading(false);
       return;
     }
-    setIsLoading(true);
     try {
       const targetMarketId = profile.managed_market_id;
       const [marketRes, usersRes, prodRes, orderCountRes] = await Promise.all([
@@ -98,7 +102,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
           .eq("managed_market_id", targetMarketId),
         supabase
           .from("products")
-          .select("*, merchants(full_name, shop_name)")
+          .select("*, merchants(shop_name, name)")
           .eq("market_id", targetMarketId)
           .eq("status", "PENDING"),
         supabase
@@ -117,76 +121,59 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
       setPendingProducts(prodRes.data || []);
       setLiveOrdersCount(orderCountRes.count || 0);
     } catch (error: any) {
-      showToast("Gagal memuat data wilayah", "error");
+      console.error("Fetch Error:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // --- LOGIKA AKSI KONTROL AKUN (BEKUKAN & AKTIFKAN) ---
-
-  const handleDeactivate = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ status: "SUSPENDED" })
-        .eq("id", id);
-      if (error) throw error;
-      showToast("Akun berhasil dibekukan", "success");
-      fetchData();
-      setDetailModal({ isOpen: false, user: null });
-    } catch (err: any) {
-      showToast(err.message, "error");
+  const triggerAlarm = () => {
+    if (isMuted) return;
+    setIsAlarmActive(true);
+    if (alarmAudio.current) {
+      alarmAudio.current.loop = true;
+      alarmAudio.current
+        .play()
+        .catch(() => console.log("Izin audio browser diperlukan."));
     }
   };
 
-  const handleActivate = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ status: "APPROVED", is_verified: true })
-        .eq("id", id);
-      if (error) throw error;
-      showToast("Akun berhasil diaktifkan kembali", "success");
-      fetchData();
-      setDetailModal({ isOpen: false, user: null });
-    } catch (err: any) {
-      showToast(err.message, "error");
+  const stopAlarm = () => {
+    setIsAlarmActive(false);
+    if (alarmAudio.current) {
+      alarmAudio.current.pause();
+      alarmAudio.current.currentTime = 0;
     }
   };
 
   useEffect(() => {
+    alarmAudio.current = new Audio(
+      "https://actions.google.com/sounds/v1/alarms/beep_short.ogg",
+    );
+
     if (!profile?.managed_market_id) return;
-    audioRef.current = new Audio("/sounds/kaching.mp3");
-    const ordersSubscription = supabase
-      .channel("live_orders_wilayah")
+
+    const productSub = supabase
+      .channel("engine_wilayah")
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
-          table: "orders",
+          table: "products",
           filter: `market_id=eq.${profile.managed_market_id}`,
         },
-        async (payload) => {
-          setLiveOrdersCount((prev) => prev + 1);
-          const { data: orderDetail } = await supabase
-            .from("orders")
-            .select("*, profiles:customer_id(full_name)")
-            .eq("id", payload.new.id)
-            .single();
-          if (orderDetail) {
-            setNewOrderPopup(orderDetail);
-            setTimeout(() => setNewOrderPopup(null), 8000);
-          }
-          if (!isMuted && audioRef.current)
-            audioRef.current.play().catch(() => {});
-          showToast(`📦 PESANAN BARU MASUK!`, "success");
+        () => {
+          fetchData();
+          triggerAlarm();
+          showToast("🚨 ADA PRODUK BARU MASUK!", "error");
         },
       )
       .subscribe();
+
     return () => {
-      supabase.removeChannel(ordersSubscription);
+      supabase.removeChannel(productSub);
+      stopAlarm();
     };
   }, [profile?.managed_market_id, isMuted]);
 
@@ -196,121 +183,105 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
 
   if (isLoading)
     return (
-      <div className="h-screen flex items-center justify-center bg-white">
+      <div className="h-screen flex items-center justify-center bg-white antialiased">
         <Loader2 className="animate-spin text-teal-600" size={40} />
       </div>
     );
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex font-sans text-left transition-all duration-500 overflow-hidden">
-      {/* 1. NOTIFICATION POPUP */}
-      {newOrderPopup && (
-        <div className="fixed bottom-10 right-10 z-[100] w-80 bg-white rounded-[2.5rem] shadow-2xl border border-teal-100 p-6 animate-in slide-in-from-right-full duration-500">
-          <button
-            onClick={() => setNewOrderPopup(null)}
-            className="absolute top-6 right-6 text-slate-300 hover:text-slate-500"
-          >
-            <X size={18} />
-          </button>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 bg-teal-500 text-white rounded-2xl flex items-center justify-center animate-bounce shadow-lg shadow-teal-200">
-              <Package size={22} />
-            </div>
-            <div className="min-w-0 text-left">
-              <p className="text-[10px] font-black text-teal-600 uppercase tracking-[0.2em]">
-                Order Baru Masuk
-              </p>
-              <h4 className="text-sm font-black text-slate-800 uppercase truncate">
-                {newOrderPopup.profiles?.full_name || "Pelanggan"}
-              </h4>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              setActiveTab("orders");
-              setNewOrderPopup(null);
-            }}
-            className="w-full bg-slate-900 text-white py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 hover:bg-teal-600 transition-all"
-          >
-            Buka Monitoring <ArrowUpRight size={14} />
-          </button>
-        </div>
+    <div
+      className={`min-h-screen flex font-sans text-left antialiased tracking-tight transition-all duration-500 overflow-hidden ${isAlarmActive ? "bg-red-50" : "bg-[#f8fafc]"}`}
+    >
+      <style>{`
+        body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+        .glass-header { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(20px); }
+      `}</style>
+
+      {isAlarmActive && (
+        <div className="fixed inset-0 z-[999] bg-red-600/10 animate-pulse pointer-events-none border-[15px] border-red-500/30"></div>
       )}
 
-      {/* 2. SIDEBAR */}
       <LocalSidebar
         marketName={myMarket?.name || "Wilayah"}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        pendingMerchants={myMerchants.filter((m) => !m.is_verified).length}
-        pendingCouriers={myCouriers.filter((c) => !c.is_verified).length}
+        pendingMerchants={
+          myMerchants.filter((m) => m.status === "PENDING").length
+        }
+        pendingCouriers={
+          myCouriers.filter((c) => c.status === "PENDING").length
+        }
         pendingProducts={pendingProducts.length}
         onLogout={logout}
       />
 
-      {/* 3. MAIN CONTENT AREA */}
-      <div className="flex-1 ml-72 flex flex-col min-h-screen">
-        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between px-10 sticky top-0 z-40">
-          <div className="flex items-center gap-4">
-            {onBack && (
-              <button
-                onClick={onBack}
-                className="p-2.5 bg-slate-50 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-xl transition-all border border-slate-100 active:scale-90"
+      <div className="flex-1 ml-72 flex flex-col min-h-screen relative">
+        <header
+          className={`h-20 flex items-center justify-between px-10 sticky top-0 z-40 glass-header border-b border-slate-100 transition-colors ${isAlarmActive ? "bg-red-600 text-white border-none" : ""}`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-2.5 h-2.5 rounded-full ${isAlarmActive ? "bg-white animate-ping" : "bg-teal-500 animate-pulse"}`}
+            ></div>
+            <span className="text-[10px] font-black uppercase tracking-[0.3em]">
+              Sistem:{" "}
+              <span
+                className={
+                  isAlarmActive ? "text-white underline" : "text-teal-600"
+                }
               >
-                <ArrowLeft size={18} />
-              </button>
-            )}
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 bg-teal-500 rounded-full animate-pulse"></div>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
-                Local Control:{" "}
-                <span className="text-teal-600">{myMarket?.name}</span>
+                {isAlarmActive ? "ALARM AKTIF" : "NORMAL"}
               </span>
-            </div>
+            </span>
           </div>
+
           <div className="flex items-center gap-5">
             <button
               onClick={() => setIsMuted(!isMuted)}
-              className={`p-2.5 rounded-xl transition-all ${isMuted ? "text-slate-300" : "text-teal-600 bg-teal-50 hover:bg-teal-100"}`}
+              className={`p-2.5 rounded-xl ${isAlarmActive ? "bg-white/20" : "bg-slate-100 text-slate-500"}`}
             >
-              {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+              {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
             </button>
-            <div className="relative p-2.5 bg-slate-50 rounded-xl text-slate-400">
-              <Bell size={20} />
-              {liveOrdersCount > 0 && (
-                <span className="absolute top-2 right-2 w-2 h-2 bg-orange-500 rounded-full border-2 border-white animate-pulse"></span>
-              )}
-            </div>
-            <div className="h-8 w-[1px] bg-slate-100 mx-2"></div>
-            <div className="flex items-center gap-3 bg-slate-50 pl-4 pr-1.5 py-1.5 rounded-2xl border border-slate-100">
-              <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">
-                {profile?.full_name?.split(" ")[0] || "Admin"}
-              </span>
-              <div className="w-8 h-8 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black text-xs shadow-sm uppercase">
-                {profile?.full_name?.charAt(0) || "A"}
-              </div>
+            <div
+              className={`px-4 py-1.5 rounded-2xl border font-black text-[10px] uppercase ${isAlarmActive ? "bg-white/10 border-white/20" : "bg-slate-50 border-slate-100"}`}
+            >
+              {profile?.full_name}
             </div>
           </div>
         </header>
 
         <main className="p-10 max-w-7xl mx-auto w-full">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-            <div className="text-left">
-              <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-3">
+            <div className="text-left text-slate-800">
+              <h1 className="text-4xl font-black uppercase tracking-tighter leading-none mb-3 italic">
                 {activeTab === "overview"
                   ? "Ringkasan"
                   : activeTab.replace("_", " ")}
               </h1>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-teal-600 text-white text-[9px] font-black rounded-lg uppercase tracking-widest shadow-lg shadow-teal-100">
-                  Real-time
-                </span>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-                  Data Wilayah Sinkron
-                </p>
-              </div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                Sinkronisasi Data Wilayah
+              </p>
             </div>
-            <div className="flex bg-white p-2 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-x-auto no-scrollbar">
+
+            <div className="flex bg-white p-2 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40 overflow-x-auto no-scrollbar">
+              {/* TOMBOL AKSI BARU: VERIFIKASI PRODUK (KE HALAMAN TERPISAH) */}
+              <button
+                onClick={() => navigate("/admin-wilayah/verifikasi-produk")}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-[1.5rem] transition-all group shrink-0 text-orange-500 hover:bg-orange-50"
+              >
+                <ClipboardCheck size={18} />
+                <span className="text-[10px] font-black uppercase tracking-widest">
+                  Verifikasi
+                </span>
+                {pendingProducts.length > 0 && (
+                  <span className="bg-orange-500 text-white text-[8px] px-1.5 py-0.5 rounded-full animate-bounce">
+                    {pendingProducts.length}
+                  </span>
+                )}
+              </button>
+
+              <div className="w-[1px] h-8 bg-slate-100 mx-2 self-center"></div>
+
               <QuickActionBtn
                 active={activeTab === "orders"}
                 icon={<ShoppingBag size={18} />}
@@ -319,7 +290,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
               />
               <QuickActionBtn
                 active={activeTab === "radar"}
-                icon={<MapIcon size={18} />}
+                icon={<Radio size={18} />}
                 label="Radar"
                 onClick={() => setActiveTab("radar")}
               />
@@ -346,6 +317,25 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
           </div>
 
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+            {activeTab === "overview" && (
+              <LocalOverviewTab
+                stats={{
+                  pendingProducts: pendingProducts.length,
+                  merchants: myMerchants.length,
+                  couriers: myCouriers.length,
+                  adminShare: 0,
+                }}
+              />
+            )}
+            {activeTab === "products" && (
+              <LocalProductsTab
+                products={pendingProducts}
+                onAction={() => {
+                  fetchData();
+                  stopAlarm();
+                }}
+              />
+            )}
             {activeTab === "orders" && (
               <LocalOrdersTab marketId={profile?.managed_market_id || ""} />
             )}
@@ -356,16 +346,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 merchants={myMerchants}
                 couriers={myCouriers}
                 customers={myCustomers}
-              />
-            )}
-            {activeTab === "overview" && (
-              <LocalOverviewTab
-                stats={{
-                  pendingProducts: pendingProducts.length,
-                  merchants: myMerchants.length,
-                  couriers: myCouriers.length,
-                  adminShare: 0,
-                }}
               />
             )}
             {activeTab === "finance" && (
@@ -382,6 +362,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 customerCount={myCustomers.length}
               />
             )}
+
             {(activeTab === "merchants" ||
               activeTab === "couriers" ||
               activeTab === "customers") && (
@@ -395,25 +376,40 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                       : myCustomers
                 }
                 onViewDetail={(u) => setDetailModal({ isOpen: true, user: u })}
+                onRefresh={fetchData}
               />
             )}
-            {activeTab === "products" && (
-              <LocalProductsTab
-                products={pendingProducts}
-                onAction={() => fetchData()}
-              />
+
+            {isAlarmActive && (
+              <div className="mt-10 p-16 bg-white rounded-[3rem] border border-red-100 shadow-2xl text-center">
+                <AlertTriangle
+                  size={60}
+                  className="mx-auto text-red-500 mb-6 animate-bounce"
+                />
+                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">
+                  Ada Produk Menunggu!
+                </h3>
+                <button
+                  onClick={() => {
+                    stopAlarm();
+                    navigate("/admin-wilayah/verifikasi-produk"); // ARAHKAN KE HALAMAN VERIFIKASI
+                  }}
+                  className="mt-8 px-10 py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-red-700 transition-all"
+                >
+                  Buka Halaman Verifikasi
+                </button>
+              </div>
             )}
           </div>
         </main>
       </div>
 
-      {/* --- MODAL DETAIL PARTNER DENGAN PROP LENGKAP --- */}
       <PartnerDetailModal
         user={detailModal.user}
         onClose={() => setDetailModal({ isOpen: false, user: null })}
         onApprove={() => fetchData()}
-        onDeactivate={handleDeactivate} // <--- SEKARANG ADA
-        onActivate={handleActivate} // <--- SEKARANG ADA
+        onDeactivate={() => fetchData()}
+        onActivate={() => fetchData()}
       />
     </div>
   );
@@ -428,9 +424,9 @@ const QuickActionBtn = ({
 }: any) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-2 px-5 py-2.5 rounded-[1.5rem] transition-all group shrink-0 ${active ? "bg-slate-900 text-white shadow-lg" : `text-slate-400 ${color}`}`}
+    className={`flex items-center gap-2 px-5 py-2.5 rounded-[1.5rem] transition-all group shrink-0 ${active ? "bg-slate-900 text-white shadow-lg shadow-slate-900/20" : `text-slate-400 ${color}`}`}
   >
-    {icon}
+    {icon}{" "}
     <span
       className={`text-[10px] font-black uppercase tracking-widest ${active ? "block" : "hidden group-hover:block"}`}
     >

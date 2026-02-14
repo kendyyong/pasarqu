@@ -10,15 +10,18 @@ import {
   Shield,
   Globe,
   MapPin,
+  Timer, // Icon untuk Pre-Order
+  ShoppingBag,
 } from "lucide-react";
 
-// Tipe data untuk menu agar TypeScript tidak komplain
+// Tipe data untuk menu
 export interface MenuItem {
   label: string;
   icon: JSX.Element;
   color: string;
-  path?: string; // Untuk link navigasi
-  action?: string; // Untuk tombol khusus (seperti Ganti Pasar)
+  path?: string;
+  action?: string;
+  description?: string; // Tambahan untuk keterangan di promo box
 }
 
 // 1. DATA MENU GRID UTAMA (10 ITEM)
@@ -54,6 +57,12 @@ export const MAIN_MENUS: MenuItem[] = [
     path: "/orders",
   },
   {
+    label: "Pre-Order", // FITUR BARU: Menggantikan Bantuan
+    icon: <Timer size={18} />,
+    color: "bg-amber-500",
+    path: "/pre-order",
+  },
+  {
     label: "Toko",
     icon: <Store size={18} />,
     color: "bg-teal-600",
@@ -66,47 +75,40 @@ export const MAIN_MENUS: MenuItem[] = [
     path: "/login/kurir",
   },
   {
-    label: "Bantuan",
-    icon: <Shield size={18} />,
-    color: "bg-slate-400",
-    path: "/help",
-  },
-  {
     label: "Zona",
     icon: <Globe size={18} />,
     color: "bg-blue-600",
     path: "/login/admin",
   },
-  // Tombol Khusus Ganti Pasar
   {
     label: "Ganti Pasar",
     icon: <MapPin size={18} />,
     color: "bg-rose-600",
-    action: "RESET_MARKET", // Kode khusus untuk dideteksi di App.tsx
+    action: "RESET_MARKET",
   },
 ];
 
 // 2. DATA PROMO BOX (3 ITEM DI BAWAH GRID)
-export const PROMO_ITEMS = [
+export const PROMO_ITEMS: MenuItem[] = [
   {
     label: "Mulai Jualan",
+    description: "Buka Toko Gratis",
     icon: <Store size={16} />,
-    color: "text-teal-700",
-    borderColor: "hover:border-teal-400",
+    color: "bg-teal-600",
     path: "/promo/toko",
   },
   {
     label: "Daftar Kurir",
+    description: "Cuan Tiap Antar",
     icon: <Bike size={16} />,
-    color: "text-orange-700",
-    borderColor: "hover:border-orange-400",
+    color: "bg-orange-500",
     path: "/promo/kurir",
   },
   {
     label: "Mitra Zona",
+    description: "Kelola Wilayah",
     icon: <Globe size={16} />,
-    color: "text-blue-700",
-    borderColor: "hover:border-blue-400",
+    color: "bg-blue-600",
     path: "/promo/admin",
   },
 ];

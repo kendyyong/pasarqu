@@ -1,12 +1,12 @@
 import React from "react";
-import { ShoppingCart, Star, MapPin } from "lucide-react";
+import { ShoppingCart, Star, MapPin, Timer } from "lucide-react"; // Tambah Timer
 import { Product } from "../types";
 import { useMarket } from "../contexts/MarketContext";
-// 1. IMPORT HOOK NAVIGASI
 import { useNavigate } from "react-router-dom";
+import { useToast } from "../contexts/ToastContext";
 
 interface ProductGridProps {
-  products: Product[];
+  products: any[]; // Gunakan any[] agar field is_po terbaca jika interface Product belum update
   isLoading: boolean;
 }
 
@@ -15,27 +15,26 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   isLoading,
 }) => {
   const { addToCart, selectedMarket } = useMarket();
-
-  // 2. INISIALISASI NAVIGASI
+  const { showToast } = useToast();
   const navigate = useNavigate();
 
-  // 3. FUNGSI PINDAH HALAMAN
-  const handleProductClick = (merchantId: string) => {
-    if (!merchantId) {
-      console.error("ID Toko tidak ditemukan");
+  // FUNGSI PINDAH KE DETAIL PRODUK (Bukan ke Toko)
+  const handleProductClick = (productId: string) => {
+    if (!productId) {
+      console.error("ID Produk tidak ditemukan");
       return;
     }
-    // Arahkan ke halaman ShopDetail yang baru kita buat
-    navigate(`/shop/${merchantId}`);
+    // Arahkan ke halaman Detail Produk
+    navigate(`/product/${productId}`);
   };
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1.5 p-1.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 p-2">
         {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
           <div
             key={i}
-            className="bg-white rounded-[4px] h-64 animate-pulse shadow-sm border border-slate-100"
+            className="bg-white rounded-xl h-64 animate-pulse shadow-sm border border-slate-100"
           />
         ))}
       </div>
@@ -44,8 +43,8 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
 
   if (products.length === 0) {
     return (
-      <div className="text-center py-20 bg-white rounded-md border border-dashed border-slate-200 mx-2">
-        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">
+      <div className="text-center py-20 bg-white rounded-xl border-2 border-dashed border-slate-100 mx-2">
+        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
           Produk tidak ditemukan
         </p>
       </div>
@@ -53,82 +52,81 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1.5 md:gap-2 p-1.5 md:p-0">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4 p-2 md:p-0">
       {products.map((product) => (
         <div
           key={product.id}
-          // 4. ONCLICK DI CONTAINER UTAMA
-          // Kita gunakan fallback merchant_id || sellerId agar data dummy/db keduanya jalan
-          onClick={() =>
-            handleProductClick(product.merchant_id || (product as any).sellerId)
-          }
-          className="group bg-white rounded-[4px] overflow-hidden flex flex-col relative shadow-sm hover:shadow-md border border-transparent hover:border-orange-500/30 transition-all duration-300 cursor-pointer"
+          // ONCLICK SEKARANG KE DETAIL PRODUK
+          onClick={() => handleProductClick(product.id)}
+          className="group bg-white rounded-xl overflow-hidden flex flex-col relative shadow-sm hover:shadow-xl border border-transparent hover:border-teal-500/20 transition-all duration-500 cursor-pointer"
         >
-          {/* Area Gambar (Square 1:1) */}
+          {/* Area Gambar */}
           <div className="aspect-square w-full bg-slate-50 overflow-hidden relative">
-            <div className="absolute top-0 left-0 z-10">
-              <div className="bg-orange-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-br-sm shadow-sm leading-tight">
+            {/* BADGE STAR+ */}
+            <div className="absolute top-2 left-2 z-10">
+              <div className="bg-orange-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-md shadow-lg uppercase">
                 STAR+
               </div>
             </div>
 
+            {/* BADGE PRE-ORDER (PO) - FITUR BARU */}
+            {product.is_po && (
+              <div className="absolute top-2 right-2 z-10">
+                <div className="bg-teal-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-md shadow-lg flex items-center gap-1 uppercase animate-pulse">
+                  <Timer size={8} /> PO
+                </div>
+              </div>
+            )}
+
             <img
-              src={
-                product.image_url ||
-                "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=400"
-              }
+              src={product.image_url || "https://via.placeholder.com/400"}
               alt={product.name}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
             />
           </div>
 
           {/* Detail Produk */}
-          <div className="p-2 flex flex-col flex-1 text-left">
-            <h3 className="text-[11px] md:text-xs font-medium text-slate-800 line-clamp-2 leading-snug mb-1 h-8 overflow-hidden uppercase">
+          <div className="p-3 flex flex-col flex-1 text-left">
+            <h3 className="text-[10px] md:text-[11px] font-bold text-slate-800 line-clamp-2 leading-tight mb-2 h-8 overflow-hidden uppercase">
               {product.name}
             </h3>
 
-            <div className="flex flex-wrap gap-1 mb-1.5">
-              <div className="text-[8px] border border-teal-500 text-teal-600 px-1 rounded-[2px] font-bold leading-tight flex items-center gap-0.5">
-                🚚 Gratis Ongkir
-              </div>
-            </div>
-
             <div className="mt-auto">
-              <div className="flex items-baseline gap-0.5 mb-1">
-                <span className="text-[10px] font-bold text-orange-600">
-                  Rp
-                </span>
+              <div className="flex items-baseline gap-0.5 mb-2">
                 <span className="text-sm md:text-base font-black text-orange-600 tracking-tighter">
-                  {product.price.toLocaleString("id-ID")}
+                  Rp {product.price.toLocaleString("id-ID")}
+                </span>
+                <span className="text-[8px] font-bold text-slate-400 uppercase ml-1">
+                  /{product.unit || "Pcs"}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between text-slate-400 pb-2 mb-1">
+              <div className="flex items-center justify-between text-slate-400 mb-3">
                 <div className="flex items-center gap-0.5">
-                  <Star size={9} fill="#fbbf24" className="text-yellow-400" />
-                  <span className="text-[9px] font-bold text-slate-500">
+                  <Star size={10} fill="#fbbf24" className="text-yellow-400" />
+                  <span className="text-[9px] font-black text-slate-500">
                     4.9
                   </span>
                 </div>
-                <div className="flex items-center gap-0.5 max-w-[60px]">
-                  <MapPin size={9} />
-                  <span className="text-[9px] truncate font-medium">
+                <div className="flex items-center gap-0.5">
+                  <MapPin size={10} className="text-slate-300" />
+                  <span className="text-[9px] font-bold truncate max-w-[50px] uppercase">
                     {selectedMarket?.name || "Area"}
                   </span>
                 </div>
               </div>
 
-              {/* TOMBOL TAMBAH (Stop Propagation agar tidak pindah halaman saat klik tombol ini) */}
+              {/* TOMBOL KERANJANG */}
               <button
                 onClick={(e) => {
-                  e.stopPropagation(); // PENTING: Mencegah klik "tembus" ke handleProductClick di kontainer
+                  e.stopPropagation(); // Mencegah pindah ke halaman detail saat klik tombol ini
                   addToCart(product);
+                  showToast("Masuk Keranjang", "success");
                 }}
-                className="w-full py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-[4px] flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-sm"
+                className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95"
               >
-                <ShoppingCart size={12} />
-                <span className="text-[10px] font-black uppercase tracking-widest">
+                <ShoppingCart size={14} />
+                <span className="text-[9px] font-black uppercase tracking-widest">
                   Tambah
                 </span>
               </button>

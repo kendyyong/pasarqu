@@ -11,7 +11,6 @@ import {
   Store,
   Bike,
   ShieldCheck,
-  ArrowLeft,
   ArrowRight,
 } from "lucide-react";
 import { GoogleLoginButton } from "../../components/GoogleLoginButton";
@@ -80,6 +79,7 @@ export const AuthPage = () => {
         finalEmail = `${finalEmail}@pasarqu.com`;
       }
 
+      // 1. SIGN IN (Cek Auth)
       const { data, error } = await supabase.auth.signInWithPassword({
         email: finalEmail,
         password: formData.password,
@@ -88,31 +88,82 @@ export const AuthPage = () => {
       if (error) throw error;
 
       if (data.user) {
-        // AMBIL DATA ROLE DAN STATUS VERIFIKASI
+        // 2. AMBIL DATA PROFILE (Cek Role & Profil Status)
         const { data: profile } = await supabase
           .from("profiles")
-          .select("role, name, is_verified")
+          .select("role, name, is_verified, status")
           .eq("id", data.user.id)
           .single();
 
         if (profile) {
-          // LOGIKA CEK VERIFIKASI UNTUK MITRA
-          if (!profile.is_verified && profile.role !== "CUSTOMER") {
-            showToast("Akun Anda sedang dalam verifikasi Admin.", "info");
-            navigate("/waiting-approval");
+          // --- VALIDASI ROLE ---
+          // Pastikan user login di portal yang benar (kecuali customer/super admin)
+          if (
+            roleParam &&
+            roleParam !== profile.role &&
+            profile.role !== "SUPER_ADMIN"
+          ) {
+            await supabase.auth.signOut();
+            showToast(
+              `Login Gagal. Akun Anda terdaftar sebagai ${profile.role}.`,
+              "error",
+            );
+            setLoading(false);
             return;
           }
 
+          // --- VALIDASI STATUS 1 (PROFIL) ---
+          // Cek apakah profil sudah disetujui Admin
+          if (
+            profile.role !== "CUSTOMER" &&
+            (profile.status !== "APPROVED" || !profile.is_verified)
+          ) {
+            showToast("Pendaftaran sedang ditinjau Admin.", "info");
+            navigate("/waiting-approval"); // Lempar ke ruang tunggu
+            return;
+          }
+
+          // --- VALIDASI STATUS 2 (OPERASIONAL TOKO/KURIR) ---
+          // Ini adalah "Kabel Tambahan" untuk memastikan tabel merchants/couriers juga sudah aktif
+          if (profile.role === "MERCHANT") {
+            const { data: merchant } = await supabase
+              .from("merchants")
+              .select("status")
+              .eq("user_id", data.user.id) // Cek via user_id
+              .maybeSingle();
+
+            // Jika data toko belum ada atau belum APPROVED
+            if (!merchant || merchant.status !== "APPROVED") {
+              navigate("/waiting-approval");
+              return;
+            }
+          } else if (profile.role === "COURIER") {
+            const { data: courier } = await supabase
+              .from("couriers")
+              .select("status")
+              .eq("user_id", data.user.id)
+              .maybeSingle();
+
+            if (!courier || courier.status !== "APPROVED") {
+              navigate("/waiting-approval");
+              return;
+            }
+          }
+
+          // --- JIKA SEMUA LOLOS ---
           showToast(`Selamat bekerja, ${profile.name}!`, "success");
           setTimeout(() => {
             if (profile.role === "MERCHANT") navigate("/merchant-dashboard");
             else if (profile.role === "COURIER") navigate("/courier-dashboard");
             else if (profile.role === "LOCAL_ADMIN") navigate("/admin-wilayah");
+            else if (profile.role === "SUPER_ADMIN") navigate("/super-admin");
             else navigate("/");
           }, 800);
         }
       }
     } catch (error: any) {
+      // Pastikan logout jika terjadi error agar sesi bersih
+      await supabase.auth.signOut();
       showToast("Email/HP atau Password salah", "error");
     } finally {
       setLoading(false);

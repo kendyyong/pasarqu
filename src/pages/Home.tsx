@@ -8,12 +8,12 @@ import {
   Flame,
   Star,
   Loader2,
+  Timer, // Icon baru untuk PO
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useMarket } from "../contexts/MarketContext";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
-import { Product } from "../types";
 
 interface HomeProps {
   searchQuery: string;
@@ -37,7 +37,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   const { selectedMarket, addToCart } = useMarket();
   const { showToast } = useToast();
 
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [quickActions, setQuickActions] = useState<any[]>([]);
   const [ads, setAds] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -60,9 +60,10 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
+      // PERBAIKAN: Mengambil data dengan status APPROVED (Huruf besar)
       let query = supabase
         .from("products")
-        .select("*, merchants(name)")
+        .select("*, merchants:merchant_id(name)")
         .eq("status", "APPROVED")
         .order("created_at", { ascending: false });
 
@@ -127,7 +128,6 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   };
 
   return (
-    /* PERBAIKAN: Tambahkan overflow-x-hidden pada kontainer paling luar agar tidak bocor ke samping */
     <div className="w-full font-sans text-left bg-white min-h-screen pb-16 pt-[10px] overflow-x-hidden">
       <div className="max-w-[1200px] mx-auto px-0 md:px-0">
         {/* 1. IKLAN SLIDE */}
@@ -180,7 +180,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
           </div>
         )}
 
-        {/* 3. PRODUK GRID - FULL WIDTH FIXED */}
+        {/* 3. PRODUK GRID */}
         <div className="mt-8 mb-8">
           <div className="flex items-center justify-between mb-4 px-5 md:px-1">
             <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
@@ -188,10 +188,6 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
             </h3>
           </div>
 
-          {/* PERBAIKAN: 
-              - mx-0 di HP sebenarnya sudah mepet karena pembungkus utamanya px-0.
-              - Menggunakan border-x untuk memastikan garis kiri kanan tetap rapi.
-          */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-[1px] bg-slate-100 md:bg-transparent md:gap-4 border-y border-slate-100 md:border-none">
             {isLoading ? (
               <>
@@ -205,6 +201,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                   key={product.id}
                   className="flex flex-col h-full bg-white rounded-none md:rounded-xl md:border md:border-slate-100 md:shadow-sm overflow-hidden group transition-all"
                 >
+                  {/* KLIK GAMBAR KE DETAIL */}
                   <div
                     onClick={() => navigate(`/product/${product.id}`)}
                     className="aspect-square w-full overflow-hidden bg-slate-50 cursor-pointer relative"
@@ -217,7 +214,15 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       alt={product.name}
                     />
+
+                    {/* BADGE PRE-ORDER (PO) */}
+                    {product.is_po && (
+                      <div className="absolute top-2 left-2 bg-orange-600 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg flex items-center gap-1 uppercase animate-pulse">
+                        <Timer size={10} /> PO {product.po_days} HARI
+                      </div>
+                    )}
                   </div>
+
                   <div className="p-3 flex flex-col flex-1">
                     <p className="text-[8px] font-black text-slate-300 uppercase truncate mb-1">
                       {product.merchants?.name || "Toko Pasarqu"}
@@ -231,7 +236,8 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                       </span>
                     </div>
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation(); // Mencegah pindah halaman saat klik tombol tambah
                         addToCart(product);
                         showToast("Masuk Keranjang", "success");
                       }}
@@ -249,7 +255,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
           </div>
         </div>
 
-        {/* 4. PORTAL MITRA - FULL WIDTH FIXED */}
+        {/* 4. PORTAL MITRA */}
         <div className="mt-8 mb-10">
           <div className="bg-slate-900 p-6 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden md:rounded-xl shadow-2xl">
             <div className="relative z-10 flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
@@ -269,7 +275,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
               onClick={() => navigate("/portal")}
               className="relative z-10 px-8 py-3 bg-teal-500 text-white rounded-lg font-black text-[9px] uppercase tracking-widest shadow-lg"
             >
-              Buka Portal <ArrowRight size={12} />
+              Buka Portal <ArrowRight size={12} className="inline ml-1" />
             </button>
           </div>
         </div>

@@ -10,13 +10,17 @@ import {
   Clock,
   CheckCircle2,
   Loader2,
+  Sparkles,
+  RefreshCw,
+  Copy,
 } from "lucide-react";
 import { useToast } from "../../../contexts/ToastContext";
-import { createAuditLog } from "../../../lib/auditHelper"; // <--- Import Helper Audit
+import { createAuditLog } from "../../../lib/auditHelper";
 
 export const NotificationManager = () => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false); // State untuk AI
   const [markets, setMarkets] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
 
@@ -28,7 +32,9 @@ export const NotificationManager = () => {
     target_market_id: "",
   });
 
-  // 1. Fetch Data Awal (Pasar & History)
+  const [aiTopic, setAiTopic] = useState(""); // Input perintah AI
+
+  // 1. Fetch Data Awal
   const fetchData = async () => {
     try {
       const { data: mData } = await supabase.from("markets").select("id, name");
@@ -49,6 +55,43 @@ export const NotificationManager = () => {
     fetchData();
   }, []);
 
+  // --- FITUR AI MAGIC WRITER ---
+  const generateAIMessage = async () => {
+    if (!aiTopic) {
+      showToast("Tuliskan topik atau perintah untuk AI!", "error");
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      /**
+       * SIMULASI LOGIKA AI (Bisa dihubungkan ke Edge Function Supabase / OpenAI API)
+       * Di sini saya buatkan template generator cerdas berdasarkan kata kunci
+       */
+      await new Promise((res) => setTimeout(res, 1500)); // Delay efek berpikir
+
+      const templates = [
+        `📢 *INFO PASARQU*\n\nHallo Juragan! ${aiTopic}.\n\nJangan sampai ketinggalan ya, yuk cek aplikasinya sekarang! 🚀`,
+        `🔥 *PROMO TERBARU*\n\nAda kabar gembira: ${aiTopic}. Belanja makin hemat cuma di PasarQu!\n\nKlik di sini: [LinkAplikasi] ✅`,
+        `👋 *HALO MITRA PASARQU*\n\nAdmin ingin menginfokan bahwa ${aiTopic}.\n\nTetap semangat dan jaga kesehatan ya! 🙏`,
+      ];
+
+      const result = templates[Math.floor(Math.random() * templates.length)];
+
+      setFormData({
+        ...formData,
+        title: "Update Terbaru PasarQu",
+        message: result,
+      });
+
+      showToast("Pesan AI berhasil dibuat!", "success");
+    } catch (err) {
+      showToast("Gagal memanggil AI", "error");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   // 2. Kirim Broadcast
   const handleSend = async () => {
     if (!formData.title || !formData.message) {
@@ -58,19 +101,17 @@ export const NotificationManager = () => {
 
     setLoading(true);
     try {
-      // Simpan ke Database
       const payload = {
         title: formData.title,
         message: formData.message,
         target_role: formData.target_role,
-        target_market_id: formData.target_market_id || null, // Null jika Global
+        target_market_id: formData.target_market_id || null,
         status: "SENT",
       };
 
       const { error } = await supabase.from("broadcasts").insert([payload]);
       if (error) throw error;
 
-      // --- OTOMATIS CATAT KE CCTV (AUDIT LOGS) ---
       await createAuditLog(
         "SEND_BROADCAST",
         "MARKETING",
@@ -78,15 +119,13 @@ export const NotificationManager = () => {
       );
 
       showToast("Notifikasi berhasil dikirim!", "success");
-
       setFormData({
         title: "",
         message: "",
         target_role: "ALL",
         target_market_id: "",
-      }); // Reset form
-
-      fetchData(); // Refresh history
+      });
+      fetchData();
     } catch (err: any) {
       showToast("Gagal mengirim: " + err.message, "error");
     } finally {
@@ -103,15 +142,52 @@ export const NotificationManager = () => {
             Broadcast Center
           </h2>
           <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
-            Kirim Notifikasi Massal
+            Kirim Notifikasi & WA massal dengan bantuan AI
           </p>
         </div>
       </div>
 
+      {/* --- PANEL AI HELPER --- */}
+      <div className="bg-gradient-to-r from-teal-600 to-teal-800 p-8 rounded-[2.5rem] shadow-xl shadow-teal-600/20 relative overflow-hidden">
+        <Sparkles className="absolute right-[-20px] top-[-20px] text-white/10 w-40 h-40 rotate-12" />
+
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 bg-white/20 backdrop-blur-md rounded-lg flex items-center justify-center text-white">
+              <Sparkles size={18} />
+            </div>
+            <h3 className="font-black text-white uppercase tracking-widest text-xs">
+              AI Magic Writer
+            </h3>
+          </div>
+
+          <div className="flex flex-col md:flex-row gap-3">
+            <input
+              type="text"
+              className="flex-1 bg-white/10 border border-white/20 rounded-2xl px-6 py-3 text-white placeholder:text-teal-200 outline-none focus:ring-2 focus:ring-white/50 font-bold text-sm"
+              placeholder="Contoh: Promo diskon ayam potong khusus besok pagi..."
+              value={aiTopic}
+              onChange={(e) => setAiTopic(e.target.value)}
+            />
+            <button
+              onClick={generateAIMessage}
+              disabled={generating}
+              className="bg-white text-teal-700 px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-teal-50 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {generating ? (
+                <RefreshCw className="animate-spin" size={16} />
+              ) : (
+                <Sparkles size={16} />
+              )}
+              Generate Pesan
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* KOLOM KIRI: FORMULIR */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
             <div className="space-y-6">
               {/* Target Audience */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -163,8 +239,8 @@ export const NotificationManager = () => {
                 </label>
                 <input
                   type="text"
-                  className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-bold text-slate-800 placeholder-slate-300 outline-none focus:ring-2 focus:ring-teal-500"
-                  placeholder="Contoh: Promo Gajian Diskon 50%!"
+                  className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-teal-500"
+                  placeholder="Judul otomatis dari AI..."
                   value={formData.title}
                   onChange={(e) =>
                     setFormData({ ...formData, title: e.target.value })
@@ -174,24 +250,20 @@ export const NotificationManager = () => {
 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
-                  <MessageSquare size={12} /> Isi Pesan
+                  <MessageSquare size={12} /> Isi Pesan (Format WhatsApp)
                 </label>
                 <textarea
-                  rows={4}
-                  className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-medium text-slate-700 placeholder-slate-300 outline-none focus:ring-2 focus:ring-teal-500"
-                  placeholder="Tulis pesan menarik di sini..."
+                  rows={6}
+                  className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-teal-500"
+                  placeholder="Hasil generate AI akan muncul di sini..."
                   value={formData.message}
                   onChange={(e) =>
                     setFormData({ ...formData, message: e.target.value })
                   }
                 />
-                <p className="text-[9px] text-slate-400 text-right">
-                  {formData.message.length} karakter
-                </p>
               </div>
 
-              {/* Tombol Kirim */}
-              <div className="pt-4 border-t border-slate-100 flex justify-end">
+              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
                 <button
                   onClick={handleSend}
                   disabled={loading}
@@ -207,108 +279,43 @@ export const NotificationManager = () => {
               </div>
             </div>
           </div>
-
-          {/* RIWAYAT BROADCAST */}
-          <div>
-            <h3 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Clock size={16} /> Riwayat Terkirim
-            </h3>
-            <div className="space-y-3">
-              {history.length === 0 && (
-                <p className="text-xs text-slate-400 italic">
-                  Belum ada riwayat.
-                </p>
-              )}
-              {history.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center justify-between"
-                >
-                  <div>
-                    <h4 className="font-bold text-sm text-slate-800">
-                      {item.title}
-                    </h4>
-                    <p className="text-xs text-slate-500 line-clamp-1">
-                      {item.message}
-                    </p>
-                    <div className="flex gap-2 mt-1">
-                      <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold uppercase">
-                        {item.target_role}
-                      </span>
-                      <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold uppercase">
-                        {item.markets?.name || "Global"}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 uppercase bg-green-50 px-2 py-1 rounded-full mb-1">
-                      <CheckCircle2 size={10} /> Terkirim
-                    </span>
-                    <p className="text-[9px] text-slate-400">
-                      {new Date(item.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
-        {/* KOLOM KANAN: PREVIEW HP */}
+        {/* KOLOM KANAN: PREVIEW HP (Live WhatsApp Preview) */}
         <div className="lg:col-span-1">
           <div className="sticky top-24">
             <div className="bg-slate-900 rounded-[3rem] p-4 shadow-2xl border-4 border-slate-800 max-w-[300px] mx-auto relative">
-              {/* Notch HP */}
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-slate-800 rounded-b-2xl z-20"></div>
 
-              {/* Layar HP */}
-              <div className="bg-slate-100 rounded-[2.5rem] h-[550px] overflow-hidden relative flex flex-col pt-12">
-                {/* Status Bar */}
-                <div className="px-6 flex justify-between text-[10px] font-bold text-slate-800 mb-4">
-                  <span>12:00</span>
-                  <div className="flex gap-1">
-                    <Smartphone size={10} />
-                    <span>100%</span>
+              <div className="bg-[#e5ddd5] rounded-[2.5rem] h-[550px] overflow-hidden relative flex flex-col pt-10">
+                {/* Header WA Mockup */}
+                <div className="bg-[#075e54] p-3 flex items-center gap-2">
+                  <div className="w-8 h-8 bg-slate-300 rounded-full"></div>
+                  <div className="flex-1">
+                    <p className="text-[10px] font-bold text-white leading-none">
+                      PasarQu Admin
+                    </p>
+                    <p className="text-[8px] text-teal-100">Online</p>
                   </div>
                 </div>
 
-                {/* Notifikasi Pop-up */}
-                <div className="mx-4 bg-white/90 backdrop-blur-sm p-3 rounded-2xl shadow-lg border border-slate-200 animate-in slide-in-from-top-4 duration-700">
-                  <div className="flex gap-3">
-                    <div className="w-10 h-10 bg-teal-600 rounded-xl flex items-center justify-center text-white shrink-0">
-                      <Bell size={20} />
-                    </div>
-                    <div>
-                      <div className="flex justify-between items-center w-full">
-                        <h4 className="font-bold text-xs text-slate-800">
-                          Pasarqu
-                        </h4>
-                        <span className="text-[9px] text-slate-400">
-                          Baru saja
-                        </span>
-                      </div>
-                      <p className="font-bold text-[11px] text-slate-900 mt-1 line-clamp-1">
-                        {formData.title || "Judul Notifikasi"}
-                      </p>
-                      <p className="text-[10px] text-slate-500 leading-tight mt-0.5 line-clamp-2">
-                        {formData.message ||
-                          "Isi pesan notifikasi akan muncul di sini..."}
-                      </p>
-                    </div>
+                {/* Bubble Chat */}
+                <div className="p-4">
+                  <div className="bg-white p-3 rounded-xl rounded-tl-none shadow-sm relative animate-in fade-in slide-in-from-left-4 duration-500">
+                    <p className="text-[11px] text-slate-800 whitespace-pre-wrap leading-relaxed">
+                      {formData.message ||
+                        "Halo! Hasil draf pesan AI Anda akan tampil cantik di sini dengan format WhatsApp..."}
+                    </p>
+                    <p className="text-right text-[8px] text-slate-400 mt-1">
+                      12:00 ✅✅
+                    </p>
                   </div>
                 </div>
-
-                {/* Background Wallpaper Dummy */}
-                <div className="absolute bottom-0 w-full h-1/2 bg-gradient-to-t from-teal-100/50 to-transparent pointer-events-none"></div>
               </div>
-
-              {/* Tombol Home */}
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-1/3 h-1 bg-slate-700 rounded-full"></div>
             </div>
-
             <div className="text-center mt-6">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                Live Mobile Preview
+                Live WhatsApp Preview
               </p>
             </div>
           </div>

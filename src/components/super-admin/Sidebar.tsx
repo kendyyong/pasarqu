@@ -1,13 +1,11 @@
 import React from "react";
 import {
-  Globe,
   LogOut,
   MapPin,
   DollarSign,
   Flag,
   Users,
   Store,
-  Tags,
   UserCheck,
   Zap,
   Settings,
@@ -15,13 +13,18 @@ import {
   ShieldAlert,
   Landmark,
   BarChart3,
-  Image as ImageIcon, // Icon untuk Manajemen Iklan
+  Image as ImageIcon,
+  LayoutGrid,
+  Wallet2,
+  Banknote,
+  Coins,
+  BookOpen, // Ikon untuk Buku Besar
 } from "lucide-react";
 import { SidebarItem } from "./SharedUI";
 
 interface SidebarProps {
   activeTab: string;
-  setActiveTab: (tab: any) => void;
+  setActiveTab: (tab: string) => void;
   onLogout: () => void;
   theme: any;
   counts: {
@@ -40,14 +43,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   counts,
   setAuditMarket,
 }) => {
+  /**
+   * Fungsi untuk menangani perpindahan tab tanpa reload halaman (SPA style).
+   */
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
-    setAuditMarket(null);
+    // Reset view audit market ke null agar tidak menutupi tab lain yang dipilih
+    if (setAuditMarket) {
+      setAuditMarket(null);
+    }
   };
 
   return (
-    <aside className="hidden md:flex w-72 border-r flex-col p-6 fixed h-full z-20 transition-all duration-300 bg-white border-slate-200 text-left">
-      {/* HEADER LOGO */}
+    <aside className="hidden md:flex w-72 border-r flex-col p-6 fixed h-full z-20 transition-all duration-300 bg-white border-slate-200 text-left overflow-hidden">
+      {/* BRANDING / LOGO */}
       <div className="flex items-center gap-3 mb-10 px-2">
         <div className="w-10 h-10 bg-teal-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-teal-600/20 font-black text-xl">
           P
@@ -62,8 +71,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* MENU NAVIGASI */}
-      <nav className="space-y-1.5 flex-1 overflow-y-auto no-scrollbar">
+      {/* NAVIGASI MENU UTAMA */}
+      <nav className="space-y-1.5 flex-1 overflow-y-auto no-scrollbar pr-1">
+        {/* SECTION: DATA MASTER */}
         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3 mb-3">
           Menu Utama
         </p>
@@ -90,7 +100,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           theme={theme}
         />
 
-        {/* SECTION: PENGATURAN BERANDA */}
+        {/* SECTION: KONTEN BERANDA */}
         <div className="pt-6 mt-6 border-t border-slate-100">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3 mb-3">
             Pengaturan Beranda
@@ -102,7 +112,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => handleTabChange("menus")}
             theme={theme}
           />
-          {/* MENU BARU: MANAJEMEN IKLAN */}
           <SidebarItem
             icon={<ImageIcon size={18} className="text-teal-600" />}
             label="Manage Ads"
@@ -111,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             theme={theme}
           />
           <SidebarItem
-            icon={<Tags size={18} />}
+            icon={<LayoutGrid size={18} className="text-teal-600" />}
             label="Kategori Global"
             active={activeTab === "categories"}
             onClick={() => handleTabChange("categories")}
@@ -119,10 +128,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
           />
         </div>
 
+        {/* SECTION: FINANSIAL & VALIDASI */}
         <div className="pt-6 mt-6 border-t border-slate-100">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3 mb-3">
             Validasi & Finansial
           </p>
+
+          {/* MENU PRIORITAS: BUKU BESAR */}
+          <SidebarItem
+            icon={<BookOpen size={18} className="text-indigo-600" />}
+            label="Buku Besar (Ledger)"
+            active={activeTab === "ledger"}
+            onClick={() => handleTabChange("ledger")}
+            theme={theme}
+          />
+
           <SidebarItem
             icon={<UserCheck size={18} />}
             label="Verifikasi Mitra"
@@ -133,11 +153,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
             isAlert={counts.candidates > 0}
           />
 
+          {/* KEUANGAN KURIR (Penambahan Saldo) */}
           <SidebarItem
-            icon={<BarChart3 size={18} className="text-blue-600" />}
-            label="Laporan Profit"
-            active={activeTab === "finance-report"}
-            onClick={() => handleTabChange("finance-report")}
+            icon={<Wallet2 size={18} className="text-orange-600" />}
+            label="Keuangan Kurir"
+            active={activeTab === "courier-finance"}
+            onClick={() => handleTabChange("courier-finance")}
+            theme={theme}
+          />
+
+          {/* ANTREAN TOP UP (Requests dari Admin Lokal) */}
+          <SidebarItem
+            icon={<Coins size={18} className="text-teal-500" />}
+            label="Antrean Top Up"
+            active={activeTab === "topup-requests"}
+            onClick={() => handleTabChange("topup-requests")}
+            theme={theme}
+          />
+
+          {/* TARIK SALDO (Withdrawals) */}
+          <SidebarItem
+            icon={<Banknote size={18} className="text-emerald-600" />}
+            label="Tarik Saldo"
+            active={activeTab === "withdrawals"}
+            onClick={() => handleTabChange("withdrawals")}
             theme={theme}
           />
 
@@ -146,6 +185,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             label="Regional Finance"
             active={activeTab === "regional-finance"}
             onClick={() => handleTabChange("regional-finance")}
+            theme={theme}
+          />
+
+          <SidebarItem
+            icon={<BarChart3 size={18} className="text-blue-600" />}
+            label="Laporan Profit"
+            active={activeTab === "finance-report"}
+            onClick={() => handleTabChange("finance-report")}
             theme={theme}
           />
 
@@ -168,6 +215,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           />
         </div>
 
+        {/* SECTION: SISTEM */}
         <div className="pt-6 mt-6 border-t border-slate-100">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-3 mb-3">
             System Control
@@ -196,7 +244,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </nav>
 
-      {/* TOMBOL LOGOUT */}
+      {/* FOOTER: ACTION */}
       <div className="pt-6 border-t border-slate-100">
         <button
           onClick={onLogout}

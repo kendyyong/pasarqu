@@ -13,17 +13,23 @@ import {
   Upload,
   Palette,
   LayoutTemplate,
+  Sparkles,
+  ShieldCheck,
+  Zap,
 } from "lucide-react";
 import { useToast } from "../../../contexts/ToastContext";
 import { createAuditLog } from "../../../lib/auditHelper";
-import { useConfig } from "../../../contexts/ConfigContext"; // <--- Import Config Context
+import { useConfig } from "../../../contexts/ConfigContext";
 
 export const GlobalConfig = () => {
   const { showToast } = useToast();
-  const { refreshConfig } = useConfig(); // <--- Untuk update logo realtime tanpa refresh
+  const { refreshConfig } = useConfig();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // State untuk AI Auditor
+  const [aiWarning, setAiWarning] = useState<string | null>(null);
 
   // State untuk menyimpan nilai form
   const [formData, setFormData] = useState({
@@ -40,6 +46,7 @@ export const GlobalConfig = () => {
     min_app_version: "",
     is_maintenance: false,
     cs_whatsapp: "",
+    min_wallet_limit: 0, // <--- Field Baru untuk Auto-Freeze
   });
 
   // 1. Ambil Data Saat Ini
@@ -65,6 +72,7 @@ export const GlobalConfig = () => {
           min_app_version: data.min_app_version || "",
           is_maintenance: data.is_maintenance || false,
           cs_whatsapp: data.cs_whatsapp || "",
+          min_wallet_limit: data.min_wallet_limit || 0, // <--- Load data limit
         });
       }
     } catch (err: any) {
@@ -77,6 +85,36 @@ export const GlobalConfig = () => {
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  // --- LOGIKA AI AUDITOR (GUARDRAIL) ---
+  useEffect(() => {
+    const runAiAudit = () => {
+      if (formData.platform_fee > 50000) {
+        setAiWarning(
+          "AI Alert: Platform fee terdeteksi sangat tinggi (di atas Rp 50.000). Ini bisa menurunkan minat transaksi.",
+        );
+      } else if (formData.min_wallet_limit > 50000) {
+        setAiWarning(
+          "AI Alert: Limit Auto-Freeze terlalu tinggi. Kurir dengan saldo Rp 50.000 masih akan diblokir, ini bisa menghambat operasional.",
+        );
+      } else if (formData.tax_percent > 20) {
+        setAiWarning(
+          "AI Alert: Persentase pajak di atas 20% mungkin melanggar regulasi standar atau memberatkan user.",
+        );
+      } else if (formData.max_distance_km > 50) {
+        setAiWarning(
+          "AI Alert: Radius pengiriman di atas 50KM sangat berisiko untuk kurir motor dan kesegaran barang.",
+        );
+      } else if (formData.is_maintenance) {
+        setAiWarning(
+          "AI Info: Mode Perbaikan sedang aktif. Semua pengguna tidak akan bisa mengakses aplikasi.",
+        );
+      } else {
+        setAiWarning(null);
+      }
+    };
+    runAiAudit();
+  }, [formData]);
 
   // 2. Handle Upload Logo
   const handleLogoUpload = async (
@@ -91,19 +129,16 @@ export const GlobalConfig = () => {
       const fileName = `app-logo-${Math.random()}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      // Upload ke Bucket 'app-assets'
       const { error: uploadError } = await supabase.storage
         .from("app-assets")
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      // Dapatkan Public URL
       const { data } = supabase.storage
         .from("app-assets")
         .getPublicUrl(filePath);
 
-      // Update State Preview
       setFormData((prev) => ({ ...prev, logo_url: data.publicUrl }));
       showToast(
         "Logo berhasil diupload (Klik Simpan untuk menerapkan)",
@@ -127,14 +162,12 @@ export const GlobalConfig = () => {
 
       if (error) throw error;
 
-      // --- Refresh Context agar Logo berubah di seluruh aplikasi ---
       await refreshConfig();
 
-      // --- OTOMATIS CATAT KE CCTV (AUDIT LOGS) ---
       await createAuditLog(
         "UPDATE_GLOBAL_SETTINGS",
         "SYSTEM",
-        `Mengubah pengaturan aplikasi (App: ${formData.app_name}, Fee: ${formData.platform_fee}, Ver: ${formData.min_app_version})`,
+        `Mengubah pengaturan aplikasi (App: ${formData.app_name}, Limit Freeze: Rp ${formData.min_wallet_limit})`,
       );
 
       showToast("Pengaturan Global berhasil diperbarui!", "success");
@@ -145,7 +178,6 @@ export const GlobalConfig = () => {
     }
   };
 
-  // Helper Input Change
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
     setFormData((prev) => ({
@@ -156,7 +188,7 @@ export const GlobalConfig = () => {
 
   if (loading)
     return (
-      <div className="flex justify-center py-20 text-left">
+      <div className="flex justify-center py-20">
         <Loader2 className="animate-spin text-teal-600" size={32} />
       </div>
     );
@@ -187,7 +219,24 @@ export const GlobalConfig = () => {
         </button>
       </div>
 
-      {/* 1. BRANDING & IDENTITAS (BARU) */}
+      {/* --- AI AUDITOR BANNER --- */}
+      {aiWarning && (
+        <div className="bg-amber-50 border border-amber-100 p-4 rounded-[1.5rem] flex items-center gap-4 animate-in zoom-in-95 duration-300">
+          <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-amber-500/20">
+            <Sparkles size={20} />
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-amber-800 uppercase tracking-widest mb-0.5">
+              AI Security Auditor
+            </p>
+            <p className="text-xs font-bold text-amber-600 leading-relaxed">
+              {aiWarning}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 1. BRANDING & IDENTITAS */}
       <section className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
         <div className="absolute top-0 right-0 p-6 text-slate-100 group-hover:text-pink-50 transition-colors">
           <LayoutTemplate size={64} />
@@ -197,7 +246,6 @@ export const GlobalConfig = () => {
         </h3>
 
         <div className="flex flex-col md:flex-row gap-8 items-center relative z-10">
-          {/* Logo Upload */}
           <div className="text-center">
             <div className="relative w-32 h-32 mx-auto bg-slate-50 rounded-full border-4 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group/img cursor-pointer">
               {formData.logo_url ? (
@@ -209,12 +257,9 @@ export const GlobalConfig = () => {
               ) : (
                 <ImageIcon className="text-slate-300" size={32} />
               )}
-
-              {/* Overlay */}
               <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
                 <Upload className="text-white" size={20} />
               </div>
-
               <input
                 type="file"
                 accept="image/*"
@@ -232,7 +277,6 @@ export const GlobalConfig = () => {
             </p>
           </div>
 
-          {/* Input Fields */}
           <div className="flex-1 w-full space-y-4">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -244,7 +288,6 @@ export const GlobalConfig = () => {
                 value={formData.app_name}
                 onChange={handleChange}
                 className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-pink-500 transition-all outline-none"
-                placeholder="Contoh: Pasarqu"
               />
             </div>
             <div className="space-y-2">
@@ -262,7 +305,6 @@ export const GlobalConfig = () => {
                   value={formData.primary_color}
                   onChange={handleChange}
                   className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-pink-500 transition-all outline-none"
-                  placeholder="#059669"
                 />
               </div>
             </div>
@@ -270,7 +312,7 @@ export const GlobalConfig = () => {
         </div>
       </section>
 
-      {/* 2. PENGATURAN KEUANGAN */}
+      {/* 2. KEUANGAN & TRANSAKSI */}
       <section className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
         <div className="absolute top-0 right-0 p-6 text-slate-100 group-hover:text-teal-50 transition-colors">
           <DollarSign size={64} />
@@ -280,7 +322,7 @@ export const GlobalConfig = () => {
           Transaksi
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
               Platform Fee (Rp)
@@ -292,9 +334,6 @@ export const GlobalConfig = () => {
               onChange={handleChange}
               className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-teal-500 transition-all outline-none"
             />
-            <p className="text-[9px] text-slate-400">
-              Biaya admin per transaksi user.
-            </p>
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -307,9 +346,6 @@ export const GlobalConfig = () => {
               onChange={handleChange}
               className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-teal-500 transition-all outline-none"
             />
-            <p className="text-[9px] text-slate-400">
-              Persentase pajak per order.
-            </p>
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -322,14 +358,24 @@ export const GlobalConfig = () => {
               onChange={handleChange}
               className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-teal-500 transition-all outline-none"
             />
-            <p className="text-[9px] text-slate-400">
-              Batas minimal tarik saldo mitra.
-            </p>
+          </div>
+          {/* INPUT BARU: AUTO-FREEZE LIMIT */}
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-red-500 uppercase tracking-widest">
+              Auto-Freeze (Rp)
+            </label>
+            <input
+              type="number"
+              name="min_wallet_limit"
+              value={formData.min_wallet_limit}
+              onChange={handleChange}
+              className="w-full bg-red-50 border-none rounded-xl px-4 py-3 font-black text-red-700 focus:ring-2 focus:ring-red-500 transition-all outline-none"
+            />
           </div>
         </div>
       </section>
 
-      {/* 3. PENGATURAN OPERASIONAL */}
+      {/* 3. OPERASIONAL */}
       <section className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
         <div className="absolute top-0 right-0 p-6 text-slate-100 group-hover:text-blue-50 transition-colors">
           <MapPin size={64} />
@@ -350,13 +396,10 @@ export const GlobalConfig = () => {
               onChange={handleChange}
               className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 transition-all outline-none"
             />
-            <p className="text-[9px] text-slate-400">
-              Jarak maksimal kurir bisa ambil order.
-            </p>
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              WhatsApp Customer Service
+              WhatsApp CS
             </label>
             <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-4 border border-transparent focus-within:ring-2 focus-within:ring-blue-500 transition-all">
               <MessageCircle size={16} className="text-green-500" />
@@ -373,7 +416,7 @@ export const GlobalConfig = () => {
         </div>
       </section>
 
-      {/* 4. PENGATURAN SISTEM (DANGER ZONE) */}
+      {/* 4. SYSTEM CONTROL */}
       <section className="bg-white p-8 rounded-[2rem] shadow-sm border border-red-100 relative overflow-hidden group hover:shadow-md transition-all text-left">
         <div className="absolute top-0 right-0 p-6 text-slate-100 group-hover:text-red-50 transition-colors">
           <Server size={64} />
@@ -399,9 +442,6 @@ export const GlobalConfig = () => {
                 placeholder="1.0.0"
               />
             </div>
-            <p className="text-[9px] text-slate-400">
-              User dengan versi di bawah ini wajib update.
-            </p>
           </div>
 
           <div className="bg-red-50 p-4 rounded-2xl border border-red-100">
@@ -431,3 +471,5 @@ export const GlobalConfig = () => {
     </div>
   );
 };
+
+export default GlobalConfig;

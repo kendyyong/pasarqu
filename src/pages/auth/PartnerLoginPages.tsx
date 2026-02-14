@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useToast } from "../../contexts/ToastContext";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   Store,
   Bike,
@@ -16,8 +16,9 @@ import {
 } from "lucide-react";
 
 /**
- * --- TEMPLATE LOGIN PRO (SHOPEE STYLE INTERFACE) ---
- * Mempertahankan fitur "PENGUNCIAN KETAT" asli dari Juragan.
+ * --- TEMPLATE LOGIN PRO (LOGIKA STREAMLINED) ---
+ * Perbaikan: Fokus validasi hanya pada tabel 'profiles'.
+ * Jika Profil Approved, user diizinkan masuk Dashboard.
  */
 const BaseLoginPage = ({
   role,
@@ -34,11 +35,11 @@ const BaseLoginPage = ({
 
   const isTeal = accentColor === "teal";
 
-  // --- LOGIKA PENGUNCIAN KETAT ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
+      // 1. Cek Email & Password (Auth Supabase)
       const { data, error } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
@@ -47,9 +48,10 @@ const BaseLoginPage = ({
       if (error) throw error;
 
       if (data.user) {
+        // 2. Tarik Data Profil (Satu Sumber Kebenaran)
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
-          .select("role")
+          .select("role, status, is_verified")
           .eq("id", data.user.id)
           .maybeSingle();
 
@@ -58,19 +60,53 @@ const BaseLoginPage = ({
         const isSuperAdmin = profile?.role === "SUPER_ADMIN";
         const isCorrectRole = profile?.role === role;
 
+        // A. CEK ROLE (Pastikan tidak salah kamar)
         if (!isCorrectRole && !isSuperAdmin) {
           await supabase.auth.signOut();
           const identity =
             profile?.role === "CUSTOMER" ? "PELANGGAN" : profile?.role;
           setIsLoading(false);
           showToast(
-            `DILARANG MASUK! Akun Anda adalah ${identity}. Silakan gunakan login yang sesuai.`,
+            `AKSES DITOLAK! Akun Anda terdaftar sebagai ${identity}.`,
             "error",
           );
           return;
         }
 
-        showToast(`Selamat Datang, ${title}!`, "success");
+        // B. CEK STATUS (Logika Disederhanakan)
+        if (!isSuperAdmin) {
+          // SKENARIO 1: SUKSES
+          if (profile?.status === "APPROVED") {
+            showToast(`Selamat Datang, ${title}!`, "success");
+            // Gunakan replace agar tidak bisa 'Back' ke login
+            window.location.replace(dashboardUrl);
+            return;
+          }
+
+          // SKENARIO 2: MASIH PENDING
+          if (profile?.status === "PENDING" || !profile?.status) {
+            showToast("Pendaftaran Anda masih dalam peninjauan admin.", "info");
+            window.location.replace("/waiting-approval");
+            return;
+          }
+
+          // SKENARIO 3: DIBEKUKAN/DITOLAK
+          if (
+            profile?.status === "SUSPENDED" ||
+            profile?.status === "REJECTED"
+          ) {
+            await supabase.auth.signOut();
+            showToast(
+              "Akun Anda telah DIBEKUKAN atau DITOLAK. Hubungi Admin.",
+              "error",
+            );
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        // C. JIKA SUPER ADMIN (Bypass Langsung)
+        showToast(`Akses Super Admin Diberikan.`, "success");
         window.location.replace(dashboardUrl);
       }
     } catch (err: any) {
@@ -84,7 +120,7 @@ const BaseLoginPage = ({
     <div
       className={`min-h-screen font-sans flex flex-col ${isTeal ? "bg-teal-600" : "bg-[#FF6600]"}`}
     >
-      {/* HEADER ALA ENTERPRISE */}
+      {/* HEADER */}
       <nav className="w-full bg-white shadow-sm py-4 px-6 md:px-12 flex justify-between items-center z-20">
         <div className="flex items-center gap-4">
           <Link
@@ -108,7 +144,7 @@ const BaseLoginPage = ({
 
       <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-12 lg:gap-24 p-6 relative overflow-hidden">
         {/* BRANDING SIDE */}
-        <div className="hidden lg:flex flex-col text-white max-w-sm">
+        <div className="hidden lg:flex flex-col text-white max-w-sm text-left">
           <div className="mb-8 p-5 bg-white/10 backdrop-blur-md rounded-3xl w-fit border border-white/20 shadow-2xl">
             {icon}
           </div>
@@ -125,7 +161,7 @@ const BaseLoginPage = ({
         {/* LOGIN CARD */}
         <div className="w-full max-w-[420px]">
           <div className="bg-white p-10 rounded-[2.5rem] shadow-[0_30px_100px_rgba(0,0,0,0.2)] border border-white">
-            <div className="mb-8">
+            <div className="mb-8 text-left">
               <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-2">
                 Masuk
               </h3>
@@ -240,7 +276,7 @@ export const AdminLogin = () => (
   />
 );
 
-// --- LOGIN SUPER ADMIN (FIXED JSX ERROR) ---
+// --- LOGIN SUPER ADMIN ---
 export const SuperAdminLogin = () => {
   const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -256,18 +292,20 @@ export const SuperAdminLogin = () => {
       });
       if (error) throw error;
 
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", data.user.id)
-        .single();
+        .maybeSingle();
+
+      if (profileError) throw profileError;
 
       if (profile?.role === "SUPER_ADMIN") {
-        showToast("Akses Diterima. Selamat Datang, Owner.", "success");
+        showToast("Akses Diterima.", "success");
         window.location.replace("/super-admin");
       } else {
         await supabase.auth.signOut();
-        throw new Error("Akses Ditolak!");
+        throw new Error("Akses Ditolak! Bukan Super Admin.");
       }
     } catch (err: any) {
       showToast(err.message, "error");

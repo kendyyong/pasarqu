@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../../lib/supabaseClient"; // Pastikan path ini benar
+import { useAuth } from "../../contexts/AuthContext"; // Pastikan path ini benar
 import {
   Clock,
   ShieldCheck,
@@ -11,6 +13,46 @@ import {
 
 export const WaitingApprovalPage = () => {
   const navigate = useNavigate();
+  const { profile } = useAuth();
+
+  // --- LOGIKA SENSOR OTOMATIS (REALTIME CHECK) ---
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    // 1. Buat koneksi sensor ke tabel profiles
+    const profileSubscription = supabase
+      .channel("check_approval")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${profile.id}`,
+        },
+        (payload) => {
+          // 2. Jika status berubah jadi APPROVED, langsung arahkan ke dashboard
+          if (payload.new.status === "APPROVED") {
+            const targetUrl =
+              profile.role === "MERCHANT"
+                ? "/merchant-dashboard"
+                : profile.role === "COURIER"
+                  ? "/courier-dashboard"
+                  : "/";
+
+            // Beri delay sedikit agar user sempat melihat animasi transisi
+            setTimeout(() => {
+              window.location.replace(targetUrl);
+            }, 1500);
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profileSubscription);
+    };
+  }, [profile, navigate]);
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 font-sans">
@@ -65,7 +107,7 @@ export const WaitingApprovalPage = () => {
         {/* AKSI (Ramping) */}
         <div className="space-y-3">
           <button
-            onClick={() => window.open("https://wa.me/628123456789", "_blank")}
+            onClick={() => window.open("https://wa.me/628123456789", "_blank")} // Juragan ganti nomor WA disini
             className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-teal-600 transition-all shadow-lg active:scale-95"
           >
             <Smartphone size={16} /> Hubungi Admin Wilayah
@@ -95,7 +137,7 @@ const Step = ({ active, icon, label, status, color, bgColor }: any) => (
     >
       {icon}
     </div>
-    <div className="flex-1">
+    <div className="flex-1 text-left">
       <p
         className={`text-[10px] font-black uppercase tracking-tight ${active ? "text-slate-800" : "text-slate-300"}`}
       >
@@ -109,3 +151,5 @@ const Step = ({ active, icon, label, status, color, bgColor }: any) => (
     </div>
   </div>
 );
+
+export default WaitingApprovalPage;

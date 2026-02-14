@@ -1,5 +1,5 @@
 import React from "react";
-import { AppLogo } from "./AppLogo";
+import { AppLogo } from "./AppLogo"; // Sesuaikan path jika perlu
 import { Home, Search, ClipboardList, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -20,11 +20,28 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
 }) => {
   const navigate = useNavigate();
 
+  // ICON SIZE TETAP 24 (Besar & Jelas)
   const tabs = [
-    { id: "home", label: "Beranda", icon: <Home size={20} /> },
-    { id: "search", label: "Cari", icon: <Search size={20} /> },
-    { id: "orders", label: "Pesanan", icon: <ClipboardList size={20} /> },
-    { id: "account", label: "Saya", icon: <User size={20} /> },
+    {
+      id: "home",
+      label: "Beranda",
+      icon: <Home size={24} strokeWidth={2.5} />,
+    },
+    {
+      id: "search",
+      label: "Cari",
+      icon: <Search size={24} strokeWidth={2.5} />,
+    },
+    {
+      id: "orders",
+      label: "Pesanan",
+      icon: <ClipboardList size={24} strokeWidth={2.5} />,
+    },
+    {
+      id: "account",
+      label: "Saya",
+      icon: <User size={24} strokeWidth={2.5} />,
+    },
   ];
 
   const handleTabClick = (tabId: string) => {
@@ -36,35 +53,45 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col font-sans overflow-x-hidden text-left">
-      {/* AREA KONTEN UTAMA 
-          pb-32: Kita naikkan padding bawah kontainer utama agar konten tidak tertutup bar navigasi yang makin tinggi.
-      */}
-      <main className="flex-1 w-full max-w-[1200px] mx-auto bg-white min-h-screen relative pt-[64px] md:pt-[74px] pb-32 md:pb-10 isolate">
+    <div className="min-h-screen bg-[#f5f5f5] flex flex-col font-sans overflow-x-hidden text-left">
+      {/* AREA KONTEN UTAMA */}
+      {/* pb-20: Saya kurangi dari pb-32 karena navbarnya sekarang sudah slim */}
+      <main className="flex-1 w-full max-w-[1200px] mx-auto bg-white min-h-screen relative pt-[64px] md:pt-[74px] pb-20 md:pb-10 isolate">
         <div className="flex flex-col m-0 p-0 [&>*]:first:mt-0 bg-white">
           {children}
         </div>
       </main>
 
-      {/* NAVIGASI BAWAH YANG DINAIKKAN:
-          - pb-10: Memberikan ruang ekstra 40px di bawah tombol (Sangat Tinggi & Nyaman).
-          - pt-4: Memberikan ruang napas di atas ikon.
-          - rounded-t-[2rem]: Lengkungan lebih tegas agar terlihat estetik saat naik ke atas.
-          - shadow-2xl: Shadow lebih kuat agar bar terlihat "melayang" di atas konten.
+      {/* --- NAVIGASI BAWAH SLIM & FLAT --- */}
+      {/* PERUBAHAN CSS:
+          1. Menghapus 'rounded-t-[2rem]' -> Agar kotak rata bawah.
+          2. Menghapus 'pb-10' dan 'pt-4' -> Diganti tinggi fix h-[54px].
+          3. Menambah 'border-t' -> Garis tipis pemisah di atas.
       */}
-      <nav className="fixed bottom-0 left-0 right-0 w-full bg-white border-t border-slate-100 flex justify-around items-center pt-4 pb-10 z-[2000] shadow-[0_-10px_25px_rgba(0,0,0,0.08)] md:hidden rounded-t-[2rem]">
+      <nav className="fixed bottom-0 left-0 right-0 w-full bg-white border-t border-slate-200 flex justify-around items-end h-[54px] pb-1 z-[2000] shadow-[0_-2px_10px_rgba(0,0,0,0.03)] md:hidden">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => handleTabClick(tab.id)}
-            className={`flex flex-col items-center gap-1.5 flex-1 transition-all active:scale-90 ${
+            // CSS TOMBOL:
+            // h-full: Memenuhi tinggi nav
+            // gap-0.5: Jarak icon ke teks sangat rapat (biar slim)
+            className={`flex-1 h-full flex flex-col items-center justify-center gap-0.5 transition-all active:bg-slate-50 ${
               activeTab === tab.id
-                ? "text-teal-600 font-bold"
-                : "text-slate-400"
+                ? "text-teal-600" // Warna aktif
+                : "text-slate-400" // Warna mati
             }`}
           >
-            <div className="mb-0.5">{tab.icon}</div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-center">
+            {/* ICON CONTAINER */}
+            <div
+              className={`transition-transform duration-200 ${activeTab === tab.id ? "-translate-y-0.5" : ""}`}
+            >
+              {tab.icon}
+            </div>
+
+            {/* LABEL TEKS */}
+            {/* text-[9px]: Font kecil tapi tebal agar muat di bar pendek */}
+            <span className="text-[9px] font-bold uppercase tracking-wide leading-none text-center">
               {tab.label}
             </span>
           </button>
