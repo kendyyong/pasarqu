@@ -10,6 +10,7 @@ import {
   CheckCircle,
   Power,
   Plus,
+  MessageSquare, // Ikon untuk fitur Chat
 } from "lucide-react";
 
 interface Props {
@@ -65,7 +66,7 @@ export const MerchantSidebar: React.FC<Props> = ({
           </div>
         </div>
 
-        <nav className="flex-1 px-4 space-y-1.5 mt-2 text-left">
+        <nav className="flex-1 px-4 space-y-1.5 mt-2 text-left overflow-y-auto no-scrollbar">
           <NavItem
             icon={<LayoutDashboard size={18} />}
             label="Ringkasan"
@@ -79,6 +80,15 @@ export const MerchantSidebar: React.FC<Props> = ({
             onClick={() => setActiveTab("orders")}
             count={orderCount}
           />
+
+          {/* MENU BARU: LAYANAN CHAT */}
+          <NavItem
+            icon={<MessageSquare size={18} />}
+            label="Layanan Chat"
+            active={activeTab === "messages"}
+            onClick={() => setActiveTab("messages")}
+          />
+
           <NavItem
             icon={<Package size={18} />}
             label="Produk"
@@ -122,19 +132,22 @@ export const MerchantSidebar: React.FC<Props> = ({
       </aside>
 
       {/* MOBILE BOTTOM NAV */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex justify-around items-center z-50 pb-safe shadow-2xl h-20 px-2">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex justify-around items-center z-50 pb-safe h-20 px-2">
         <MobileItem
           icon={<LayoutDashboard size={22} />}
           label="Home"
           active={activeTab === "overview"}
           onClick={() => setActiveTab("overview")}
         />
+
+        {/* MOBILE CHAT ITEM */}
         <MobileItem
-          icon={<Package size={22} />}
-          label="Produk"
-          active={activeTab === "products"}
-          onClick={() => setActiveTab("products")}
+          icon={<MessageSquare size={22} />}
+          label="Chat"
+          active={activeTab === "messages"}
+          onClick={() => setActiveTab("messages")}
         />
+
         <div className="relative -top-6">
           <button
             onClick={onAddProduct}
@@ -143,6 +156,7 @@ export const MerchantSidebar: React.FC<Props> = ({
             <Plus size={28} />
           </button>
         </div>
+
         <MobileItem
           icon={<ShoppingBag size={22} />}
           label="Order"
@@ -151,10 +165,11 @@ export const MerchantSidebar: React.FC<Props> = ({
           count={orderCount}
         />
         <MobileItem
-          icon={<MapPin size={22} />}
-          label="Lokasi"
-          active={false}
-          onClick={onLocationClick}
+          icon={<Package size={22} />}
+          label="Produk"
+          active={activeTab === "products"}
+          onClick={() => setActiveTab("products")}
+          count={productCount}
         />
       </div>
     </>

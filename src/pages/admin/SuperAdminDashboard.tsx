@@ -26,7 +26,8 @@ import { ManageQuickActions } from "./super-features/ManageQuickActions";
 import { CourierFinanceManager } from "./super-features/CourierFinanceManager";
 import { WithdrawalManager } from "./super-features/WithdrawalManager";
 import { TopUpRequestManager } from "./super-features/TopUpRequestManager";
-import { FinancialLedger } from "./super-features/FinancialLedger"; // <--- Import Buku Besar
+import { FinancialLedger } from "./super-features/FinancialLedger";
+import { RegionalFinanceReport } from "./finance/RegionalFinanceReport"; // <--- Import Laporan Mingguan
 import RegionalFinance from "./finance/RegionalFinance";
 
 const libraries: "places"[] = ["places"];
@@ -225,7 +226,10 @@ export const SuperAdminDashboard: React.FC = () => {
 
               {activeTab === "regional-finance" && <RegionalFinance />}
 
-              {(activeTab === "finance" || activeTab === "finance-report") && (
+              {/* --- PERBAIKAN: TAB LAPORAN MINGGUAN --- */}
+              {activeTab === "finance-report" && <RegionalFinanceReport />}
+
+              {activeTab === "finance" && (
                 <FinanceManager
                   finance={finance}
                   activeTab={activeTab}
@@ -260,7 +264,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 "courier-finance",
                 "withdrawals",
                 "topup-requests",
-                "ledger", // <--- Tambahkan ke pengecekan fallback
+                "ledger",
               ].includes(activeTab) && (
                 <div className="p-20 text-center bg-white rounded-3xl border border-dashed border-slate-200">
                   <p className="text-xs font-black text-slate-400 uppercase tracking-widest">

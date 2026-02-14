@@ -5,15 +5,23 @@ import { useToast } from "../../contexts/ToastContext";
 import { useNavigate } from "react-router-dom";
 import { Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 
-// Import komponen sidebar & tab Juragan (Pastikan path import ini benar sesuai struktur folder Juragan)
+// Import komponen sidebar & tab Juragan
 import { MerchantSidebar } from "./components/MerchantSidebar";
 import { MerchantOverview } from "./components/MerchantOverview";
 import { MerchantProducts } from "./components/MerchantProducts";
 import { MerchantOrders } from "./components/MerchantOrders";
 import { MerchantWallet } from "./components/MerchantWallet";
+import { MerchantMessages } from "./components/MerchantMessages"; // PERBAIKAN: Import komponen chat
 import { LocationPickerModal } from "./components/LocationPickerModal";
 
-type TabType = "overview" | "products" | "orders" | "wallet";
+// PERBAIKAN: Tambahkan "messages" dan "finance" (untuk kecocokan sidebar) ke dalam tipe Tab
+type TabType =
+  | "overview"
+  | "products"
+  | "orders"
+  | "wallet"
+  | "messages"
+  | "finance";
 
 export const MerchantDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -49,14 +57,9 @@ export const MerchantDashboard: React.FC = () => {
         .maybeSingle();
 
       // --- LOGIKA "BODO AMAT" (BYPASS) ---
-      // Jika Profil APPROVED, kita paksa dashboard terbuka.
-      // Kita memalsukan object merchant jika data aslinya belum siap di DB.
-
       if (profile?.status === "APPROVED") {
-        // Kalau data merchant di DB kosong/rusak, kita buat data sementara di memori browser
-        // supaya dashboard tetap bisa render tanpa error.
         const effectiveMerchant = merchantData || {
-          id: user.id, // Pakai ID user sebagai ID toko sementara
+          id: user.id,
           user_id: user.id,
           shop_name: profile.shop_name || profile.name || "Toko Saya",
           market_id: profile.managed_market_id,
@@ -65,7 +68,6 @@ export const MerchantDashboard: React.FC = () => {
           is_shop_open: true,
         };
 
-        // Tarik data produk & order (Kalau toko baru pasti kosong, jadi aman)
         const [resProducts, resOrders] = await Promise.all([
           supabase
             .from("products")
@@ -82,7 +84,6 @@ export const MerchantDashboard: React.FC = () => {
         setProducts(resProducts.data || []);
         setOrders(resOrders.data || []);
       } else {
-        // Jika Profil MEMANG BELUM APPROVED (Murni masih pending)
         setMerchantProfile(null);
       }
     } catch (err: any) {
@@ -154,13 +155,15 @@ export const MerchantDashboard: React.FC = () => {
 
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto no-scrollbar">
         {/* HEADER SEDERHANA */}
-        <header className="h-20 bg-white border-b px-10 flex items-center justify-between">
+        <header className="h-20 bg-white border-b px-10 flex items-center justify-between sticky top-0 z-40">
           <h1 className="text-xl font-black uppercase tracking-tighter text-slate-800">
             {merchantProfile.shop_name}
           </h1>
-          <span className="text-[10px] font-bold bg-green-100 text-green-700 px-3 py-1 rounded-full">
-            ONLINE
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-black bg-green-50 text-green-600 px-4 py-2 rounded-xl border border-green-100">
+              STATUS: ONLINE
+            </span>
+          </div>
         </header>
 
         <main className="p-6 md:p-10 max-w-6xl mx-auto w-full">
@@ -176,7 +179,12 @@ export const MerchantDashboard: React.FC = () => {
           {activeTab === "orders" && (
             <MerchantOrders merchantProfile={merchantProfile} />
           )}
-          {activeTab === "wallet" && (
+
+          {/* PERBAIKAN: Render Tab Pesanan/Messages */}
+          {activeTab === "messages" && <MerchantMessages />}
+
+          {/* Menyesuaikan activeTab finance ke wallet component */}
+          {(activeTab === "wallet" || activeTab === "finance") && (
             <MerchantWallet merchantProfile={merchantProfile} />
           )}
         </main>

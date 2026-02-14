@@ -21,6 +21,7 @@ import { CourierSidebar } from "./components/CourierSidebar";
 import { CourierBidArea } from "./components/CourierBidArea";
 import { CourierProfile } from "./components/CourierProfile";
 import { CourierActiveOrder } from "./components/CourierActiveOrder";
+import { CourierMessages } from "./components/CourierMessages"; // Komponen Pusat Chat
 import { LocationPickerModal } from "../merchant/components/LocationPickerModal";
 
 export const CourierDashboard: React.FC = () => {
@@ -43,6 +44,7 @@ export const CourierDashboard: React.FC = () => {
   const fetchInitialData = async () => {
     if (!user) return;
     try {
+      // Ambil Profil Kurir
       const { data: profile } = await supabase
         .from("profiles")
         .select("*, markets(name)")
@@ -56,17 +58,18 @@ export const CourierDashboard: React.FC = () => {
           setCurrentCoords({ lat: profile.latitude, lng: profile.longitude });
       }
 
+      // Ambil order aktif yang sedang berjalan
       const { data: order } = await supabase
         .from("orders")
         .select(
           `
           *,
-          profiles:customer_id (full_name, phone_number, address, latitude, longitude),
-          merchants:merchant_id (shop_name, address, latitude, longitude)
+          profiles:customer_id (id, full_name, phone_number, address, latitude, longitude),
+          merchants:merchant_id (id, shop_name, address, latitude, longitude)
         `,
         )
         .eq("courier_id", user.id)
-        .in("status", ["READY_FOR_PICKUP", "ON_DELIVERY"])
+        .in("shipping_status", ["COURIER_ASSIGNED", "PICKING_UP", "DELIVERING"])
         .maybeSingle();
 
       setActiveOrder(order || null);
@@ -148,17 +151,17 @@ export const CourierDashboard: React.FC = () => {
   // VIEW: BELUM VERIFIKASI
   if (courierData && !courierData.is_verified) {
     return (
-      <div className="min-h-screen bg-[#F3F4F6] flex items-center justify-center p-6">
+      <div className="min-h-screen bg-[#F3F4F6] flex items-center justify-center p-6 text-left">
         <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 text-center">
           <div className="w-20 h-20 bg-teal-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
             <ShieldCheck size={40} className="text-teal-600 animate-pulse" />
           </div>
-          <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">
+          <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tighter text-center">
             Verifikasi Akun
           </h1>
-          <p className="text-xs text-slate-500 font-bold uppercase mt-4 leading-relaxed tracking-tight">
+          <p className="text-xs text-slate-500 font-bold uppercase mt-4 leading-relaxed tracking-tight text-center">
             Identitas Anda sedang divalidasi oleh Admin Wilayah{" "}
-            {courierData.markets?.name}.
+            {courierData.markets?.name || "Pasar"}.
           </p>
           <div className="mt-10 space-y-3">
             <button
@@ -209,14 +212,14 @@ export const CourierDashboard: React.FC = () => {
           <div className="flex items-center gap-4">
             <div className="flex flex-col items-end hidden md:block">
               <p className="text-[10px] font-black text-slate-800 uppercase leading-none">
-                {courierData?.full_name}
+                {courierData?.full_name || courierData?.name}
               </p>
               <p className="text-[8px] font-bold text-teal-600 uppercase mt-1">
-                {courierData?.markets?.name}
+                {courierData?.markets?.name || "Pasar Lokal"}
               </p>
             </div>
             <div className="w-10 h-10 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black shadow-lg uppercase">
-              {courierData?.full_name?.charAt(0)}
+              {(courierData?.full_name || courierData?.name || "C").charAt(0)}
             </div>
           </div>
         </header>
@@ -246,6 +249,9 @@ export const CourierDashboard: React.FC = () => {
             </div>
           )}
 
+          {/* TAB: PUSAT CHAT (MODUL BARU) */}
+          {activeTab === "messages" && <CourierMessages />}
+
           {/* TAB: PROFILE */}
           {activeTab === "profile" && (
             <CourierProfile courierData={courierData} />
@@ -254,16 +260,19 @@ export const CourierDashboard: React.FC = () => {
           {/* TAB: FINANCE */}
           {activeTab === "finance" && (
             <div className="space-y-6 animate-in slide-in-from-bottom-4">
-              <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">
+              <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter text-left">
                 Dompet Saya
               </h1>
               <div className="bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden shadow-2xl shadow-slate-900/30">
-                <div className="relative z-10">
+                <div className="relative z-10 text-left">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60 mb-2">
                     Total Saldo
                   </p>
                   <h2 className="text-5xl font-black tracking-tighter mb-10">
-                    Rp {courierData?.wallet_balance?.toLocaleString() || 0}
+                    Rp{" "}
+                    {Number(courierData?.wallet_balance || 0).toLocaleString(
+                      "id-ID",
+                    )}
                   </h2>
                   <button className="py-4 px-8 bg-teal-500 hover:bg-teal-400 text-slate-900 rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] transition-all">
                     Tarik Dana

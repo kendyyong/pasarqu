@@ -3,7 +3,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
 import { useJsApiLoader } from "@react-google-maps/api";
-import { useNavigate } from "react-router-dom"; // IMPORT BARU
+import { useNavigate } from "react-router-dom";
 import {
   Loader2,
   Bell,
@@ -22,7 +22,7 @@ import {
   AlertTriangle,
   BarChart3,
   Radio,
-  ClipboardCheck, // ICON BARU
+  ClipboardCheck,
 } from "lucide-react";
 
 import { LocalSidebar } from "./components/LocalSidebar";
@@ -36,6 +36,7 @@ import { LocalRatingsTab } from "./tabs/LocalRatingsTab";
 import { LocalResolutionTab } from "./tabs/LocalResolutionTab";
 import { LocalBroadcastTab } from "./tabs/LocalBroadcastTab";
 import { LocalOrdersTab } from "./tabs/LocalOrdersTab";
+import { LocalCourierMonitor } from "./tabs/LocalCourierMonitor"; // <--- SUDAH SINKRON
 
 type TabType =
   | "overview"
@@ -59,7 +60,7 @@ interface Props {
 export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
   const { profile, logout } = useAuth();
   const { showToast } = useToast();
-  const navigate = useNavigate(); // HOOK NAVIGASI
+  const navigate = useNavigate();
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
@@ -71,7 +72,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
 
-  // --- STATE ALARM ---
   const [isAlarmActive, setIsAlarmActive] = useState(false);
   const alarmAudio = useRef<HTMLAudioElement | null>(null);
 
@@ -150,9 +150,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
     alarmAudio.current = new Audio(
       "https://actions.google.com/sounds/v1/alarms/beep_short.ogg",
     );
-
     if (!profile?.managed_market_id) return;
-
     const productSub = supabase
       .channel("engine_wilayah")
       .on(
@@ -170,7 +168,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
         },
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(productSub);
       stopAlarm();
@@ -264,7 +261,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
             </div>
 
             <div className="flex bg-white p-2 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40 overflow-x-auto no-scrollbar">
-              {/* TOMBOL AKSI BARU: VERIFIKASI PRODUK (KE HALAMAN TERPISAH) */}
               <button
                 onClick={() => navigate("/admin-wilayah/verifikasi-produk")}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-[1.5rem] transition-all group shrink-0 text-orange-500 hover:bg-orange-50"
@@ -363,18 +359,12 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
               />
             )}
 
-            {(activeTab === "merchants" ||
-              activeTab === "couriers" ||
-              activeTab === "customers") && (
+            {activeTab === "couriers" && <LocalCourierMonitor />}
+
+            {(activeTab === "merchants" || activeTab === "customers") && (
               <LocalUsersTab
                 type={activeTab}
-                data={
-                  activeTab === "merchants"
-                    ? myMerchants
-                    : activeTab === "couriers"
-                      ? myCouriers
-                      : myCustomers
-                }
+                data={activeTab === "merchants" ? myMerchants : myCustomers}
                 onViewDetail={(u) => setDetailModal({ isOpen: true, user: u })}
                 onRefresh={fetchData}
               />
@@ -392,7 +382,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 <button
                   onClick={() => {
                     stopAlarm();
-                    navigate("/admin-wilayah/verifikasi-produk"); // ARAHKAN KE HALAMAN VERIFIKASI
+                    navigate("/admin-wilayah/verifikasi-produk");
                   }}
                   className="mt-8 px-10 py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-red-700 transition-all"
                 >

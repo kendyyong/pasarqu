@@ -10,6 +10,7 @@ import {
   Power,
   CheckCircle,
   Wallet,
+  MessageSquare, // Ikon Chat
 } from "lucide-react";
 
 interface Props {
@@ -33,6 +34,7 @@ export const CourierSidebar: React.FC<Props> = ({
 }) => {
   return (
     <>
+      {/* DESKTOP SIDEBAR */}
       <aside className="hidden lg:flex w-72 bg-slate-900 flex-col sticky top-0 h-screen z-30 shadow-2xl">
         <div className="p-8 text-left">
           <div className="flex items-center gap-3 mb-6">
@@ -52,12 +54,13 @@ export const CourierSidebar: React.FC<Props> = ({
           <div className="p-4 bg-slate-800/50 rounded-2xl border border-slate-700/50">
             <div className="flex items-center gap-2 mb-1">
               <p className="text-xs font-black text-slate-100 truncate uppercase tracking-tight">
-                {courierData?.name}
+                {courierData?.full_name || courierData?.name || "Driver"}
               </p>
               <CheckCircle size={10} className="text-blue-400" />
             </div>
-            <p className="text-[9px] text-slate-400 font-bold uppercase">
-              Rp{courierData?.wallet_balance?.toLocaleString() || 0}
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+              Rp{" "}
+              {Number(courierData?.wallet_balance || 0).toLocaleString("id-ID")}
             </p>
           </div>
         </div>
@@ -65,25 +68,34 @@ export const CourierSidebar: React.FC<Props> = ({
         <nav className="flex-1 px-4 space-y-1.5 text-left">
           <NavItem
             icon={<Zap size={18} />}
-            label="Bid Area"
+            label="Radar Order"
             active={activeTab === "bid"}
             onClick={() => setActiveTab("bid")}
           />
+
+          {/* MENU BARU: PUSAT CHAT */}
+          <NavItem
+            icon={<MessageSquare size={18} />}
+            label="Pusat Pesan"
+            active={activeTab === "messages"}
+            onClick={() => setActiveTab("messages")}
+          />
+
           <NavItem
             icon={<History size={18} />}
-            label="Riwayat"
+            label="Riwayat Tugas"
             active={activeTab === "history"}
             onClick={() => setActiveTab("history")}
           />
           <NavItem
             icon={<Wallet size={18} />}
-            label="Keuangan"
+            label="Dompet & Cairkan"
             active={activeTab === "finance"}
             onClick={() => setActiveTab("finance")}
           />
           <NavItem
             icon={<MapPin size={18} />}
-            label="Lokasi Pangkalan"
+            label="Update Lokasi"
             active={false}
             onClick={onLocationClick}
           />
@@ -98,25 +110,37 @@ export const CourierSidebar: React.FC<Props> = ({
         <div className="p-6 space-y-3">
           <button
             onClick={onToggleOnline}
-            className={`w-full py-3 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 transition-all ${isOnline ? "bg-green-500 text-white shadow-lg shadow-green-500/20" : "bg-slate-700 text-slate-400"}`}
+            className={`w-full py-4 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-3 transition-all duration-300 border ${
+              isOnline
+                ? "bg-green-500 text-white border-green-400 shadow-lg shadow-green-500/20"
+                : "bg-slate-800 text-slate-400 border-slate-700"
+            }`}
           >
-            <Power size={14} /> {isOnline ? "ONLINE" : "OFFLINE"}
+            <Power size={14} className={isOnline ? "animate-pulse" : ""} />
+            {isOnline ? "STATUS: ONLINE" : "STATUS: OFFLINE"}
           </button>
+
           <button
             onClick={onLogout}
-            className="w-full flex items-center gap-3 px-5 py-4 rounded-xl text-red-400 hover:bg-red-500/10 transition-all font-black text-[10px] uppercase tracking-widest group"
+            className="w-full flex items-center gap-3 px-5 py-4 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all font-black text-[10px] uppercase tracking-widest group"
           >
-            <LogOut size={18} /> Keluar
+            <LogOut size={18} /> Keluar Sistem
           </button>
         </div>
       </aside>
 
-      {/* MOBILE NAV */}
-      <div className="md:hidden fixed bottom-6 left-6 right-6 bg-slate-900 text-white rounded-[2rem] p-2 flex justify-around items-center z-50 shadow-2xl backdrop-blur-md bg-opacity-95 border border-white/10">
+      {/* MOBILE BOTTOM NAV */}
+      <div className="lg:hidden fixed bottom-6 left-6 right-6 bg-slate-900 text-white rounded-[2rem] p-2 flex justify-around items-center z-50 shadow-2xl backdrop-blur-md bg-opacity-95 border border-white/10">
         <MobileItem
           icon={<Zap size={20} />}
           active={activeTab === "bid"}
           onClick={() => setActiveTab("bid")}
+        />
+        {/* MOBILE CHAT ITEM */}
+        <MobileItem
+          icon={<MessageSquare size={20} />}
+          active={activeTab === "messages"}
+          onClick={() => setActiveTab("messages")}
         />
         <MobileItem
           icon={<Wallet size={20} />}
@@ -141,7 +165,11 @@ export const CourierSidebar: React.FC<Props> = ({
 const NavItem = ({ icon, label, active, onClick }: any) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center gap-3 px-5 py-3.5 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest ${active ? "bg-teal-600 text-white shadow-lg shadow-teal-600/20" : "text-slate-400 hover:bg-slate-800 hover:text-white"}`}
+    className={`w-full flex items-center gap-3 px-5 py-3.5 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest ${
+      active
+        ? "bg-teal-600 text-white shadow-lg shadow-teal-600/20"
+        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+    }`}
   >
     <div className={active ? "text-white" : "text-slate-500"}>{icon}</div>
     <span className="flex-1 text-left">{label}</span>
@@ -151,7 +179,9 @@ const NavItem = ({ icon, label, active, onClick }: any) => (
 const MobileItem = ({ icon, active, onClick }: any) => (
   <button
     onClick={onClick}
-    className={`p-4 rounded-full transition-all ${active ? "bg-teal-600 text-white shadow-xl scale-110" : "text-slate-400"}`}
+    className={`p-4 rounded-full transition-all ${
+      active ? "bg-teal-600 text-white shadow-xl scale-110" : "text-slate-400"
+    }`}
   >
     {icon}
   </button>
