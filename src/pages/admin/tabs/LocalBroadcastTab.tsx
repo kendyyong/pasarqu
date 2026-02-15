@@ -8,6 +8,9 @@ import {
   AlertCircle,
   Loader2,
   Smartphone,
+  Sparkles,
+  RefreshCw,
+  Zap,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useToast } from "../../../contexts/ToastContext";
@@ -27,7 +30,52 @@ export const LocalBroadcastTab: React.FC<Props> = ({
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [history, setHistory] = useState<any[]>([]); // Bisa dihubungkan ke tabel notifications
+
+  // AI States
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+
+  // --- FITUR AI COPYWRITER ---
+  const generateWithAI = async () => {
+    if (!aiPrompt) return showToast("Masukkan topik promo dulu, Gan!", "info");
+
+    setIsGenerating(true);
+    try {
+      // Simulasi AI Engine (Dapat dihubungkan ke OpenAI/Gemini API)
+      await new Promise((res) => setTimeout(res, 2000));
+
+      const promptsMap: { [key: string]: { t: string; m: string } } = {
+        diskon: {
+          t: "🔥 DISKON SERBU PASAR!",
+          m: `Halo warga ${marketName}! Khusus hari ini ada harga miring untuk sayur dan daging segar. Stok terbatas, yuk checkout sekarang sebelum kehabisan!`,
+        },
+        hujan: {
+          t: "🌧️ MAGER KELUAR KARENA HUJAN?",
+          m: `Tenang! Kurir Pasarqu siap antar belanjaan dapurmu sampai depan pintu. Tetap nyaman di rumah, biar kami yang belanja ke pasar.`,
+        },
+        pagi: {
+          t: "🌅 SEMANGAT PAGI, BUNDA!",
+          m: `Bahan masakan baru saja tiba di pasar! Masih segar-segar banget. Pesan sekarang, langsung kami kirim buat menu makan siang spesial keluarga.`,
+        },
+      };
+
+      // Logika pemilihan prompt (fallback ke default jika tidak ada keyword)
+      const key =
+        Object.keys(promptsMap).find((k) =>
+          aiPrompt.toLowerCase().includes(k),
+        ) || "pagi";
+      const result = promptsMap[key];
+
+      setTitle(result.t);
+      setMessage(result.m);
+      showToast("AI berhasil membuatkan pesan untukmu!", "success");
+      setAiPrompt("");
+    } catch (err) {
+      showToast("AI sedang lelah, coba ketik manual ya.", "error");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const handleBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,8 +84,6 @@ export const LocalBroadcastTab: React.FC<Props> = ({
 
     setIsSending(true);
     try {
-      // LOGIKA: Menyimpan notifikasi ke tabel notifications untuk semua user di market_id ini
-      // Dalam sistem pro, ini biasanya memicu push notification (Firebase/OneSignal)
       const { error } = await supabase.from("notifications").insert([
         {
           market_id: marketId,
@@ -64,116 +110,157 @@ export const LocalBroadcastTab: React.FC<Props> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 text-left">
-      <div className="flex items-center justify-between">
+    <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 text-left pb-20">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter">
-            Broadcast Wilayah
+          <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tighter italic flex items-center gap-2">
+            <Megaphone className="text-teal-500" /> Broadcast{" "}
+            <span className="text-teal-500">Center</span>
           </h3>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-            Kirim pesan ke seluruh pembeli di {marketName}
+            Teknologi Siaran Wilayah {marketName}
           </p>
         </div>
-        <div className="bg-teal-50 px-4 py-2 rounded-2xl border border-teal-100 flex items-center gap-2">
-          <Users size={16} className="text-teal-600" />
-          <span className="text-[10px] font-black text-teal-700 uppercase">
-            {customerCount} Penerima Aktif
+        <div className="bg-teal-600 px-6 py-3 rounded-2xl shadow-xl shadow-teal-500/20 flex items-center gap-3 border-b-4 border-teal-800">
+          <Users size={18} className="text-teal-200" />
+          <span className="text-xs font-black text-white uppercase tracking-widest">
+            {customerCount} Warga Terhubung
           </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* FORM INPUT */}
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* PANEL KIRI: AI ASSISTANT & FORM */}
+        <div className="lg:col-span-8 space-y-6">
+          {/* AI ASSISTANT BOX */}
+          <div className="bg-indigo-600 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl">
+            <div className="relative z-10">
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles size={20} className="text-indigo-300 animate-pulse" />
+                <h4 className="text-sm font-black uppercase tracking-widest">
+                  AI Copywriter Assistant
+                </h4>
+              </div>
+              <div className="flex flex-col md:flex-row gap-3">
+                <input
+                  type="text"
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  placeholder="Contoh: buat promo sayur pagi hari..."
+                  className="flex-1 bg-white/10 border border-white/20 rounded-2xl px-6 py-4 text-xs font-bold placeholder:text-white/40 outline-none focus:bg-white/20 transition-all"
+                />
+                <button
+                  onClick={generateWithAI}
+                  disabled={isGenerating}
+                  className="bg-white text-indigo-600 px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:bg-indigo-50 active:scale-95 transition-all shadow-lg"
+                >
+                  {isGenerating ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    <Zap size={16} />
+                  )}
+                  Bantu Buatkan
+                </button>
+              </div>
+              <p className="text-[8px] font-bold text-indigo-200 uppercase mt-4 italic tracking-widest opacity-60">
+                Tips: Masukkan kata kunci seperti 'hujan', 'diskon', atau 'stok
+                baru'
+              </p>
+            </div>
+            <Sparkles
+              className="absolute right-[-20px] top-[-20px] text-white/5"
+              size={180}
+            />
+          </div>
+
+          {/* FORM INPUT */}
           <form
             onSubmit={handleBroadcast}
-            className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6"
+            className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm space-y-6"
           >
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">
-                Judul Pesan
+              <label className="text-[10px] font-black text-slate-400 uppercase ml-4 tracking-widest">
+                Judul Notifikasi
               </label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Contoh: Promo Spesial Hari Jumat!"
-                className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 font-bold text-slate-700 focus:ring-2 focus:ring-teal-500 outline-none transition-all"
+                placeholder="Masukkan judul yang menarik..."
+                className="w-full bg-slate-50 border-2 border-transparent rounded-[1.5rem] px-8 py-5 font-black text-slate-700 focus:border-teal-500 focus:bg-white outline-none transition-all italic text-lg"
               />
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase ml-2 tracking-widest">
-                Isi Pengumuman
+              <label className="text-[10px] font-black text-slate-400 uppercase ml-4 tracking-widest">
+                Isi Pesan Siaran
               </label>
               <textarea
-                rows={5}
+                rows={6}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Tuliskan detail promo atau informasi pasar di sini..."
-                className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 font-bold text-slate-700 focus:ring-2 focus:ring-teal-500 outline-none transition-all resize-none"
+                placeholder="Tuliskan detail pengumuman Anda..."
+                className="w-full bg-slate-50 border-2 border-transparent rounded-[2rem] px-8 py-6 font-bold text-slate-700 focus:border-teal-500 focus:bg-white outline-none transition-all resize-none leading-relaxed"
               />
             </div>
 
             <button
-              disabled={isSending}
-              className="w-full py-5 bg-teal-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-teal-600/20 hover:bg-teal-700 active:scale-95 transition-all flex items-center justify-center gap-3"
+              disabled={isSending || isGenerating}
+              className="w-full py-6 bg-slate-900 text-white rounded-[2.5rem] font-black uppercase text-sm tracking-[0.3em] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-4 disabled:opacity-50"
             >
               {isSending ? (
                 <Loader2 className="animate-spin" />
               ) : (
                 <>
-                  <Send size={18} /> Kirim Sekarang
+                  <Send size={20} /> PUBLIKASIKAN KE WARGA
                 </>
               )}
             </button>
           </form>
         </div>
 
-        {/* PREVIEW HANDPHONE */}
-        <div className="hidden lg:block space-y-4">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">
-            Preview di HP Pembeli
-          </p>
-          <div className="bg-slate-900 w-full aspect-[9/16] rounded-[3rem] border-[6px] border-slate-800 p-4 relative overflow-hidden shadow-2xl">
-            <div className="w-20 h-5 bg-slate-800 mx-auto rounded-b-2xl mb-8"></div>
+        {/* PANEL KANAN: PREVIEW HP */}
+        <div className="lg:col-span-4 space-y-6">
+          <div className="sticky top-24">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-4">
+              Live Preview
+            </p>
+            <div className="bg-slate-900 w-full aspect-[9/18] rounded-[3.5rem] border-[8px] border-slate-800 p-6 relative overflow-hidden shadow-2xl ring-4 ring-slate-100">
+              {/* Notch */}
+              <div className="w-28 h-6 bg-slate-800 mx-auto rounded-b-3xl mb-10"></div>
 
-            {/* Mock Notification */}
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20 animate-bounce">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-5 h-5 bg-teal-500 rounded-md flex items-center justify-center text-[8px] font-black text-white">
-                  P
+              {/* Mock Notification Card */}
+              <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-5 border border-white/20 animate-in slide-in-from-top-10 duration-1000">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-6 h-6 bg-teal-500 rounded-lg flex items-center justify-center text-[10px] font-black text-white shadow-lg shadow-teal-500/40">
+                    P
+                  </div>
+                  <span className="text-[9px] font-black text-white/80 uppercase tracking-tighter">
+                    Pasarqu • {marketName}
+                  </span>
                 </div>
-                <span className="text-[8px] font-black text-white uppercase tracking-tighter">
-                  Pasarqu • {marketName}
-                </span>
+                <h5 className="text-xs font-black text-white mb-1 truncate leading-none uppercase italic">
+                  {title || "Judul Muncul Di Sini"}
+                </h5>
+                <p className="text-[10px] text-slate-300 line-clamp-3 leading-relaxed font-medium">
+                  {message ||
+                    "Isi pesan yang Anda tulis akan muncul di layar kunci handphone pembeli..."}
+                </p>
               </div>
-              <p className="text-[10px] font-black text-white truncate">
-                {title || "Judul Pesan..."}
-              </p>
-              <p className="text-[9px] text-slate-300 line-clamp-2 mt-1">
-                {message || "Isi pesan akan muncul di sini..."}
-              </p>
+
+              {/* Home Indicator */}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-24 h-1.5 bg-white/20 rounded-full"></div>
             </div>
 
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-10 h-10 bg-white/5 rounded-full border border-white/10 flex items-center justify-center">
-              <div className="w-8 h-8 rounded-full border border-white/20"></div>
+            <div className="mt-8 p-6 bg-amber-50 rounded-[2rem] border border-amber-100 flex gap-4 items-center shadow-sm">
+              <AlertCircle className="text-amber-500 shrink-0" size={24} />
+              <p className="text-[9px] font-bold text-amber-700 uppercase leading-relaxed tracking-wide">
+                Pesan akan terkirim secara{" "}
+                <span className="underline">Real-Time</span>. Pastikan informasi
+                sudah benar sebelum menekan tombol kirim.
+              </p>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div className="p-6 bg-blue-50 rounded-[2rem] border border-blue-100 flex items-start gap-4">
-        <AlertCircle className="text-blue-500 shrink-0 mt-1" />
-        <div>
-          <h4 className="text-xs font-black text-blue-800 uppercase tracking-widest mb-1">
-            Tips Penjualan
-          </h4>
-          <p className="text-[11px] text-blue-600 font-medium leading-relaxed">
-            Gunakan fitur ini secara bijak. Broadcast yang berisi promo harga
-            murah di pagi hari terbukti meningkatkan transaksi hingga 40% di
-            wilayah tertentu.
-          </p>
         </div>
       </div>
     </div>

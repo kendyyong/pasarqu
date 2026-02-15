@@ -14,6 +14,9 @@ import {
   Bell,
   Navigation,
   ShieldCheck,
+  Plus,
+  X,
+  ArrowDownLeft,
 } from "lucide-react";
 
 // KOMPONEN MODULAR
@@ -21,8 +24,12 @@ import { CourierSidebar } from "./components/CourierSidebar";
 import { CourierBidArea } from "./components/CourierBidArea";
 import { CourierProfile } from "./components/CourierProfile";
 import { CourierActiveOrder } from "./components/CourierActiveOrder";
-import { CourierMessages } from "./components/CourierMessages"; // Komponen Pusat Chat
+import { CourierMessages } from "./components/CourierMessages";
 import { LocationPickerModal } from "../merchant/components/LocationPickerModal";
+
+// IMPORT KOMPONEN TOP UP & WITHDRAWAL
+import { KurirTopUp } from "./components/KurirTopUp";
+import { WithdrawalModal } from "../../components/Finance/WithdrawalModal";
 
 export const CourierDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -35,16 +42,21 @@ export const CourierDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [activeOrder, setActiveOrder] = useState<any>(null);
   const [showLocationModal, setShowLocationModal] = useState(false);
+
+  // STATE UNTUK MODAL KEUANGAN
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [showWDModal, setShowWDModal] = useState(false);
+
   const [currentCoords, setCurrentCoords] = useState<{
     lat: number;
     lng: number;
   } | null>(null);
 
-  // 1. Fungsi Utama Ambil Data
+  const MIN_WITHDRAWAL_COURIER = 20000;
+
   const fetchInitialData = async () => {
     if (!user) return;
     try {
-      // Ambil Profil Kurir
       const { data: profile } = await supabase
         .from("profiles")
         .select("*, markets(name)")
@@ -58,7 +70,6 @@ export const CourierDashboard: React.FC = () => {
           setCurrentCoords({ lat: profile.latitude, lng: profile.longitude });
       }
 
-      // Ambil order aktif yang sedang berjalan
       const { data: order } = await supabase
         .from("orders")
         .select(
@@ -80,7 +91,6 @@ export const CourierDashboard: React.FC = () => {
     }
   };
 
-  // 2. Real-time Subscription
   useEffect(() => {
     fetchInitialData();
     if (!user) return;
@@ -148,18 +158,17 @@ export const CourierDashboard: React.FC = () => {
       </div>
     );
 
-  // VIEW: BELUM VERIFIKASI
   if (courierData && !courierData.is_verified) {
     return (
-      <div className="min-h-screen bg-[#F3F4F6] flex items-center justify-center p-6 text-left">
-        <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95 text-center">
+      <div className="min-h-screen bg-[#F3F4F6] flex items-center justify-center p-6 text-left text-center">
+        <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
           <div className="w-20 h-20 bg-teal-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
             <ShieldCheck size={40} className="text-teal-600 animate-pulse" />
           </div>
-          <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tighter text-center">
+          <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">
             Verifikasi Akun
           </h1>
-          <p className="text-xs text-slate-500 font-bold uppercase mt-4 leading-relaxed tracking-tight text-center">
+          <p className="text-xs text-slate-500 font-bold uppercase mt-4 leading-relaxed tracking-tight">
             Identitas Anda sedang divalidasi oleh Admin Wilayah{" "}
             {courierData.markets?.name || "Pasar"}.
           </p>
@@ -183,7 +192,7 @@ export const CourierDashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex font-sans text-left overflow-hidden">
+    <div className="min-h-screen bg-[#f8fafc] flex font-sans text-left overflow-hidden relative">
       <CourierSidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -208,7 +217,6 @@ export const CourierDashboard: React.FC = () => {
               </span>
             </span>
           </div>
-
           <div className="flex items-center gap-4">
             <div className="flex flex-col items-end hidden md:block">
               <p className="text-[10px] font-black text-slate-800 uppercase leading-none">
@@ -225,7 +233,6 @@ export const CourierDashboard: React.FC = () => {
         </header>
 
         <main className="p-6 md:p-10 max-w-5xl mx-auto w-full">
-          {/* TAB: RADAR / BID AREA */}
           {activeTab === "bid" && (
             <div className="space-y-6">
               <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">
@@ -249,10 +256,7 @@ export const CourierDashboard: React.FC = () => {
             </div>
           )}
 
-          {/* TAB: PUSAT CHAT (MODUL BARU) */}
           {activeTab === "messages" && <CourierMessages />}
-
-          {/* TAB: PROFILE */}
           {activeTab === "profile" && (
             <CourierProfile courierData={courierData} />
           )}
@@ -266,26 +270,59 @@ export const CourierDashboard: React.FC = () => {
               <div className="bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden shadow-2xl shadow-slate-900/30">
                 <div className="relative z-10 text-left">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60 mb-2">
-                    Total Saldo
+                    Gaji Bersih Tersedia
                   </p>
-                  <h2 className="text-5xl font-black tracking-tighter mb-10">
+                  <h2 className="text-5xl font-black tracking-tighter mb-10 italic leading-none">
                     Rp{" "}
                     {Number(courierData?.wallet_balance || 0).toLocaleString(
                       "id-ID",
                     )}
                   </h2>
-                  <button className="py-4 px-8 bg-teal-500 hover:bg-teal-400 text-slate-900 rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] transition-all">
-                    Tarik Dana
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowTopUpModal(true)}
+                      className="py-4 px-8 bg-white/10 hover:bg-white/20 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center gap-2"
+                    >
+                      <Plus size={16} /> Top Up (Deposit)
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (
+                          courierData?.wallet_balance < MIN_WITHDRAWAL_COURIER
+                        ) {
+                          showToast(
+                            `Minimal tarik gaji Rp ${MIN_WITHDRAWAL_COURIER.toLocaleString()}`,
+                            "info",
+                          );
+                          return;
+                        }
+                        setShowWDModal(true);
+                      }}
+                      className={`py-4 px-8 rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center gap-2 shadow-lg ${
+                        courierData?.wallet_balance >= MIN_WITHDRAWAL_COURIER
+                          ? "bg-teal-500 hover:bg-teal-400 text-slate-900 shadow-teal-500/20"
+                          : "bg-slate-800 text-slate-500 cursor-not-allowed"
+                      }`}
+                    >
+                      <ArrowDownLeft size={16} /> Tarik Dana (WD)
+                    </button>
+                  </div>
                 </div>
                 <div className="absolute right-[-40px] bottom-[-40px] text-white/[0.03] w-80 h-80 rotate-[-15deg]">
                   <Wallet size={320} />
                 </div>
               </div>
+              {courierData?.wallet_balance < MIN_WITHDRAWAL_COURIER && (
+                <p className="text-xs font-bold text-slate-400 uppercase italic flex items-center gap-2 px-6">
+                  <AlertCircle size={14} className="text-orange-500" />{" "}
+                  Kumpulkan saldo minimal Rp{" "}
+                  {MIN_WITHDRAWAL_COURIER.toLocaleString()} untuk mencairkan ke
+                  bank.
+                </p>
+              )}
             </div>
           )}
 
-          {/* TAB: HISTORY */}
           {activeTab === "history" && (
             <div className="py-24 text-center flex flex-col items-center bg-white rounded-[3rem] border border-slate-100">
               <History size={40} className="text-slate-200 mb-4" />
@@ -297,6 +334,42 @@ export const CourierDashboard: React.FC = () => {
         </main>
       </div>
 
+      {/* MODAL TOP UP KURIR */}
+      {showTopUpModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+          <div
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in"
+            onClick={() => setShowTopUpModal(false)}
+          />
+          <div className="relative w-full max-w-md animate-in zoom-in-95">
+            <button
+              onClick={() => setShowTopUpModal(false)}
+              className="absolute -top-14 right-0 p-3 text-white/70 hover:text-white"
+            >
+              <X size={32} />
+            </button>
+            <KurirTopUp
+              courierId={user?.id || ""}
+              theme={{
+                card: "bg-white",
+                text: "text-slate-900",
+                border: "border-slate-100",
+                subText: "text-slate-400",
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ✅ MODAL TARIK DANA (WITHDRAWAL) */}
+      <WithdrawalModal
+        isOpen={showWDModal}
+        onClose={() => setShowWDModal(false)}
+        profile={courierData}
+        role="COURIER"
+        onSuccess={fetchInitialData}
+      />
+
       {showLocationModal && (
         <LocationPickerModal
           merchantProfile={courierData}
@@ -307,3 +380,28 @@ export const CourierDashboard: React.FC = () => {
     </div>
   );
 };
+
+// Helper component untuk icon peringatan
+const AlertCircle = ({
+  size,
+  className,
+}: {
+  size: number;
+  className?: string;
+}) => (
+  <svg
+    className={className}
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="3"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
+  </svg>
+);

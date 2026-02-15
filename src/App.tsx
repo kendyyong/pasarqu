@@ -45,23 +45,13 @@ import { CheckoutPaymentPage } from "./pages/checkout/CheckoutPaymentPage";
 
 // --- DASHBOARDS ---
 import { LocalAdminDashboard } from "./pages/admin/LocalAdminDashboard";
-import { AdminProductVerification } from "./pages/admin/AdminProductVerification";
 import { SuperAdminDashboard } from "./pages/admin/SuperAdminDashboard";
 import { MerchantDashboard } from "./pages/merchant/MerchantDashboard";
 import { CourierDashboard } from "./pages/courier/CourierDashboard";
 import { CustomerDashboard } from "./pages/customer/CustomerDashboard";
 
-// --- PROMO ---
-import { MerchantPromoPage } from "./pages/promo/MerchantPromoPage";
-import { CourierPromoPage } from "./pages/promo/CourierPromoPage";
-import { AdminPromoPage } from "./pages/promo/AdminPromoPage";
-
-// --- ADMIN FEATURES ---
-import { ManageAds } from "./pages/admin/super-features/ManageAds";
-import { ManageCategories } from "./pages/admin/super-features/ManageCategories";
-
-// ✅ FIX IMPORT BARIS 62 (PASTIKAN TANPA KURUNG KURAWAL)
-import RegionalFinance from "./pages/admin/finance/RegionalFinance";
+// --- SUPER FEATURES (NEW) ---
+import { ShippingConfig } from "./pages/admin/super-features/ShippingConfig";
 
 // --- LOGIN KHUSUS ---
 import {
@@ -77,7 +67,7 @@ const RoleBasedRedirect = () => {
 
   if (loading)
     return (
-      <div className="h-screen flex items-center justify-center bg-white">
+      <div className="h-screen flex items-center justify-center bg-white font-sans">
         <Loader2 className="animate-spin text-teal-600" size={40} />
       </div>
     );
@@ -103,7 +93,6 @@ const MarketplaceApp = () => {
   const marketContext = useMarket();
   const navigate = useNavigate();
 
-  // Tambahkan Optional Chaining (?.) agar tidak crash jika context belum siap
   const cart = marketContext?.cart || [];
   const updateQty = marketContext?.updateQty || (() => {});
   const removeFromCart = marketContext?.removeFromCart || (() => {});
@@ -205,8 +194,8 @@ const MainContent = () => {
     "/login",
     "/register",
     "/portal",
-    "/promo",
     "/super-admin",
+    "/admin", // Bypass untuk rute admin
     "/waiting-approval",
     "/track-order",
   ];
@@ -234,7 +223,9 @@ const MainContent = () => {
       <Route
         path="/track-order/:orderId"
         element={
-          <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN", "COURIER"]}>
+          <ProtectedRoute
+            allowedRoles={["CUSTOMER", "SUPER_ADMIN", "COURIER", "MERCHANT"]}
+          >
             <OrderTrackingPage />
           </ProtectedRoute>
         }
@@ -276,7 +267,7 @@ const MainContent = () => {
         }
       />
 
-      {/* SUPER ADMIN */}
+      {/* ✅ SEKSI MASTER ADMIN */}
       <Route
         path="/super-admin"
         element={
@@ -289,7 +280,26 @@ const MainContent = () => {
         path="/super-admin/finance"
         element={
           <ProtectedRoute allowedRoles={["SUPER_ADMIN"]}>
-            <RegionalFinance />
+            <SuperAdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* 🚚 SUPER FEATURE: LOGISTICS ENGINE */}
+      <Route
+        path="/admin/shipping-config"
+        element={
+          <ProtectedRoute allowedRoles={["SUPER_ADMIN"]}>
+            {/* Menggunakan default theme light */}
+            <ShippingConfig
+              theme={{
+                bg: "bg-white",
+                text: "text-slate-900",
+                subText: "text-slate-400",
+                border: "border-slate-100",
+                card: "bg-white",
+              }}
+            />
           </ProtectedRoute>
         }
       />

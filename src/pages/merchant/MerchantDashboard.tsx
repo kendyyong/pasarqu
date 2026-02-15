@@ -10,11 +10,12 @@ import { MerchantSidebar } from "./components/MerchantSidebar";
 import { MerchantOverview } from "./components/MerchantOverview";
 import { MerchantProducts } from "./components/MerchantProducts";
 import { MerchantOrders } from "./components/MerchantOrders";
-import { MerchantWallet } from "./components/MerchantWallet";
-import { MerchantMessages } from "./components/MerchantMessages"; // PERBAIKAN: Import komponen chat
+// ✅ SEKARANG MENGGUNAKAN KOMPONEN FINANCE TERBARU
+import { MerchantFinanceDashboard } from "./components/MerchantFinanceDashboard";
+import { MerchantMessages } from "./components/MerchantMessages";
 import { LocationPickerModal } from "./components/LocationPickerModal";
 
-// PERBAIKAN: Tambahkan "messages" dan "finance" (untuk kecocokan sidebar) ke dalam tipe Tab
+// Definisi tipe Tab
 type TabType =
   | "overview"
   | "products"
@@ -56,7 +57,7 @@ export const MerchantDashboard: React.FC = () => {
         .or(`user_id.eq.${user.id},id.eq.${user.id}`)
         .maybeSingle();
 
-      // --- LOGIKA "BODO AMAT" (BYPASS) ---
+      // LOGIKA BYPASS UNTUK MERCHANT APPROVED
       if (profile?.status === "APPROVED") {
         const effectiveMerchant = merchantData || {
           id: user.id,
@@ -68,6 +69,7 @@ export const MerchantDashboard: React.FC = () => {
           is_shop_open: true,
         };
 
+        // AMBIL PRODUK DAN ORDER SECARA PARALEL
         const [resProducts, resOrders] = await Promise.all([
           supabase
             .from("products")
@@ -76,7 +78,7 @@ export const MerchantDashboard: React.FC = () => {
           supabase
             .from("orders")
             .select("*")
-            .eq("merchant_id", effectiveMerchant.id)
+            .eq("market_id", effectiveMerchant.market_id) // Sesuaikan jika merchant hanya melihat order dari pasarnya
             .order("created_at", { ascending: false }),
         ]);
 
@@ -109,11 +111,11 @@ export const MerchantDashboard: React.FC = () => {
       </div>
     );
 
-  // TAMPILAN JIKA BELUM APPROVED SAMA SEKALI
+  // TAMPILAN JIKA BELUM APPROVED
   if (!merchantProfile) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 text-center font-sans">
-        <div className="bg-white p-12 rounded-[3rem] shadow-2xl max-w-sm border border-slate-100">
+        <div className="bg-white p-12 rounded-[3rem] shadow-2xl max-w-sm border border-slate-100 text-center">
           <AlertTriangle size={50} className="text-orange-500 mx-auto mb-6" />
           <h2 className="text-2xl font-black text-slate-800 uppercase mb-4 tracking-tighter leading-none">
             Menunggu Verifikasi
@@ -153,16 +155,24 @@ export const MerchantDashboard: React.FC = () => {
         productCount={products.length}
       />
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto no-scrollbar">
-        {/* HEADER SEDERHANA */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto no-scrollbar pb-20">
+        {/* HEADER */}
         <header className="h-20 bg-white border-b px-10 flex items-center justify-between sticky top-0 z-40">
           <h1 className="text-xl font-black uppercase tracking-tighter text-slate-800">
             {merchantProfile.shop_name}
           </h1>
           <div className="flex items-center gap-3">
-            <span className="text-[10px] font-black bg-green-50 text-green-600 px-4 py-2 rounded-xl border border-green-100">
-              STATUS: ONLINE
-            </span>
+            <div className="flex flex-col items-end mr-4">
+              <p className="text-[10px] font-black text-slate-400 uppercase leading-none">
+                Status Toko
+              </p>
+              <p className="text-[11px] font-black text-green-600 uppercase mt-1">
+                ONLINE
+              </p>
+            </div>
+            <div className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black shadow-lg">
+              {merchantProfile.shop_name.charAt(0)}
+            </div>
           </div>
         </header>
 
@@ -173,19 +183,20 @@ export const MerchantDashboard: React.FC = () => {
               stats={{ orders: orders.length, products: products.length }}
             />
           )}
+
           {activeTab === "products" && (
             <MerchantProducts merchantProfile={merchantProfile} />
           )}
+
           {activeTab === "orders" && (
             <MerchantOrders merchantProfile={merchantProfile} />
           )}
 
-          {/* PERBAIKAN: Render Tab Pesanan/Messages */}
           {activeTab === "messages" && <MerchantMessages />}
 
-          {/* Menyesuaikan activeTab finance ke wallet component */}
+          {/* ✅ SINKRONISASI TAB WALLET/FINANCE KE KOMPONEN TERBARU */}
           {(activeTab === "wallet" || activeTab === "finance") && (
-            <MerchantWallet merchantProfile={merchantProfile} />
+            <MerchantFinanceDashboard />
           )}
         </main>
       </div>

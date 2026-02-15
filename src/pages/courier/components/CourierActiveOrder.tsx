@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useToast } from "../../../contexts/ToastContext";
-import { useRegionalFinance } from "../../../hooks/useRegionalFinance";
 import {
   MapPin,
   Phone,
@@ -14,7 +13,7 @@ import {
   Package,
   X,
   Lock,
-  Store, // Ikon Toko
+  Store,
 } from "lucide-react";
 
 import { OrderChatRoom } from "../../../components/Chat/OrderChatRoom";
@@ -29,7 +28,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
   const [loading, setLoading] = useState(false);
   const [showChat, setShowChat] = useState(false);
 
-  // State baru untuk menentukan siapa yang diajak chat
+  // State untuk menentukan siapa yang diajak chat
   const [chatTarget, setChatTarget] = useState<{
     type: "courier_customer" | "courier_merchant";
     name: string;
@@ -38,7 +37,65 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
   const isCompleted =
     order?.status === "COMPLETED" || order?.shipping_status === "COMPLETED";
 
-  // Fungsi buka chat yang lebih cerdas
+  // --- LOGIKA UTAMA: UPDATE STATUS & MONEY SPLIT ---
+  const handleStatusUpdate = async () => {
+    setLoading(true);
+    try {
+      let nextStatus = "";
+      let isFinalStep = false;
+
+      // Alur Status: COURIER_ASSIGNED -> PICKING_UP -> DELIVERING -> COMPLETED
+      if (
+        order.shipping_status === "COURIER_ASSIGNED" ||
+        order.shipping_status === "PAID"
+      ) {
+        nextStatus = "PICKING_UP";
+      } else if (order.shipping_status === "PICKING_UP") {
+        nextStatus = "DELIVERING";
+      } else if (order.shipping_status === "DELIVERING") {
+        nextStatus = "COMPLETED";
+        isFinalStep = true;
+      }
+
+      if (isFinalStep) {
+        // 1. JALANKAN PROSEDUR SELESAI & CAIRKAN DANA (RPC)
+        // Memastikan saldo bertambah dan status berubah dalam satu transaksi
+        const { error: rpcError } = await supabase.rpc(
+          "complete_order_and_pay_courier",
+          {
+            p_order_id: order.id,
+            p_courier_id: order.courier_id,
+            p_amount: order.courier_earning_total || 0,
+          },
+        );
+
+        if (rpcError) throw rpcError;
+        showToast("Pesanan Selesai! Saldo masuk ke dompet Anda.", "success");
+      } else {
+        // 2. UPDATE STATUS PERJALANAN BIASA
+        const { error } = await supabase
+          .from("orders")
+          .update({ shipping_status: nextStatus })
+          .eq("id", order.id);
+
+        if (error) throw error;
+        showToast(
+          `Status diperbarui: ${nextStatus.replace("_", " ")}`,
+          "success",
+        );
+      }
+
+      // Beritahu dashboard utama untuk refresh data
+      onFinished();
+    } catch (err: any) {
+      console.error("Update Error:", err);
+      showToast(err.message || "Gagal update status", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fungsi buka chat
   const openChat = (
     type: "courier_customer" | "courier_merchant",
     name: string,
@@ -49,14 +106,14 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
 
   return (
     <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 pb-20 text-left">
-      {/* MODAL CHAT - Disesuaikan dengan chatTarget */}
+      {/* MODAL CHAT */}
       {showChat && (
         <div className="fixed inset-0 z-[999] bg-slate-900/90 backdrop-blur-md flex items-end sm:items-center justify-center">
           <div className="w-full max-w-lg flex flex-col h-[85vh] bg-white rounded-t-[3rem] overflow-hidden shadow-2xl">
             <div className="p-4 flex justify-between items-center bg-slate-50 border-b border-slate-100">
               <div className="flex items-center gap-2 ml-4">
                 <div
-                  className={`w-2 h-2 rounded-full ${chatTarget.type === "courier_merchant" ? "bg-orange-500" : "bg-teal-500"}`}
+                  className={`w-2 h-2 rounded-full ${chatTarget.type === "courier_merchant" ? "bg-orange-500" : "bg-teal-500"} animate-pulse`}
                 ></div>
                 <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
                   {chatTarget.type.replace("_", " ")}
@@ -66,14 +123,14 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                 onClick={() => setShowChat(false)}
                 className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md text-slate-900 font-bold"
               >
-                X
+                ✕
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
               <OrderChatRoom
                 orderId={order.id}
                 receiverName={chatTarget.name}
-                chatType={chatTarget.type} // Pastikan komponen ChatRoom menerima prop ini
+                chatType={chatTarget.type}
               />
             </div>
           </div>
@@ -86,11 +143,17 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
       >
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-teal-500 rounded-2xl flex items-center justify-center shadow-lg">
-            <Truck size={24} />
+            {loading ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <Truck size={24} />
+            )}
           </div>
           <div>
             <h2 className="text-lg font-black uppercase italic leading-none">
-              {isCompleted ? "SELESAI" : order.shipping_status}
+              {isCompleted
+                ? "SELESAI"
+                : order.shipping_status?.replace(/_/g, " ")}
             </h2>
             <p className="text-[10px] font-bold opacity-50 mt-1 uppercase">
               ID: {order.id.slice(0, 8)}
@@ -98,7 +161,6 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           </div>
         </div>
 
-        {/* TOMBOL QUICK CHAT (Default ke Pelanggan) */}
         <button
           onClick={() =>
             openChat(
@@ -114,7 +176,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
 
       {/* BODY AREA */}
       <div className="bg-white p-8 rounded-[3rem] border-2 border-slate-100 shadow-xl space-y-6">
-        {/* BAGIAN TOKO (MERCHANT) */}
+        {/* BAGIAN TOKO */}
         <div className="flex gap-4 p-4 bg-orange-50/50 rounded-[2rem] border border-orange-100">
           <div className="w-10 h-10 bg-orange-500 text-white rounded-xl flex items-center justify-center shrink-0 shadow-sm">
             <Store size={20} />
@@ -178,12 +240,21 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
         </div>
       </div>
 
+      {/* TOMBOL UPDATE STATUS */}
       {!isCompleted && (
         <button
-          onClick={onFinished}
-          className="w-full py-6 bg-teal-600 text-white rounded-[2rem] font-black uppercase text-sm tracking-widest shadow-2xl active:scale-95 flex items-center justify-center gap-3 border-b-4 border-teal-800"
+          onClick={handleStatusUpdate}
+          disabled={loading}
+          className="w-full py-6 bg-teal-600 text-white rounded-[2rem] font-black uppercase text-sm tracking-widest shadow-2xl active:scale-95 flex items-center justify-center gap-3 border-b-4 border-teal-800 disabled:opacity-50"
         >
-          <CheckCircle size={24} /> UPDATE STATUS TUGAS
+          {loading ? (
+            <Loader2 className="animate-spin" size={24} />
+          ) : (
+            <CheckCircle size={24} />
+          )}
+          {order.shipping_status === "DELIVERING"
+            ? "KONFIRMASI TIBA & TERIMA GAJI"
+            : "UPDATE STATUS TUGAS"}
         </button>
       )}
     </div>

@@ -23,6 +23,8 @@ import {
   BarChart3,
   Radio,
   ClipboardCheck,
+  TrendingUp,
+  RefreshCw,
 } from "lucide-react";
 
 import { LocalSidebar } from "./components/LocalSidebar";
@@ -36,7 +38,7 @@ import { LocalRatingsTab } from "./tabs/LocalRatingsTab";
 import { LocalResolutionTab } from "./tabs/LocalResolutionTab";
 import { LocalBroadcastTab } from "./tabs/LocalBroadcastTab";
 import { LocalOrdersTab } from "./tabs/LocalOrdersTab";
-import { LocalCourierMonitor } from "./tabs/LocalCourierMonitor"; // <--- SUDAH SINKRON
+import { LocalCourierMonitor } from "./tabs/LocalCourierMonitor";
 
 type TabType =
   | "overview"
@@ -80,7 +82,10 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
   const [myCouriers, setMyCouriers] = useState<any[]>([]);
   const [myCustomers, setMyCustomers] = useState<any[]>([]);
   const [pendingProducts, setPendingProducts] = useState<any[]>([]);
-  const [liveOrdersCount, setLiveOrdersCount] = useState(0);
+  const [marketFinance, setMarketFinance] = useState({
+    revenue: 0,
+    serviceFees: 0,
+  });
 
   const [detailModal, setDetailModal] = useState<{
     isOpen: boolean;
@@ -94,7 +99,9 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
     }
     try {
       const targetMarketId = profile.managed_market_id;
-      const [marketRes, usersRes, prodRes, orderCountRes] = await Promise.all([
+      const today = new Date().toISOString().split("T")[0];
+
+      const [marketRes, usersRes, prodRes, financeRes] = await Promise.all([
         supabase.from("markets").select("*").eq("id", targetMarketId).single(),
         supabase
           .from("profiles")
@@ -107,9 +114,9 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
           .eq("status", "PENDING"),
         supabase
           .from("orders")
-          .select("id", { count: "exact", head: true })
+          .select("total_price, service_fee")
           .eq("market_id", targetMarketId)
-          .eq("status", "PENDING"),
+          .gte("created_at", today),
       ]);
 
       if (marketRes.data) setMyMarket(marketRes.data);
@@ -119,7 +126,19 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
         setMyCustomers(usersRes.data.filter((p) => p.role === "CUSTOMER"));
       }
       setPendingProducts(prodRes.data || []);
-      setLiveOrdersCount(orderCountRes.count || 0);
+
+      // Hitung Keuangan Wilayah Hari Ini
+      if (financeRes.data) {
+        const total = financeRes.data.reduce(
+          (acc, curr) => acc + Number(curr.total_price),
+          0,
+        );
+        const fees = financeRes.data.reduce(
+          (acc, curr) => acc + Number(curr.service_fee),
+          0,
+        );
+        setMarketFinance({ revenue: total, serviceFees: fees });
+      }
     } catch (error: any) {
       console.error("Fetch Error:", error);
     } finally {
@@ -132,9 +151,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
     setIsAlarmActive(true);
     if (alarmAudio.current) {
       alarmAudio.current.loop = true;
-      alarmAudio.current
-        .play()
-        .catch(() => console.log("Izin audio browser diperlukan."));
+      alarmAudio.current.play().catch(() => {});
     }
   };
 
@@ -151,6 +168,8 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
       "https://actions.google.com/sounds/v1/alarms/beep_short.ogg",
     );
     if (!profile?.managed_market_id) return;
+
+    // REAL-TIME: Ada Produk Baru
     const productSub = supabase
       .channel("engine_wilayah")
       .on(
@@ -164,10 +183,11 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
         () => {
           fetchData();
           triggerAlarm();
-          showToast("🚨 ADA PRODUK BARU MASUK!", "error");
+          showToast("🚨 ADA PRODUK BARU PERLU DIVALIDASI!", "error");
         },
       )
       .subscribe();
+
     return () => {
       supabase.removeChannel(productSub);
       stopAlarm();
@@ -187,19 +207,14 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
 
   return (
     <div
-      className={`min-h-screen flex font-sans text-left antialiased tracking-tight transition-all duration-500 overflow-hidden ${isAlarmActive ? "bg-red-50" : "bg-[#f8fafc]"}`}
+      className={`min-h-screen flex font-sans text-left antialiased transition-all duration-500 overflow-hidden ${isAlarmActive ? "bg-red-50" : "bg-[#f8fafc]"}`}
     >
-      <style>{`
-        body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
-        .glass-header { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(20px); }
-      `}</style>
-
       {isAlarmActive && (
         <div className="fixed inset-0 z-[999] bg-red-600/10 animate-pulse pointer-events-none border-[15px] border-red-500/30"></div>
       )}
 
       <LocalSidebar
-        marketName={myMarket?.name || "Wilayah"}
+        marketName={myMarket?.name || "Pasar Wilayah"}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         pendingMerchants={
@@ -214,20 +229,20 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
 
       <div className="flex-1 ml-72 flex flex-col min-h-screen relative">
         <header
-          className={`h-20 flex items-center justify-between px-10 sticky top-0 z-40 glass-header border-b border-slate-100 transition-colors ${isAlarmActive ? "bg-red-600 text-white border-none" : ""}`}
+          className={`h-20 flex items-center justify-between px-10 sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-100 transition-colors ${isAlarmActive ? "bg-red-600 text-white border-none" : ""}`}
         >
           <div className="flex items-center gap-3">
             <div
               className={`w-2.5 h-2.5 rounded-full ${isAlarmActive ? "bg-white animate-ping" : "bg-teal-500 animate-pulse"}`}
             ></div>
             <span className="text-[10px] font-black uppercase tracking-[0.3em]">
-              Sistem:{" "}
+              Mode Area:{" "}
               <span
                 className={
                   isAlarmActive ? "text-white underline" : "text-teal-600"
                 }
               >
-                {isAlarmActive ? "ALARM AKTIF" : "NORMAL"}
+                {isAlarmActive ? "DARURAT / ALARM" : "NORMAL"}
               </span>
             </span>
           </div>
@@ -235,39 +250,46 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
           <div className="flex items-center gap-5">
             <button
               onClick={() => setIsMuted(!isMuted)}
-              className={`p-2.5 rounded-xl ${isAlarmActive ? "bg-white/20" : "bg-slate-100 text-slate-500"}`}
+              className={`p-2.5 rounded-xl transition-all active:scale-90 ${isAlarmActive ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}
             >
               {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
             </button>
+            <button
+              onClick={fetchData}
+              className="p-2.5 bg-slate-100 text-slate-500 rounded-xl hover:rotate-180 transition-all duration-500"
+            >
+              <RefreshCw size={18} />
+            </button>
             <div
-              className={`px-4 py-1.5 rounded-2xl border font-black text-[10px] uppercase ${isAlarmActive ? "bg-white/10 border-white/20" : "bg-slate-50 border-slate-100"}`}
+              className={`px-4 py-1.5 rounded-2xl border font-black text-[10px] uppercase ${isAlarmActive ? "bg-white/10 border-white/20 text-white" : "bg-slate-50 border-slate-100 text-slate-800"}`}
             >
               {profile?.full_name}
             </div>
           </div>
         </header>
 
-        <main className="p-10 max-w-7xl mx-auto w-full">
+        <main className="p-10 max-w-7xl mx-auto w-full pb-32">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
             <div className="text-left text-slate-800">
               <h1 className="text-4xl font-black uppercase tracking-tighter leading-none mb-3 italic">
                 {activeTab === "overview"
-                  ? "Ringkasan"
+                  ? "Dashboard Wilayah"
                   : activeTab.replace("_", " ")}
               </h1>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-                Sinkronisasi Data Wilayah
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none flex items-center gap-2">
+                <MapIcon size={12} className="text-teal-500" /> Pengawasan Area{" "}
+                {myMarket?.name}
               </p>
             </div>
 
-            <div className="flex bg-white p-2 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40 overflow-x-auto no-scrollbar">
+            <div className="flex bg-white p-2 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40">
               <button
-                onClick={() => navigate("/admin-wilayah/verifikasi-produk")}
+                onClick={() => setActiveTab("products")}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-[1.5rem] transition-all group shrink-0 text-orange-500 hover:bg-orange-50"
               >
                 <ClipboardCheck size={18} />
                 <span className="text-[10px] font-black uppercase tracking-widest">
-                  Verifikasi
+                  Produk
                 </span>
                 {pendingProducts.length > 0 && (
                   <span className="bg-orange-500 text-white text-[8px] px-1.5 py-0.5 rounded-full animate-bounce">
@@ -297,15 +319,15 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 onClick={() => setActiveTab("broadcast")}
               />
               <QuickActionBtn
-                active={activeTab === "ratings"}
-                icon={<Star size={18} />}
-                label="Rating"
-                onClick={() => setActiveTab("ratings")}
+                active={activeTab === "finance"}
+                icon={<BarChart3 size={18} />}
+                label="Finance"
+                onClick={() => setActiveTab("finance")}
               />
               <QuickActionBtn
                 active={activeTab === "resolution"}
                 icon={<AlertCircle size={18} />}
-                label="Bantuan"
+                label="Help"
                 onClick={() => setActiveTab("resolution")}
                 color="hover:text-red-500"
               />
@@ -314,15 +336,49 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
 
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             {activeTab === "overview" && (
-              <LocalOverviewTab
-                stats={{
-                  pendingProducts: pendingProducts.length,
-                  merchants: myMerchants.length,
-                  couriers: myCouriers.length,
-                  adminShare: 0,
-                }}
-              />
+              <div className="space-y-8">
+                {/* FINANCE SUMMARY AREA */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white flex justify-between items-center relative overflow-hidden shadow-2xl">
+                    <div className="relative z-10">
+                      <p className="text-[9px] font-black text-white/40 uppercase tracking-[0.2em] mb-1">
+                        Omzet Pasar (Hari Ini)
+                      </p>
+                      <h2 className="text-3xl font-black italic">
+                        Rp {marketFinance.revenue.toLocaleString()}
+                      </h2>
+                    </div>
+                    <TrendingUp
+                      className="text-white/5 absolute right-[-10px] bottom-[-10px]"
+                      size={120}
+                    />
+                  </div>
+                  <div className="bg-teal-600 rounded-[2.5rem] p-8 text-white flex justify-between items-center shadow-xl">
+                    <div>
+                      <p className="text-[9px] font-black text-white/60 uppercase tracking-[0.2em] mb-1">
+                        Total Biaya Layanan
+                      </p>
+                      <h2 className="text-3xl font-black italic">
+                        Rp {marketFinance.serviceFees.toLocaleString()}
+                      </h2>
+                    </div>
+                    <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md">
+                      <BarChart3 size={28} />
+                    </div>
+                  </div>
+                </div>
+
+                <LocalOverviewTab
+                  stats={{
+                    pendingProducts: pendingProducts.length,
+                    merchants: myMerchants.length,
+                    couriers: myCouriers.length,
+                    adminShare: marketFinance.serviceFees,
+                  }}
+                />
+              </div>
             )}
+
             {activeTab === "products" && (
               <LocalProductsTab
                 products={pendingProducts}
@@ -332,9 +388,11 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 }}
               />
             )}
+
             {activeTab === "orders" && (
               <LocalOrdersTab marketId={profile?.managed_market_id || ""} />
             )}
+
             {activeTab === "radar" && (
               <LocalRadarTab
                 isLoaded={isLoaded}
@@ -344,6 +402,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 customers={myCustomers}
               />
             )}
+
             {activeTab === "finance" && (
               <LocalFinanceTab merchants={myMerchants} couriers={myCouriers} />
             )}
@@ -358,7 +417,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 customerCount={myCustomers.length}
               />
             )}
-
             {activeTab === "couriers" && <LocalCourierMonitor />}
 
             {(activeTab === "merchants" || activeTab === "customers") && (
@@ -371,22 +429,25 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
             )}
 
             {isAlarmActive && (
-              <div className="mt-10 p-16 bg-white rounded-[3rem] border border-red-100 shadow-2xl text-center">
+              <div className="mt-10 p-16 bg-white rounded-[3rem] border border-red-100 shadow-2xl text-center animate-in zoom-in-95">
                 <AlertTriangle
                   size={60}
                   className="mx-auto text-red-500 mb-6 animate-bounce"
                 />
                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">
-                  Ada Produk Menunggu!
+                  Ada Produk Menunggu Verifikasi!
                 </h3>
+                <p className="text-xs font-bold text-slate-400 uppercase mt-2">
+                  Segera periksa kelayakan produk mitra Anda.
+                </p>
                 <button
                   onClick={() => {
                     stopAlarm();
-                    navigate("/admin-wilayah/verifikasi-produk");
+                    setActiveTab("products");
                   }}
-                  className="mt-8 px-10 py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-red-700 transition-all"
+                  className="mt-8 px-10 py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-red-700 transition-all active:scale-95"
                 >
-                  Buka Halaman Verifikasi
+                  Buka Menu Verifikasi Produk
                 </button>
               </div>
             )}
@@ -416,7 +477,7 @@ const QuickActionBtn = ({
     onClick={onClick}
     className={`flex items-center gap-2 px-5 py-2.5 rounded-[1.5rem] transition-all group shrink-0 ${active ? "bg-slate-900 text-white shadow-lg shadow-slate-900/20" : `text-slate-400 ${color}`}`}
   >
-    {icon}{" "}
+    {icon}
     <span
       className={`text-[10px] font-black uppercase tracking-widest ${active ? "block" : "hidden group-hover:block"}`}
     >

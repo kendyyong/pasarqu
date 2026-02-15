@@ -6,14 +6,13 @@ import {
   XCircle,
   Clock,
   Search,
-  Filter,
   Loader2,
-  Banknote,
   TrendingUp,
   ArrowUpRight,
+  ChevronRight,
+  Banknote,
 } from "lucide-react";
 import { useToast } from "../../../contexts/ToastContext";
-import { createAuditLog } from "../../../lib/auditHelper";
 
 const formatRupiah = (amount: number) => {
   return new Intl.NumberFormat("id-ID", {
@@ -23,7 +22,7 @@ const formatRupiah = (amount: number) => {
   }).format(amount);
 };
 
-// --- DATA MOCK UNTUK GRAFIK (Nanti bisa dihubungkan ke DB) ---
+// Data Mock Statistik
 const chartData = [
   { day: "Sen", value: 45 },
   { day: "Sel", value: 52 },
@@ -36,58 +35,75 @@ const chartData = [
 
 export const FinanceManager = ({ finance, activeTab }: any) => {
   const { showToast } = useToast();
-  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [payouts, setPayouts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<any>(null);
-  const [processNote, setProcessNote] = useState("");
   const [processing, setProcessing] = useState(false);
 
-  const fetchWithdrawals = async () => {
+  const fetchPayouts = async () => {
     setLoading(true);
     try {
+      // SINKRONISASI: Menggunakan tabel 'payout_requests' sesuai draf DB kita
       let query = supabase
-        .from("withdrawals")
-        .select(`*, profiles!withdrawals_profile_id_fkey (name, email, role)`)
+        .from("payout_requests")
+        .select(
+          `
+          *,
+          wallets (
+            owner_id,
+            owner_type
+          )
+        `,
+        )
         .order("created_at", { ascending: false });
 
       if (activeTab === "pending") {
-        query = query.eq("status", "PENDING");
+        query = query.eq("status", "REQUESTED");
       }
 
       const { data, error } = await query;
       if (error) throw error;
-      setWithdrawals(data || []);
+      setPayouts(data || []);
     } catch (err: any) {
       console.error(err);
+      showToast("Gagal memuat data penarikan", "error");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchWithdrawals();
+    fetchPayouts();
   }, [activeTab]);
 
   const handleProcess = async (status: "APPROVED" | "REJECTED") => {
     if (!selectedItem) return;
     setProcessing(true);
     try {
+      // 1. Update status permintaan penarikan
       const { error } = await supabase
-        .from("withdrawals")
-        .update({ status, admin_note: processNote, updated_at: new Date() })
+        .from("payout_requests")
+        .update({
+          status,
+          processed_at: new Date(),
+          admin_note:
+            status === "APPROVED"
+              ? "Dana telah ditransfer"
+              : "Ditolak oleh admin",
+        })
         .eq("id", selectedItem.id);
 
       if (error) throw error;
 
-      await createAuditLog(
-        status === "APPROVED" ? "APPROVE_WITHDRAWAL" : "REJECT_WITHDRAWAL",
-        "FINANCE",
-        `${status === "APPROVED" ? "Menyetujui" : "Menolak"} penarikan ${formatRupiah(selectedItem.amount)}`,
-      );
+      // 2. Jika APPROVED, potong saldo di wallet (Opsional jika belum dipotong saat request)
+      // Logic ini biasanya sudah dilakukan saat user klik 'Tarik' di aplikasi mereka.
 
-      showToast("Berhasil diproses", "success");
+      showToast(
+        `Penarikan berhasil ${status === "APPROVED" ? "disetujui" : "ditolak"}`,
+        "success",
+      );
       setSelectedItem(null);
-      fetchWithdrawals();
+      fetchPayouts();
     } catch (err: any) {
       showToast(err.message, "error");
     } finally {
@@ -97,35 +113,35 @@ export const FinanceManager = ({ finance, activeTab }: any) => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 text-left">
-      {/* 1. TOP STATS (Sama untuk kedua tab) */}
+      {/* 1. TOP STATS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-2xl flex items-center justify-center">
-            <Wallet size={24} />
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-5">
+          <div className="w-14 h-14 bg-teal-50 text-teal-600 rounded-[1.2rem] flex items-center justify-center shadow-inner">
+            <Wallet size={28} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">
               Total Revenue
             </p>
-            <h3 className="text-xl font-black text-slate-800">
+            <h3 className="text-2xl font-black text-slate-800 tracking-tighter">
               {formatRupiah(finance?.revenue || 0)}
             </h3>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-orange-50 text-orange-500 rounded-2xl flex items-center justify-center">
-            <Clock size={24} />
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-5">
+          <div className="w-14 h-14 bg-orange-50 text-orange-500 rounded-[1.2rem] flex items-center justify-center shadow-inner">
+            <Clock size={28} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">
               Menunggu Cair
             </p>
-            <h3 className="text-xl font-black text-slate-800">
+            <h3 className="text-2xl font-black text-slate-800 tracking-tighter">
               {formatRupiah(
-                withdrawals.reduce(
+                payouts.reduce(
                   (sum, item) =>
-                    item.status === "PENDING" ? sum + item.amount : sum,
+                    item.status === "REQUESTED" ? sum + item.amount : sum,
                   0,
                 ),
               )}
@@ -133,56 +149,55 @@ export const FinanceManager = ({ finance, activeTab }: any) => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
-            <TrendingUp size={24} />
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-5">
+          <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-[1.2rem] flex items-center justify-center shadow-inner">
+            <TrendingUp size={28} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">
               Growth
             </p>
-            <h3 className="text-xl font-black text-blue-600">+12.5%</h3>
+            <h3 className="text-2xl font-black text-blue-600 tracking-tighter">
+              +12.5%
+            </h3>
           </div>
         </div>
       </div>
 
       {/* 2. KONDISIONAL KONTEN */}
       {activeTab === "finance" ? (
-        // --- TAMPILAN FINANCE SUMMARY (CHART) ---
-        <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
-          <div className="flex items-center justify-between mb-10">
+        <div className="bg-white rounded-[3rem] p-10 border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between mb-12">
             <div>
-              <h3 className="font-black text-slate-800 uppercase tracking-tighter text-lg">
+              <h3 className="font-black text-slate-800 uppercase tracking-tighter text-xl">
                 Tren Pendapatan
               </h3>
-              <p className="text-xs text-slate-400 font-bold">
-                Statistik 7 hari terakhir
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                Statistik Performa 7 Hari Terakhir
               </p>
             </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-teal-50 text-teal-600 rounded-xl text-[10px] font-black uppercase">
-              <ArrowUpRight size={14} /> Berjalan Baik
+            <div className="flex items-center gap-2 px-5 py-2.5 bg-teal-50 text-teal-600 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-teal-100">
+              <ArrowUpRight size={14} /> Performa Stabil
             </div>
           </div>
 
           {/* SIMPLE SVG BAR CHART */}
-          <div className="flex items-end justify-between h-64 gap-2 md:gap-4 px-2">
+          <div className="flex items-end justify-between h-72 gap-3 md:gap-6 px-4">
             {chartData.map((data, i) => (
               <div
                 key={i}
-                className="flex-1 flex flex-col items-center gap-4 group"
+                className="flex-1 flex flex-col items-center gap-4 group cursor-pointer"
               >
                 <div className="relative w-full flex items-end justify-center h-full">
-                  {/* Tooltip */}
-                  <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all bg-slate-800 text-white text-[9px] font-black px-2 py-1 rounded-md pointer-events-none mb-2">
+                  <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-all bg-slate-900 text-white text-[10px] font-black px-3 py-1.5 rounded-xl pointer-events-none mb-2 shadow-xl">
                     {data.value}%
                   </div>
-                  {/* Bar */}
                   <div
-                    className="w-full max-w-[40px] bg-slate-100 group-hover:bg-teal-500 rounded-t-xl transition-all duration-500 ease-out"
+                    className="w-full max-w-[45px] bg-slate-100 group-hover:bg-teal-500 rounded-t-[1rem] transition-all duration-500 ease-out shadow-inner"
                     style={{ height: `${data.value}%` }}
                   ></div>
                 </div>
-                <span className="text-[10px] font-black text-slate-400 uppercase">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                   {data.day}
                 </span>
               </div>
@@ -190,120 +205,131 @@ export const FinanceManager = ({ finance, activeTab }: any) => {
           </div>
         </div>
       ) : (
-        // --- TAMPILAN LAPORAN PROFIT (TABLE) ---
-        <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-8 border-b border-slate-50 flex justify-between items-center">
-            <h3 className="font-black text-slate-800 uppercase tracking-tight">
-              Riwayat Transaksi
+        <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden">
+          <div className="p-10 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
+            <h3 className="font-black text-slate-800 uppercase tracking-tighter text-lg">
+              Daftar Penarikan Dana
             </h3>
-            <div className="flex gap-2">
-              <div className="relative">
-                <Search
-                  size={14}
-                  className="absolute left-3 top-2.5 text-slate-300"
-                />
-                <input
-                  type="text"
-                  placeholder="Cari..."
-                  className="pl-9 pr-4 py-2 bg-slate-50 rounded-xl text-[10px] font-bold outline-none ring-teal-500 focus:ring-2 w-40"
-                />
-              </div>
+            <div className="bg-white border border-slate-200 rounded-2xl px-5 py-3 flex items-center gap-3">
+              <Search size={16} className="text-slate-400" />
+              <input
+                type="text"
+                placeholder="Cari Mitra..."
+                className="bg-transparent outline-none text-xs font-bold w-40"
+              />
             </div>
           </div>
 
-          {loading ? (
-            <div className="py-20 text-center">
-              <Loader2 className="animate-spin mx-auto text-teal-600" />
-              <p className="text-[10px] font-black text-slate-400 uppercase mt-2">
-                Sinkronisasi...
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b border-slate-100">
-                    <th className="px-8 py-4">Mitra</th>
-                    <th className="px-8 py-4">Nominal</th>
-                    <th className="px-8 py-4">Status</th>
-                    <th className="px-8 py-4 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="text-[11px] font-bold text-slate-700 divide-y divide-slate-50">
-                  {withdrawals.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/50">
-                      <td className="px-8 py-5">
-                        <p className="text-slate-800">
-                          {item.profiles?.name || "User"}
-                        </p>
-                        <p className="text-[9px] text-teal-600 uppercase">
-                          {item.profiles?.role}
-                        </p>
-                      </td>
-                      <td className="px-8 py-5 font-black">
-                        {formatRupiah(item.amount)}
-                      </td>
-                      <td className="px-8 py-5">
-                        <span
-                          className={`px-2 py-1 rounded text-[9px] font-black uppercase ${item.status === "PENDING" ? "bg-orange-50 text-orange-600" : "bg-green-50 text-green-600"}`}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] border-b border-slate-100">
+                  <th className="px-10 py-6">Mitra / Dompet</th>
+                  <th className="px-10 py-6">Rekening Tujuan</th>
+                  <th className="px-10 py-6">Nominal</th>
+                  <th className="px-10 py-6">Status</th>
+                  <th className="px-10 py-6 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="text-xs font-bold text-slate-700 divide-y divide-slate-50">
+                {payouts.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="hover:bg-slate-50/50 transition-colors"
+                  >
+                    <td className="px-10 py-6">
+                      <p className="text-slate-900 font-black uppercase tracking-tight">
+                        ID: {item.wallets?.owner_id?.slice(0, 8)}
+                      </p>
+                      <span className="text-[9px] bg-teal-50 text-teal-600 px-2 py-0.5 rounded-md uppercase font-black">
+                        {item.wallets?.owner_type}
+                      </span>
+                    </td>
+                    <td className="px-10 py-6">
+                      <p className="text-slate-800">{item.bank_name}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {item.account_number}
+                      </p>
+                    </td>
+                    <td className="px-10 py-6 font-black text-slate-900">
+                      {formatRupiah(item.amount)}
+                    </td>
+                    <td className="px-10 py-6">
+                      <span
+                        className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${item.status === "REQUESTED" ? "bg-orange-50 text-orange-600" : "bg-green-50 text-green-600"}`}
+                      >
+                        {item.status === "REQUESTED" ? "PENDING" : item.status}
+                      </span>
+                    </td>
+                    <td className="px-10 py-6 text-right">
+                      {item.status === "REQUESTED" && (
+                        <button
+                          onClick={() => setSelectedItem(item)}
+                          className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:bg-teal-600 transition-all shadow-lg shadow-slate-200"
                         >
-                          {item.status}
-                        </span>
-                      </td>
-                      <td className="px-8 py-5 text-right">
-                        {item.status === "PENDING" && (
-                          <button
-                            onClick={() => setSelectedItem(item)}
-                            className="bg-slate-900 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase hover:bg-teal-600"
-                          >
-                            Proses
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                          Proses
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {/* MODAL PROSES (Tetap Sama) */}
+      {/* MODAL PROSES */}
       {selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-md p-10 shadow-2xl animate-in zoom-in-95">
-            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter mb-6">
-              Konfirmasi Cair
+        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-6">
+          <div className="bg-white rounded-[3.5rem] w-full max-w-md p-12 shadow-2xl animate-in zoom-in-95 duration-300">
+            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-8 italic">
+              Konfirmasi <span className="text-teal-600">Pencairan</span>
             </h3>
-            <div className="bg-slate-50 p-6 rounded-2xl mb-8 space-y-2 border border-slate-100">
-              <p className="text-[10px] font-black text-slate-400 uppercase">
-                Tujuan Transfer
-              </p>
-              <p className="text-sm font-black text-slate-800 uppercase">
-                {selectedItem.bank_name} - {selectedItem.account_number}
-              </p>
-              <p className="text-lg font-black text-teal-600 pt-2 border-t border-slate-200 mt-2">
-                {formatRupiah(selectedItem.amount)}
-              </p>
+
+            <div className="bg-slate-50 p-8 rounded-[2.5rem] mb-10 space-y-4 border border-slate-100 shadow-inner text-center">
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                  Tujuan Transfer
+                </p>
+                <p className="text-sm font-black text-slate-800 uppercase">
+                  {selectedItem.bank_name}
+                </p>
+                <p className="text-lg font-black text-slate-900 tracking-widest mt-1">
+                  {selectedItem.account_number}
+                </p>
+              </div>
+              <div className="pt-4 border-t border-slate-200">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                  Nominal Bersih
+                </p>
+                <p className="text-3xl font-black text-teal-600 tracking-tighter">
+                  {formatRupiah(selectedItem.amount)}
+                </p>
+              </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <button
                 onClick={() => handleProcess("REJECTED")}
-                className="py-4 font-black text-[10px] uppercase text-red-500 hover:bg-red-50 rounded-2xl"
+                className="py-5 font-black text-[10px] uppercase tracking-widest text-red-500 hover:bg-red-50 rounded-[1.8rem] transition-all"
               >
                 Tolak
               </button>
               <button
                 onClick={() => handleProcess("APPROVED")}
-                className="py-4 bg-teal-600 text-white font-black text-[10px] uppercase rounded-2xl shadow-lg shadow-teal-600/20"
+                className="py-5 bg-teal-600 text-white font-black text-[10px] uppercase tracking-widest rounded-[1.8rem] shadow-xl shadow-teal-200 active:scale-95 transition-all"
               >
-                Setujui
+                {processing ? (
+                  <Loader2 className="animate-spin mx-auto" />
+                ) : (
+                  "Setujui & Cairkan"
+                )}
               </button>
             </div>
             <button
               onClick={() => setSelectedItem(null)}
-              className="w-full mt-6 text-[9px] font-black text-slate-300 uppercase hover:text-slate-500"
+              className="w-full mt-8 text-[9px] font-black text-slate-300 uppercase tracking-[0.3em] hover:text-slate-900 transition-colors"
             >
               Batal
             </button>

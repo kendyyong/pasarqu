@@ -26,7 +26,6 @@ export const TopUpRequestManager = () => {
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      // PERBAIKAN RELASI: Menggunakan alias spesifik agar Supabase tidak bingung
       const { data, error } = await supabase
         .from("topup_requests")
         .select(
@@ -60,19 +59,18 @@ export const TopUpRequestManager = () => {
         const currentBalance = Number(req.courier.wallet_balance || 0);
         const newBalance = currentBalance + amountNum;
 
-        // 1. Update Saldo Kurir & Aktifkan status jika melewati threshold
+        // 1. Update Saldo Kurir & Aktifkan status
         const { error: upError } = await supabase
           .from("profiles")
           .update({
             wallet_balance: newBalance,
-            // Status otomatis ACTIVE jika saldo bertambah
             status: "ACTIVE",
           })
           .eq("id", req.courier_id);
 
         if (upError) throw upError;
 
-        // 2. Catat di Riwayat Mutasi (wallet_logs)
+        // 2. Catat di Riwayat Mutasi Dompet Kurir
         await supabase.from("wallet_logs").insert([
           {
             profile_id: req.courier_id,
@@ -83,6 +81,20 @@ export const TopUpRequestManager = () => {
           },
         ]);
 
+        // ========================================================
+        // TAMBAHAN: CATAT KE GENERAL LEDGER (UANG MASUK PLATFORM)
+        // ========================================================
+        await supabase.from("transactions").insert([
+          {
+            type: "KURIR_TOPUP",
+            debit: amountNum, // Uang masuk ke Kas
+            credit: 0,
+            account_code: "1001-KAS",
+            description: `Top Up Saldo Kurir: ${req.courier.name} (via Admin ${req.admin?.name || "Sistem"})`,
+          },
+        ]);
+        // ========================================================
+
         await createAuditLog(
           "APPROVE_TOPUP",
           "FINANCE",
@@ -90,7 +102,7 @@ export const TopUpRequestManager = () => {
         );
       }
 
-      // 3. Update Status Request (Berlaku untuk Approve maupun Reject)
+      // 3. Update Status Request
       const { error: statusError } = await supabase
         .from("topup_requests")
         .update({
@@ -103,7 +115,7 @@ export const TopUpRequestManager = () => {
 
       showToast(
         action === "APPROVED"
-          ? "Saldo telah diaktifkan!"
+          ? "Saldo telah diaktifkan & Tercatat di Ledger!"
           : "Permintaan ditolak",
         "success",
       );
@@ -188,7 +200,6 @@ export const TopUpRequestManager = () => {
                   </div>
                 </div>
 
-                {/* INFO SALDO SAAT INI */}
                 <div className="bg-slate-50 px-6 py-4 rounded-2xl border border-slate-100 text-center lg:text-left">
                   <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">
                     Saldo Kurir Sekarang

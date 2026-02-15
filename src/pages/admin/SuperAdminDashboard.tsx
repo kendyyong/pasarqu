@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useJsApiLoader } from "@react-google-maps/api";
 import { useNavigate } from "react-router-dom";
-import { Bell, ArrowLeft, Loader2 } from "lucide-react";
+import { Bell, ArrowLeft, Loader2, Moon, Sun, Zap } from "lucide-react";
+
+// ✅ FIX: Jalur import diperbaiki
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -22,19 +24,55 @@ import { ActivityLogs } from "./super-features/ActivityLogs";
 import { ManageAds } from "./super-features/ManageAds";
 import { ManageCategories } from "./super-features/ManageCategories";
 import { DisputeCenter } from "./super-features/DisputeCenter";
-import { ManageQuickActions } from "./super-features/ManageQuickActions";
-import { CourierFinanceManager } from "./super-features/CourierFinanceManager";
+import { ManageQuickActions } from "./super-features/ManageQuickActions"; // Jika ada
+import { CourierFinanceManager } from "./super-features/CourierFinanceManager"; // Jika ada
 import { WithdrawalManager } from "./super-features/WithdrawalManager";
 import { TopUpRequestManager } from "./super-features/TopUpRequestManager";
 import { FinancialLedger } from "./super-features/FinancialLedger";
-import { RegionalFinanceReport } from "./finance/RegionalFinanceReport"; // <--- Import Laporan Mingguan
+import { RegionalFinanceReport } from "./finance/RegionalFinanceReport";
 import RegionalFinance from "./finance/RegionalFinance";
+import { FinanceDashboard } from "./super-features/FinanceDashboard";
+
+// ✅ NEW: Import Logistics Engine
+import { ShippingConfig } from "./super-features/ShippingConfig";
 
 const libraries: "places"[] = ["places"];
 
 export const SuperAdminDashboard: React.FC = () => {
   const { user, logout, profile } = useAuth();
   const navigate = useNavigate();
+
+  // --- LOGIC MODE GELAP / TERANG ---
+  const [isDark, setIsDark] = useState(() => {
+    return localStorage.getItem("admin-theme") === "dark";
+  });
+
+  const toggleTheme = () => {
+    const newTheme = !isDark;
+    setIsDark(newTheme);
+    localStorage.setItem("admin-theme", newTheme ? "dark" : "light");
+  };
+
+  // --- THEME OBJECT (DIKIRIM KE SEMUA SUB-KOMPONEN) ---
+  const currentTheme = isDark
+    ? {
+        bg: "bg-[#0b0f19]",
+        card: "bg-[#0f172a]",
+        border: "border-white/5",
+        text: "text-slate-200",
+        subText: "text-slate-500",
+        header: "bg-[#0f172a]/80",
+        sidebar: "bg-[#0f172a]",
+      }
+    : {
+        bg: "bg-slate-50",
+        card: "bg-white",
+        border: "border-slate-200",
+        text: "text-slate-800",
+        subText: "text-slate-400",
+        header: "bg-white/90",
+        sidebar: "bg-white",
+      };
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
@@ -44,13 +82,6 @@ export const SuperAdminDashboard: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [auditMarket, setAuditMarket] = useState<any>(null);
-
-  const shopeeTheme = {
-    sidebar: "bg-white",
-    accent: "text-teal-600",
-    text: "text-slate-800",
-    subText: "text-slate-400",
-  };
 
   const [markets, setMarkets] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
@@ -66,12 +97,10 @@ export const SuperAdminDashboard: React.FC = () => {
     try {
       const { data: mData } = await supabase.from("markets").select("*");
       setMarkets(mData || []);
-
       const { data: uData } = await supabase
         .from("profiles")
         .select("*, markets(name)");
       setAllUsers(uData || []);
-
       setCandidates(
         uData?.filter(
           (u: any) =>
@@ -79,45 +108,40 @@ export const SuperAdminDashboard: React.FC = () => {
             (u.role === "LOCAL_ADMIN" && !u.is_verified),
         ) || [],
       );
-
       const { data: fData } = await supabase.rpc("get_financial_summary");
       if (fData?.[0]) setFinance(fData[0]);
-
       const { count } = await supabase
         .from("complaints")
         .select("*", { count: "exact", head: true })
         .eq("status", "open");
       setComplaintsCount(count || 0);
     } catch (err) {
-      console.error("Gagal memuat data dashboard:", err);
+      console.error("Fetch error:", err);
     }
   };
 
   useEffect(() => {
-    if (user) {
-      fetchData();
-    }
+    if (user) fetchData();
   }, [user]);
-
-  const handleLogout = async () => {
-    await logout();
-    navigate("/");
-  };
 
   if (!isLoaded)
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50">
+      <div
+        className={`h-screen flex items-center justify-center ${currentTheme.bg}`}
+      >
         <Loader2 className="animate-spin text-teal-600" size={40} />
       </div>
     );
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5] font-sans flex text-left">
+    <div
+      className={`min-h-screen ${currentTheme.bg} ${currentTheme.text} font-sans flex text-left overflow-hidden transition-colors duration-500`}
+    >
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        onLogout={handleLogout}
-        theme={shopeeTheme}
+        onLogout={() => logout().then(() => navigate("/"))}
+        theme={currentTheme}
         setAuditMarket={setAuditMarket}
         counts={{
           users: allUsers.length,
@@ -126,152 +150,139 @@ export const SuperAdminDashboard: React.FC = () => {
         }}
       />
 
-      <div className="flex-1 ml-72 flex flex-col min-h-screen">
-        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-40">
-          <div>
-            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
-              Master Control /{" "}
-              <span className="text-teal-600">
+      <div className="flex-1 ml-72 flex flex-col h-screen overflow-hidden relative">
+        <header
+          className={`h-16 ${currentTheme.header} backdrop-blur-md border-b ${currentTheme.border} flex items-center justify-between px-8 sticky top-0 z-40 transition-all`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`p-2 ${isDark ? "bg-teal-500/10" : "bg-teal-50"} rounded-lg`}
+            >
+              <Zap size={16} className="text-teal-500" />
+            </div>
+            <h2
+              className={`text-[10px] font-black ${currentTheme.subText} uppercase tracking-[0.3em]`}
+            >
+              System OS /{" "}
+              <span className="text-teal-500">
                 {activeTab.replace("-", " ")}
               </span>
             </h2>
           </div>
 
-          <div className="flex items-center gap-6">
-            <button className="relative text-slate-400 hover:text-teal-600 transition-colors">
+          <div className="flex items-center gap-5">
+            <button
+              onClick={toggleTheme}
+              className={`flex items-center gap-2 p-2 px-3 rounded-2xl border ${currentTheme.border} ${currentTheme.card} shadow-sm transition-all hover:scale-105 active:scale-95 text-teal-500`}
+            >
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+              <span className="text-[9px] font-black uppercase tracking-widest">
+                {isDark ? "Light" : "Dark"}
+              </span>
+            </button>
+            <div className={`h-6 w-[1px] ${currentTheme.border}`}></div>
+            <button className="relative text-slate-400 hover:text-teal-500 transition-colors">
               <Bell size={20} />
               {complaintsCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full border-2 border-white animate-pulse"></span>
               )}
             </button>
-            <div className="flex items-center gap-3 pl-6 border-l border-slate-100">
-              <div className="text-right hidden md:block">
-                <p className="text-xs font-black text-slate-800 leading-none">
-                  {profile?.full_name || profile?.name || "ROOT ADMIN"}
+            <div className="flex items-center gap-3 pl-5 border-l border-white/5">
+              <div className="text-right hidden md:block text-nowrap">
+                <p
+                  className={`text-xs font-black tracking-tight leading-none ${isDark ? "text-white" : "text-slate-800"}`}
+                >
+                  {profile?.full_name || "MASTER ADMIN"}
                 </p>
-                <p className="text-[9px] text-teal-600 font-bold uppercase mt-1 tracking-widest">
+                <p className="text-[8px] text-teal-500 font-bold uppercase mt-1">
                   Super User
                 </p>
               </div>
-              <div className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black shadow-lg shadow-slate-900/20 uppercase">
-                {(profile?.full_name || profile?.name || "S").charAt(0)}
+              <div
+                className={`w-9 h-9 ${isDark ? "bg-slate-800" : "bg-slate-900"} text-white rounded-xl flex items-center justify-center font-black shadow-lg uppercase`}
+              >
+                {(profile?.full_name || "S").charAt(0)}
               </div>
             </div>
           </div>
         </header>
 
-        <main className="p-8">
+        <main className={`flex-1 p-8 overflow-y-auto no-scrollbar`}>
           {auditMarket ? (
             <div className="animate-in fade-in slide-in-from-bottom-2">
               <button
                 onClick={() => setAuditMarket(null)}
                 className="mb-6 flex items-center gap-2 text-slate-500 hover:text-teal-600 font-black text-[10px] uppercase tracking-widest transition-all"
               >
-                <ArrowLeft size={14} /> Kembali ke Peta
+                <ArrowLeft size={14} /> Back to Map
               </button>
               <MarketAuditFullView
                 market={auditMarket}
                 allUsers={allUsers}
-                theme={{ bg: "bg-white", text: "text-slate-900" }}
+                theme={currentTheme}
                 onViewUser={() => {}}
               />
             </div>
           ) : (
             <div className="animate-in fade-in duration-500">
-              {/* --- 1. MENU UTAMA --- */}
               {activeTab === "dashboard" && (
                 <DashboardOverview
                   isLoaded={isLoaded}
                   markets={markets}
-                  darkMode={false}
-                  theme={shopeeTheme}
+                  darkMode={isDark}
+                  theme={currentTheme}
                   setAuditMarket={setAuditMarket}
                 />
               )}
+              {activeTab === "finance-master" && (
+                <FinanceDashboard theme={currentTheme} />
+              )}
               {activeTab === "users" && (
-                <UserManager allUsers={allUsers} theme={shopeeTheme} />
+                <UserManager allUsers={allUsers} theme={currentTheme} />
               )}
               {activeTab === "markets" && (
                 <MarketManager
                   markets={markets}
-                  theme={shopeeTheme}
-                  darkMode={false}
+                  theme={currentTheme}
+                  darkMode={isDark}
                   isLoaded={isLoaded}
                   refreshData={fetchData}
                   setAuditMarket={setAuditMarket}
                 />
               )}
 
-              {/* --- 2. PENGATURAN BERANDA --- */}
+              {/* ✅ LOGISTICS ENGINE ADDED HERE */}
+              {activeTab === "shipping-config" && (
+                <ShippingConfig theme={currentTheme} />
+              )}
+
               {activeTab === "menus" && <MenuManager />}
-              {activeTab === "quick-actions" && <ManageQuickActions />}
               {activeTab === "manage-ads" && <ManageAds />}
               {activeTab === "categories" && <ManageCategories />}
-
-              {/* --- 3. VALIDASI & FINANSIAL --- */}
               {activeTab === "verification" && (
                 <VerificationCenter
                   candidates={candidates}
                   markets={markets}
-                  theme={shopeeTheme}
+                  theme={currentTheme}
                   refreshData={fetchData}
                 />
               )}
-
-              {/* FINANSIAL KURIR & TRANSAKSI */}
               {activeTab === "ledger" && <FinancialLedger />}
-              {activeTab === "courier-finance" && <CourierFinanceManager />}
               {activeTab === "withdrawals" && <WithdrawalManager />}
               {activeTab === "topup-requests" && <TopUpRequestManager />}
-
               {activeTab === "regional-finance" && <RegionalFinance />}
-
-              {/* --- PERBAIKAN: TAB LAPORAN MINGGUAN --- */}
               {activeTab === "finance-report" && <RegionalFinanceReport />}
-
               {activeTab === "finance" && (
                 <FinanceManager
                   finance={finance}
                   activeTab={activeTab}
-                  theme={shopeeTheme}
+                  theme={currentTheme}
                 />
               )}
-
               {activeTab === "disputes" && <DisputeCenter />}
-
-              {/* --- 4. SYSTEM CONTROL --- */}
               {activeTab === "settings" && <GlobalConfig />}
               {activeTab === "broadcast" && <NotificationManager />}
               {activeTab === "logs" && <ActivityLogs />}
-
-              {/* FALLBACK JIKA TAB TIDAK DITEMUKAN */}
-              {![
-                "dashboard",
-                "users",
-                "markets",
-                "menus",
-                "manage-ads",
-                "categories",
-                "verification",
-                "regional-finance",
-                "finance",
-                "finance-report",
-                "disputes",
-                "settings",
-                "broadcast",
-                "logs",
-                "quick-actions",
-                "courier-finance",
-                "withdrawals",
-                "topup-requests",
-                "ledger",
-              ].includes(activeTab) && (
-                <div className="p-20 text-center bg-white rounded-3xl border border-dashed border-slate-200">
-                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                    Konten Sedang Dimuat atau Tidak Ditemukan...
-                  </p>
-                </div>
-              )}
             </div>
           )}
         </main>
