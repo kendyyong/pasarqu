@@ -8,8 +8,8 @@ import {
   Flame,
   Star,
   Loader2,
-  Timer, // Icon baru untuk PO
-} from "lucide-react";
+  Timer,
+} from "lucide-react"; // ✅ SUDAH DIPERBAIKI (Bukan lucide-center)
 import { supabase } from "../lib/supabaseClient";
 import { useMarket } from "../contexts/MarketContext";
 import { useToast } from "../contexts/ToastContext";
@@ -36,6 +36,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   const navigate = useNavigate();
   const { selectedMarket, addToCart } = useMarket();
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   const [products, setProducts] = useState<any[]>([]);
   const [quickActions, setQuickActions] = useState<any[]>([]);
@@ -60,7 +61,6 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
-      // PERBAIKAN: Mengambil data dengan status APPROVED (Huruf besar)
       let query = supabase
         .from("products")
         .select("*, merchants:merchant_id(name)")
@@ -133,7 +133,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
         {/* 1. IKLAN SLIDE */}
         {!searchQuery && ads.length > 0 && (
           <div className="mt-0">
-            <div className="relative h-44 md:h-72 w-full overflow-hidden rounded-none md:rounded-xl group border-none">
+            <div className="relative h-44 md:h-72 w-full overflow-hidden rounded-none md:rounded-xl group border-none text-left">
               {ads.map((ad, index) => (
                 <div
                   key={ad.id}
@@ -167,7 +167,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                   className="flex flex-col items-center gap-2 group shrink-0"
                 >
                   <div
-                    className={`${action.bg_color || "bg-teal-500"} w-14 h-14 rounded-xl flex items-center justify-center text-white shadow-lg transition-transform`}
+                    className={`${action.bg_color || "bg-teal-500"} w-14 h-14 rounded-xl flex items-center justify-center text-white shadow-lg transition-transform hover:scale-110`}
                   >
                     {renderIcon(action.icon_name)}
                   </div>
@@ -184,7 +184,8 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
         <div className="mt-8 mb-8">
           <div className="flex items-center justify-between mb-4 px-5 md:px-1">
             <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
-              Katalog Produk
+              Katalog Produk{" "}
+              {selectedMarket?.name && `di ${selectedMarket.name}`}
             </h3>
           </div>
 
@@ -201,7 +202,6 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                   key={product.id}
                   className="flex flex-col h-full bg-white rounded-none md:rounded-xl md:border md:border-slate-100 md:shadow-sm overflow-hidden group transition-all"
                 >
-                  {/* KLIK GAMBAR KE DETAIL */}
                   <div
                     onClick={() => navigate(`/product/${product.id}`)}
                     className="aspect-square w-full overflow-hidden bg-slate-50 cursor-pointer relative"
@@ -215,7 +215,6 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                       alt={product.name}
                     />
 
-                    {/* BADGE PRE-ORDER (PO) */}
                     {product.is_po && (
                       <div className="absolute top-2 left-2 bg-orange-600 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg flex items-center gap-1 uppercase animate-pulse">
                         <Timer size={10} /> PO {product.po_days} HARI
@@ -235,11 +234,13 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                         Rp {product.price.toLocaleString()}
                       </span>
                     </div>
+
+                    {/* ✅ TAMU BOLEH TAMBAH BARANG SESUAI INSTRUKSI JURAGAN */}
                     <button
                       onClick={(e) => {
-                        e.stopPropagation(); // Mencegah pindah halaman saat klik tombol tambah
+                        e.stopPropagation();
                         addToCart(product);
-                        showToast("Masuk Keranjang", "success");
+                        showToast("Berhasil masuk keranjang", "success");
                       }}
                       className="w-full bg-teal-600 hover:bg-teal-700 text-white py-2.5 rounded-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
                     >
@@ -256,8 +257,8 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
         </div>
 
         {/* 4. PORTAL MITRA */}
-        <div className="mt-8 mb-10">
-          <div className="bg-slate-900 p-6 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden md:rounded-xl shadow-2xl">
+        <div className="mt-8 mb-10 px-4 md:px-0">
+          <div className="bg-slate-900 p-6 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden rounded-2xl shadow-2xl">
             <div className="relative z-10 flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
               <div className="bg-white/10 p-2 rounded-lg text-orange-400">
                 <Zap size={22} fill="currentColor" />
@@ -273,7 +274,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
             </div>
             <button
               onClick={() => navigate("/portal")}
-              className="relative z-10 px-8 py-3 bg-teal-500 text-white rounded-lg font-black text-[9px] uppercase tracking-widest shadow-lg"
+              className="relative z-10 px-8 py-3 bg-teal-500 text-white rounded-lg font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-teal-600 transition-all"
             >
               Buka Portal <ArrowRight size={12} className="inline ml-1" />
             </button>

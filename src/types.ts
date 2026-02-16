@@ -1,3 +1,5 @@
+// --- FULL SCRIPT src/types.ts ---
+
 export enum UserRole {
   SUPER_ADMIN = "SUPER_ADMIN",
   LOCAL_ADMIN = "LOCAL_ADMIN",
@@ -52,7 +54,7 @@ export interface ShippingRates {
 export interface Market {
   id: string;
   name: string;
-  brandName: string;
+  brandName: string; // ✅ Digunakan untuk Branding Area di Top Bar
   district: string;
   latitude: number;
   longitude: number;
@@ -66,7 +68,6 @@ export interface Market {
   image_url?: string;
 }
 
-// --- UPDATE PENTING DI SINI ---
 export interface Product {
   id: string;
   sellerId: string;
@@ -75,13 +76,10 @@ export interface Product {
   name: string;
   description: string;
   price: number;
-
-  // TAMBAHAN BARU (Agar tidak error di Home.tsx)
-  discount?: number; // Persen diskon
-  old_price?: number; // Harga coret
-  status?: string; // 'approved', 'pending'
-  is_active?: boolean; // Status aktif produk
-
+  discount?: number;
+  old_price?: number;
+  status?: string;
+  is_active?: boolean;
   stock: number;
   unit: string;
   category: string;
@@ -92,8 +90,6 @@ export interface Product {
   isPromoted: boolean;
   createdAt: string;
   merchant_id: string;
-
-  // Relasi ke Merchant (Untuk halaman Detail Produk)
   merchants?: {
     id: string;
     name: string;
@@ -105,9 +101,8 @@ export interface Product {
 
 export interface CartItem extends Product {
   quantity: number;
-  // Opsional: properti tambahan jika struktur cart berbeda
   variant_name?: string;
-  product?: Product; // Helper untuk kompatibilitas code lama
+  product?: Product;
 }
 
 export interface StoreProfile {
@@ -133,7 +128,6 @@ export interface PromoPackage {
   description: string;
 }
 
-// --- CHAT INTERFACES ---
 export interface ChatMessage {
   id: string;
   senderId: string;
@@ -154,7 +148,6 @@ export interface ChatThread {
   relatedOrderId?: string;
 }
 
-// --- ORDER & TRANSACTION TYPES ---
 export type PaymentMethod = "cod" | "transfer";
 export type DeliveryMethod = "courier" | "pickup";
 
@@ -165,7 +158,6 @@ export interface OrderItem {
   price_at_purchase: number;
   product?: Product;
   name?: string;
-  // Metadata tambahan untuk mempermudah tampilan UI tanpa fetch product ulang
   buyerName?: string;
 }
 
@@ -181,11 +173,9 @@ export interface Order {
   delivery_address: string;
   created_at: string;
   items?: OrderItem[];
-  // Field tambahan untuk kemudahan admin verifikasi
   proof_of_transfer?: string;
   pickupCode?: string;
   buyerName?: string;
 }
 
-// Alias Type Transaction agar kompatibel dengan Order
 export type Transaction = Order;

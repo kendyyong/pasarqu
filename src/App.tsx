@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -16,7 +16,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ChatProvider } from "./contexts/ChatContext";
 import { ToastProvider } from "./contexts/ToastContext";
 
-// LEVEL AKSES DB
+// ✅ Jalur import disesuaikan
 import { supabase } from "./lib/supabaseClient";
 
 // --- HOOKS ---
@@ -93,9 +93,11 @@ const MarketplaceApp = () => {
   const marketContext = useMarket();
   const navigate = useNavigate();
 
+  // Mengambil data cart dengan aman
   const cart = marketContext?.cart || [];
   const updateQty = marketContext?.updateQty || (() => {});
   const removeFromCart = marketContext?.removeFromCart || (() => {});
+  const selectedMarket = marketContext?.selectedMarket;
 
   const [activeTab, setActiveTab] = useState<
     "home" | "search" | "orders" | "account"
@@ -105,6 +107,10 @@ const MarketplaceApp = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [userName, setUserName] = useState<string>("Tamu");
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
+
+  const totalCartItems = useMemo(() => {
+    return cart.reduce((sum, item) => sum + (item.quantity || 0), 0);
+  }, [cart]);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -123,6 +129,9 @@ const MarketplaceApp = () => {
         } catch (e) {
           console.error("User fetch error", e);
         }
+      } else {
+        setUserName("Tamu");
+        setUserAvatar(null);
       }
     };
     fetchUserData();
@@ -135,29 +144,42 @@ const MarketplaceApp = () => {
         onTabChange={setActiveTab}
         onSearch={setSearchQuery}
         onCartClick={() => setIsCartOpen(true)}
-        cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
+        cartCount={totalCartItems}
       >
         <AppHeader
           userName={userName}
           userAvatar={userAvatar}
-          cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
+          cartCount={totalCartItems}
+          regionName={selectedMarket?.brandName || selectedMarket?.name}
           onCartClick={() => setIsCartOpen(true)}
           onSearch={setSearchQuery}
           onUserClick={() =>
             user ? navigate("/customer-dashboard") : navigate("/login")
           }
         />
-        <div className="w-full max-w-[1200px] mx-auto px-0 md:px-5 bg-white">
+
+        {/* ✅ SOLUSI FINAL "JARAK TINGGI":
+            1. Ubah pt-[70px] menjadi pt-0 (atau pt-16 jika MobileLayout tidak punya padding).
+            2. Saya set `pt-0 md:pt-[10px]` dulu. Jika nanti kontennya malah 'ketutup' header,
+               berarti MobileLayout Juragan polos, baru nanti kita tambah pt-nya pelan-pelan.
+            3. Hapus semua margin negatif (-mt) karena kita mulai dari 0.
+        */}
+        <div className="w-full max-w-[1200px] mx-auto bg-white pt-0 md:pt-4 pb-24">
           {!searchQuery && (
-            <>
+            <div className="flex flex-col m-0 p-0">
+              {/* Pastikan HeroOnboarding sudah bersih (mt-0 di file-nya) */}
               <HeroOnboarding />
-              <div className="mt-0">
+
+              <div className="mt-0 px-4 md:px-5">
                 <HomeMenuGrid />
               </div>
-            </>
+            </div>
           )}
-          <Home searchQuery={searchQuery} />
+          <div className="px-4 md:px-5">
+            <Home searchQuery={searchQuery} />
+          </div>
         </div>
+
         <CartDrawer
           isOpen={isCartOpen}
           onClose={() => setIsCartOpen(false)}
@@ -195,7 +217,7 @@ const MainContent = () => {
     "/register",
     "/portal",
     "/super-admin",
-    "/admin", // Bypass untuk rute admin
+    "/admin",
     "/waiting-approval",
     "/track-order",
   ];
@@ -267,7 +289,7 @@ const MainContent = () => {
         }
       />
 
-      {/* ✅ SEKSI MASTER ADMIN */}
+      {/* SEKSI MASTER ADMIN */}
       <Route
         path="/super-admin"
         element={
@@ -285,12 +307,11 @@ const MainContent = () => {
         }
       />
 
-      {/* 🚚 SUPER FEATURE: LOGISTICS ENGINE */}
+      {/* LOGISTICS ENGINE */}
       <Route
         path="/admin/shipping-config"
         element={
           <ProtectedRoute allowedRoles={["SUPER_ADMIN"]}>
-            {/* Menggunakan default theme light */}
             <ShippingConfig
               theme={{
                 bg: "bg-white",
@@ -312,16 +333,16 @@ const MainContent = () => {
 const App = () => (
   <ToastProvider>
     <ConfigProvider>
-      <MarketProvider>
-        <AuthProvider>
+      <AuthProvider>
+        <MarketProvider>
           <ChatProvider>
             <Router>
               <GhostBar />
               <MainContent />
             </Router>
           </ChatProvider>
-        </AuthProvider>
-      </MarketProvider>
+        </MarketProvider>
+      </AuthProvider>
     </ConfigProvider>
   </ToastProvider>
 );

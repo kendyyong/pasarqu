@@ -48,15 +48,11 @@ export const HeroOnboarding: React.FC<HeroOnboardingProps> = ({
 
   return (
     /**
-     * KUNCI LEBAR TOTAL (MOBILE FULL):
-     * -mx-5: Menarik iklan keluar dari padding App.tsx (sejauh 20px kiri-kanan).
-     * md:mx-0: Mengembalikan ke posisi normal di desktop agar sejajar.
+     * ✅ PERBAIKAN UTAMA:
+     * 1. Menghapus 'md:mt-4' -> Menjadi 'mt-0' (Gap Desktop Hilang!)
+     * 2. Menambahkan 'pt-0' untuk keamanan ekstra.
      */
-    <div className="-mx-5 md:mx-0 block leading-[0] mt-0 md:mt-4 overflow-hidden">
-      {/* Container Slider:
-          - rounded-none: Di HP wajib siku agar terlihat full lebar.
-          - md:rounded-[2rem]: Di Desktop baru melengkung mewah.
-      */}
+    <div className="-mx-5 md:mx-0 block leading-[0] mt-0 pt-0 overflow-hidden">
       <div className="relative w-full h-52 md:h-80 overflow-hidden group rounded-none md:rounded-[2rem] shadow-none md:shadow-md border-none bg-white">
         <div
           className="w-full h-full flex transition-transform duration-700 ease-in-out"

@@ -8,21 +8,23 @@ import React, {
 import { supabase } from "../lib/supabaseClient";
 
 // --- DEFINISI TIPE DATA ---
-export interface GlobalConfig {
-  id: string;
-  // --- BRANDING DINAMIS (Dari Database) ---
-  appName: string;
-  logoUrl: string | null;
-  primaryColor: string;
+export interface AppSettings {
+  id: number | string;
+  // Branding
+  app_name: string;
+  logo_url: string | null;
+  primary_color: string;
 
-  // --- CONFIGURASI BISNIS (Bisa statis atau nanti dari DB juga) ---
+  // Konfigurasi Bisnis
   appAdminFeePercentage: number;
   defaultAppFee: number;
   shippingCommissionPercentage: number;
 
-  // Footer Text
+  // Footer & System
   footerSlogan: string;
   footerCopyright: string;
+  is_maintenance: boolean;
+  min_wallet_limit: number;
 
   // Payment Configuration
   bankAccount: {
@@ -40,29 +42,25 @@ export interface GlobalConfig {
   };
 }
 
-// --- NILAI DEFAULT (Fallback jika internet mati/DB kosong) ---
-const DEFAULT_CONFIG: GlobalConfig = {
-  id: "config_main",
-
-  // Default Branding
-  appName: "Pasarqu",
-  logoUrl: null,
-  primaryColor: "#059669", // Emerald default
-
+// --- NILAI DEFAULT (Fallback) ---
+const DEFAULT_CONFIG: AppSettings = {
+  id: 1,
+  app_name: "Pasarqu",
+  logo_url: null,
+  primary_color: "#059669",
   appAdminFeePercentage: 1.5,
   defaultAppFee: 2000,
   shippingCommissionPercentage: 10,
-
   footerSlogan: "E-Commerce Lokal Presisi",
   footerCopyright: `© ${new Date().getFullYear()} Pasarqu Ecosystem. All rights reserved.`,
-
+  is_maintenance: false,
+  min_wallet_limit: 50000,
   bankAccount: {
     bankName: "BCA",
     accountNumber: "8830-1234-5678",
     holderName: "PT PASAR KECAMATAN INDONESIA",
   },
   allowLocalAdminVerification: true,
-
   defaultShippingRates: {
     tier1: { maxDistance: 3, price: 5000 },
     tier2: { maxDistance: 7, price: 8000 },
@@ -71,9 +69,10 @@ const DEFAULT_CONFIG: GlobalConfig = {
 };
 
 interface ConfigContextType {
-  config: GlobalConfig;
-  refreshConfig: () => Promise<void>; // Fungsi untuk reload data dari DB
-  updateConfig: (newConfig: Partial<GlobalConfig>) => void; // Update state lokal
+  appConfig: AppSettings | null;
+  loading: boolean;
+  refreshConfig: () => Promise<void>;
+  updateConfig: (newConfig: Partial<AppSettings>) => void;
 }
 
 const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
@@ -81,12 +80,16 @@ const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
 export const ConfigProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
-  const [config, setConfig] = useState<GlobalConfig>(DEFAULT_CONFIG);
+  const [appConfig, setAppConfig] = useState<AppSettings | null>(
+    DEFAULT_CONFIG,
+  );
+  const [loading, setLoading] = useState(true);
 
   // --- FUNGSI AMBIL DATA DARI SUPABASE ---
   const fetchSettings = async () => {
+    // Jangan set loading true di sini jika hanya refresh,
+    // agar layar tidak kedap-kedip saat simpan di admin.
     try {
-      // Ambil data dari tabel app_settings (ID 1)
       const { data, error } = await supabase
         .from("app_settings")
         .select("*")
@@ -94,40 +97,47 @@ export const ConfigProvider: React.FC<{ children: ReactNode }> = ({
         .single();
 
       if (error) {
-        console.warn(
-          "Menggunakan config default (DB belum diset).",
-          error.message,
-        );
+        console.warn("Menggunakan config default:", error.message);
+        setAppConfig(DEFAULT_CONFIG);
         return;
       }
 
       if (data) {
-        // Gabungkan data DB dengan data statis yang lain
-        setConfig((prev) => ({
-          ...prev,
-          appName: data.app_name || prev.appName,
-          logoUrl: data.logo_url || prev.logoUrl,
-          primaryColor: data.primary_color || prev.primaryColor,
-        }));
-        console.log("✅ Branding dimuat dari Database:", data.app_name);
+        // ✅ LOGIKA CACHE BUSTER:
+        // Menambahkan timestamp pada URL logo agar browser dipaksa
+        // mendownload ulang jika logo baru saja diganti.
+        const freshLogoUrl = data.logo_url
+          ? `${data.logo_url}?t=${new Date().getTime()}`
+          : null;
+
+        setAppConfig({
+          ...DEFAULT_CONFIG,
+          ...data,
+          app_name: data.app_name || DEFAULT_CONFIG.app_name,
+          logo_url: freshLogoUrl, // Gunakan URL yang sudah di-refresh
+          primary_color: data.primary_color || DEFAULT_CONFIG.primary_color,
+        });
+
+        console.log("✅ Branding Terbaru Berhasil Dimuat:", data.app_name);
       }
     } catch (err) {
       console.error("Gagal memuat config:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // --- LOAD SAAT APLIKASI PERTAMA DIBUKA ---
   useEffect(() => {
     fetchSettings();
   }, []);
 
-  const updateConfig = (newConfig: Partial<GlobalConfig>) => {
-    setConfig((prev) => ({ ...prev, ...newConfig }));
+  const updateConfig = (newConfig: Partial<AppSettings>) => {
+    setAppConfig((prev) => (prev ? { ...prev, ...newConfig } : null));
   };
 
   return (
     <ConfigContext.Provider
-      value={{ config, refreshConfig: fetchSettings, updateConfig }}
+      value={{ appConfig, loading, refreshConfig: fetchSettings, updateConfig }}
     >
       {children}
     </ConfigContext.Provider>
