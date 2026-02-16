@@ -20,12 +20,13 @@ import {
   AlertTriangle,
   Navigation,
   ReceiptText,
+  ShoppingBag,
 } from "lucide-react";
 
 const mapContainerStyle = {
   width: "100%",
-  height: "220px",
-  borderRadius: "24px",
+  height: "200px",
+  borderRadius: "16px",
 };
 
 interface Props {
@@ -45,7 +46,6 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
   const [isCalculating, setIsCalculating] = useState(false);
   const [isOutOfRange, setIsOutOfRange] = useState(false);
 
-  // State koordinat dengan proteksi angka (Number)
   const [deliveryCoords, setDeliveryCoords] = useState({
     lat: Number(profile?.latitude) || Number(selectedMarket?.latitude) || -6.2,
     lng:
@@ -57,7 +57,6 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
   });
 
-  // ✅ FITUR BARU: AUTO DETEKSI LOKASI GPS
   const handleAutoDetect = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -68,9 +67,9 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
           };
           setDeliveryCoords(newPos);
           updateLogistics(newPos.lat, newPos.lng);
-          showToast("Lokasi GPS ditemukan!", "success");
+          showToast("GPS Berhasil dikunci!", "success");
         },
-        () => showToast("Gagal akses GPS. Silakan geser pin manual.", "error"),
+        () => showToast("Gagal akses GPS.", "error"),
       );
     }
   };
@@ -86,17 +85,13 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
           Number(selectedMarket.latitude),
           Number(selectedMarket.longitude),
         );
-
-        // Proteksi Jarak NAN
         const safeDistance = isNaN(distance) ? 0 : distance;
-
         const maxAllowed = (configContext as any).max_distance_km || 50;
         setIsOutOfRange(safeDistance > maxAllowed);
 
         const merchantIds = Array.from(
           new Set(cart.map((item) => item.merchant_id)),
         );
-
         const result = await calculateShippingFee(
           selectedMarket.district || "Default",
           safeDistance,
@@ -109,7 +104,7 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
           merchantCount: merchantIds.length,
         });
       } catch (err) {
-        console.error("Logistics Error:", err);
+        console.error(err);
       } finally {
         setIsCalculating(false);
       }
@@ -128,15 +123,6 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
     }
   }, [isOpen, profile, selectedMarket, updateLogistics]);
 
-  const onMarkerDragEnd = (e: google.maps.MapMouseEvent) => {
-    if (e.latLng) {
-      const newLat = e.latLng.lat();
-      const newLng = e.latLng.lng();
-      setDeliveryCoords({ lat: newLat, lng: newLng });
-      updateLogistics(newLat, newLng);
-    }
-  };
-
   if (!isOpen || !selectedMarket) return null;
 
   const subtotal = cart.reduce(
@@ -146,11 +132,7 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
   const totalToPay = subtotal + (shippingDetails?.total_to_buyer || 0);
 
   const handlePayment = async () => {
-    if (isOutOfRange) {
-      showToast("Jarak pengantaran diluar batas!", "error");
-      return;
-    }
-
+    if (isOutOfRange) return showToast("Lokasi terlalu jauh!", "error");
     setLoading(true);
     try {
       const { data: newOrder, error: orderErr } = await supabase
@@ -171,7 +153,6 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
         .single();
 
       if (orderErr) throw orderErr;
-
       await supabase.from("order_items").insert(
         cart.map((i) => ({
           order_id: newOrder.id,
@@ -199,29 +180,60 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex items-end justify-center">
-      <div className="bg-slate-100 w-full max-w-lg rounded-t-[3rem] shadow-2xl animate-in slide-in-from-bottom-full duration-500 max-h-[95vh] overflow-y-auto no-scrollbar pb-10 text-left">
-        {/* HEADER */}
-        <div className="sticky top-0 bg-white p-6 border-b-2 border-teal-600 flex justify-between items-center z-20">
+      {/* Container Luas (W-Full di Mobile) */}
+      <div className="bg-slate-100 w-full max-w-2xl rounded-t-[2.5rem] shadow-2xl animate-in slide-in-from-bottom-full duration-500 max-h-[95vh] overflow-y-auto no-scrollbar text-left flex flex-col">
+        {/* Header Tetap Bersih */}
+        <div className="sticky top-0 bg-white p-6 border-b-2 border-teal-600 flex justify-between items-center z-30">
           <div>
             <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter">
-              Konfirmasi Bayar
+              Kasir Pembayaran
             </h2>
             <p className="text-[10px] font-bold text-teal-600 uppercase tracking-widest mt-1">
-              Pasar: {selectedMarket.name}
+              {selectedMarket.name}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-3 bg-slate-100 rounded-2xl text-slate-400 hover:text-red-500 transition-all active:scale-90"
+            className="p-3 bg-slate-100 rounded-2xl text-slate-400 hover:text-red-500 transition-all"
           >
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-4 space-y-4">
-          {/* SEKSI LOKASI */}
+        <div className="p-2 md:p-6 space-y-4">
+          {/* ✅ 1. RINCIAN PEMBELANJAAN (DETAIL BARANG) */}
           <div className="bg-white p-5 rounded-[2rem] border-2 border-white shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
+              <ShoppingBag size={18} className="text-teal-600" />
+              <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">
+                Barang Belanjaan
+              </h3>
+            </div>
+            <div className="space-y-4 max-h-[200px] overflow-y-auto no-scrollbar pr-2">
+              {cart.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex justify-between items-start gap-4"
+                >
+                  <div className="flex-1">
+                    <h4 className="text-[11px] font-black text-slate-800 uppercase leading-tight">
+                      {item.name}
+                    </h4>
+                    <p className="text-[10px] font-bold text-slate-400 mt-1">
+                      {item.quantity} x Rp {item.price.toLocaleString()}
+                    </p>
+                  </div>
+                  <span className="text-[11px] font-black text-slate-900 whitespace-nowrap">
+                    Rp {(item.price * item.quantity).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 2. SEKSI LOKASI */}
+          <div className="bg-white p-4 rounded-[2rem] border-2 border-white shadow-sm space-y-4">
+            <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
                 <MapPin size={18} className="text-red-600" />
                 <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">
@@ -230,13 +242,12 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
               </div>
               <button
                 onClick={handleAutoDetect}
-                className="flex items-center gap-1 bg-teal-600 text-white px-3 py-1.5 rounded-full text-[9px] font-black uppercase shadow-lg active:scale-90"
+                className="bg-teal-600 text-white px-4 py-2 rounded-full text-[9px] font-black uppercase shadow-lg active:scale-90 transition-all"
               >
-                <Navigation size={10} /> Auto GPS
+                <Navigation size={10} className="inline mr-1" /> GPS
               </button>
             </div>
-
-            <div className="relative h-[220px] bg-slate-50 rounded-[1.8rem] overflow-hidden border-2 border-slate-100 shadow-inner">
+            <div className="relative rounded-2xl overflow-hidden border-2 border-slate-100">
               {isLoaded ? (
                 <GoogleMap
                   mapContainerStyle={mapContainerStyle}
@@ -250,54 +261,54 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
                   <MarkerF
                     position={deliveryCoords}
                     draggable={true}
-                    onDragEnd={onMarkerDragEnd}
+                    onDragEnd={(e) => {
+                      const newLat = e.latLng?.lat() || 0;
+                      const newLng = e.latLng?.lng() || 0;
+                      setDeliveryCoords({ lat: newLat, lng: newLng });
+                      updateLogistics(newLat, newLng);
+                    }}
                   />
                 </GoogleMap>
               ) : (
-                <div className="h-full flex items-center justify-center text-xs font-bold text-slate-400">
-                  Radar Loading...
-                </div>
+                <div className="h-[200px] bg-slate-200 animate-pulse" />
               )}
-
               {isCalculating && (
-                <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center">
+                <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center z-10">
                   <div className="bg-slate-900 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase flex items-center gap-2 shadow-2xl">
-                    <Loader2 size={14} className="animate-spin" /> Hitung
+                    <Loader2 size={14} className="animate-spin" /> Sinkron
                     Ongkir...
                   </div>
                 </div>
               )}
             </div>
             <p className="text-[10px] font-bold text-slate-500 px-2 uppercase leading-relaxed">
-              Alamat: {profile?.address || "Belum ditentukan"}
+              {profile?.address || "Alamat belum diatur"}
             </p>
           </div>
 
-          {/* RINCIAN PEMBAYARAN */}
+          {/* 3. RINCIAN PEMBAYARAN (FINANSIAL) */}
           <div className="bg-white p-6 rounded-[2rem] border-2 border-white shadow-sm space-y-5">
             <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
               <ReceiptText size={18} className="text-teal-600" />
-              <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-widest text-left">
+              <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">
                 Rincian Pembayaran
               </h3>
             </div>
-
             <div className="space-y-3">
               <div className="flex justify-between text-xs font-bold text-slate-500 uppercase">
-                <span>Belanjaan</span>
-                <span className="text-slate-800">
+                <span>Total Belanja</span>
+                <span className="text-slate-900 font-black">
                   Rp {subtotal.toLocaleString()}
                 </span>
               </div>
               <div className="flex justify-between text-xs font-bold text-slate-500 uppercase">
                 <span>
-                  Ongkir ({shippingDetails?.distance?.toFixed(1) || 0} KM)
+                  Biaya Kurir ({shippingDetails?.distance?.toFixed(1) || 0} KM)
                 </span>
-                <span className="text-slate-800">
+                <span className="text-slate-900 font-black">
                   Rp {shippingDetails?.total_ongkir?.toLocaleString() || 0}
                 </span>
               </div>
-              {/* ✅ BIAYA PELAYANAN DIMUNCULKAN */}
               <div className="flex justify-between text-xs font-bold text-slate-500 uppercase">
                 <span>Biaya Pelayanan</span>
                 <span className="text-teal-600 font-black">
@@ -305,47 +316,43 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
                 </span>
               </div>
             </div>
-
             <div className="pt-4 border-t-2 border-dashed border-slate-100 flex justify-between items-end">
               <div>
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  Total Bayar
+                  Total Tagihan
                 </span>
                 <h3
-                  className={`text-3xl font-black tracking-tighter leading-none mt-1 ${isOutOfRange ? "text-red-500" : "text-teal-600"}`}
+                  className={`text-3xl font-black tracking-tighter mt-1 ${isOutOfRange ? "text-red-500" : "text-teal-600"}`}
                 >
                   Rp {totalToPay.toLocaleString()}
                 </h3>
               </div>
               {isOutOfRange && (
-                <div className="flex items-center gap-1 text-red-500 animate-pulse">
+                <div className="text-red-500 animate-pulse flex items-center gap-1">
                   <AlertTriangle size={18} />
-                  <span className="text-[9px] font-black uppercase">
-                    Jarak Kejauhan
-                  </span>
+                  <span className="text-[9px] font-black uppercase">Jauh</span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* TOMBOL BAYAR */}
+          {/* TOMBOL BAYAR GAGAH */}
           <button
             disabled={
               loading || isCalculating || isOutOfRange || cart.length === 0
             }
             onClick={handlePayment}
-            className={`w-full py-6 rounded-[2.2rem] font-black uppercase text-sm tracking-[0.4em] shadow-2xl flex items-center justify-center gap-3 transition-all active:scale-95 ${
+            className={`w-full py-6 mb-10 rounded-[2rem] font-black uppercase text-sm tracking-[0.4em] shadow-2xl flex items-center justify-center gap-3 transition-all active:scale-95 ${
               isOutOfRange
-                ? "bg-slate-300 text-slate-500 cursor-not-allowed"
-                : "bg-slate-900 text-white hover:bg-teal-600 shadow-slate-200"
+                ? "bg-slate-300 text-slate-500"
+                : "bg-slate-900 text-white hover:bg-teal-600 shadow-slate-300"
             }`}
           >
             {loading ? (
               <Loader2 className="animate-spin" />
             ) : (
               <>
-                {isOutOfRange ? "JARAK TIDAK TERJANGKAU" : "BAYAR SEKARANG"}
-                <ArrowRight size={20} />
+                KONFIRMASI BAYAR <ArrowRight size={20} />
               </>
             )}
           </button>
