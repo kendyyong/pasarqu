@@ -16,7 +16,6 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ChatProvider } from "./contexts/ChatContext";
 import { ToastProvider } from "./contexts/ToastContext";
 
-// ✅ Jalur import disesuaikan
 import { supabase } from "./lib/supabaseClient";
 
 // --- HOOKS ---
@@ -43,6 +42,12 @@ import { OrderTrackingPage } from "./pages/customer/OrderTrackingPage";
 import { MarketSelectionPage } from "./pages/MarketSelection/MarketSelectionPage";
 import { CheckoutPaymentPage } from "./pages/checkout/CheckoutPaymentPage";
 
+// ✅ JALUR IMPORT YANG BENAR (Sesuai posisi file Juragan)
+import { MerchantPromoPage } from "./pages/merchant/MerchantPromoPage";
+// Pastikan file CourierPromoPage.tsx ada di folder src/pages/courier/
+// Jika belum ada, buat foldernya atau sementara comment baris di bawah ini
+import { CourierPromoPage } from "./pages/courier/CourierPromoPage";
+
 // --- DASHBOARDS ---
 import { LocalAdminDashboard } from "./pages/admin/LocalAdminDashboard";
 import { SuperAdminDashboard } from "./pages/admin/SuperAdminDashboard";
@@ -50,7 +55,7 @@ import { MerchantDashboard } from "./pages/merchant/MerchantDashboard";
 import { CourierDashboard } from "./pages/courier/CourierDashboard";
 import { CustomerDashboard } from "./pages/customer/CustomerDashboard";
 
-// --- SUPER FEATURES (NEW) ---
+// --- SUPER FEATURES ---
 import { ShippingConfig } from "./pages/admin/super-features/ShippingConfig";
 
 // --- LOGIN KHUSUS ---
@@ -94,7 +99,6 @@ const MarketplaceApp = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Mengambil data cart dengan aman
   const cart = marketContext?.cart || [];
   const updateQty = marketContext?.updateQty || (() => {});
   const removeFromCart = marketContext?.removeFromCart || (() => {});
@@ -111,7 +115,6 @@ const MarketplaceApp = () => {
     return cart.reduce((sum, item) => sum + (item.quantity || 0), 0);
   }, [cart]);
 
-  // ✅ LOGIKA SINKRONISASI: Jika user baru daftar/login dari alur checkout
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("openCheckout") === "true" && user) {
@@ -120,15 +123,11 @@ const MarketplaceApp = () => {
     }
   }, [location, user, navigate]);
 
-  // ✅ LOGIKA SATPAM: Mencegat Tamu saat Klik Checkout
   const handleCheckoutTrigger = () => {
-    setIsCartOpen(false); // Tutup drawer keranjang dulu
-
+    setIsCartOpen(false);
     if (!user) {
-      // Jika tamu, lempar ke pendaftaran dengan tanda redirect
       navigate("/register?redirect=checkout");
     } else {
-      // Jika sudah member, langsung buka halaman bayar
       setTimeout(() => setIsCheckoutOpen(true), 300);
     }
   };
@@ -156,14 +155,14 @@ const MarketplaceApp = () => {
 
         <div className="w-full max-w-[1200px] mx-auto bg-white pt-0 md:pt-4 pb-24 text-left">
           {!searchQuery && (
-            <div className="flex flex-col m-0 p-0">
+            <div className="flex flex-col m-0 p-0 text-left">
               <HeroOnboarding />
               <div className="mt-0 px-4 md:px-5">
                 <HomeMenuGrid />
               </div>
             </div>
           )}
-          <div className="px-4 md:px-5">
+          <div className="px-4 md:px-5 text-left">
             <Home searchQuery={searchQuery} />
           </div>
         </div>
@@ -174,10 +173,9 @@ const MarketplaceApp = () => {
           cart={cart}
           onUpdateQty={updateQty}
           onRemove={removeFromCart}
-          onCheckout={handleCheckoutTrigger} // ✅ Pakai Satpam baru kita
+          onCheckout={handleCheckoutTrigger}
         />
 
-        {/* Modal bayar HANYA bisa tampil jika sudah Login */}
         {user && (
           <CheckoutPaymentPage
             isOpen={isCheckoutOpen}
@@ -209,7 +207,10 @@ const MainContent = () => {
     "/admin",
     "/waiting-approval",
     "/track-order",
+    "/merchant-promo", // ✅ Rute Pendaftaran Toko (Agar tidak dicegat)
+    "/promo/kurir", // ✅ Rute Pendaftaran Kurir
   ];
+
   const isBypassRoute = bypassRoutes.some((route) =>
     location.pathname.startsWith(route),
   );
@@ -227,6 +228,10 @@ const MainContent = () => {
       <Route path="/login/admin-wilayah" element={<AdminLogin />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/waiting-approval" element={<WaitingApprovalPage />} />
+
+      {/* ✅ PENDAFTARAN MITRA TERHUBUNG */}
+      <Route path="/merchant-promo" element={<MerchantPromoPage />} />
+      <Route path="/promo/kurir" element={<CourierPromoPage />} />
 
       {/* PELANGGAN */}
       <Route path="/shop/:merchantId" element={<ShopDetail />} />
@@ -287,16 +292,7 @@ const MainContent = () => {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/super-admin/finance"
-        element={
-          <ProtectedRoute allowedRoles={["SUPER_ADMIN"]}>
-            <SuperAdminDashboard />
-          </ProtectedRoute>
-        }
-      />
 
-      {/* LOGISTICS ENGINE */}
       <Route
         path="/admin/shipping-config"
         element={

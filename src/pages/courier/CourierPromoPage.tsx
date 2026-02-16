@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useToast } from "../../contexts/ToastContext";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Bike,
   ArrowRight,
@@ -67,22 +67,36 @@ export const CourierPromoPage: React.FC = () => {
     initPage();
   }, []);
 
+  // FUNGSI UPLOAD KE SUPABASE STORAGE
   const uploadImage = async (userId: string, file: File, prefix: string) => {
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${userId}/${prefix}_${Date.now()}.${fileExt}`;
-    const { error } = await supabase.storage
-      .from("courier-docs")
-      .upload(fileName, file);
-    if (error) throw error;
-    const { data } = supabase.storage
-      .from("courier-docs")
-      .getPublicUrl(fileName);
-    return data.publicUrl;
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${userId}/${prefix}_${Date.now()}.${fileExt}`;
+
+      // Upload ke bucket 'courier-docs'
+      const { error: uploadError } = await supabase.storage
+        .from("courier-docs")
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      // Ambil Public URL
+      const { data } = supabase.storage
+        .from("courier-docs")
+        .getPublicUrl(fileName);
+
+      return data.publicUrl;
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      throw new Error(`Gagal upload ${prefix}: ${error.message}`);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
+
+    // Validasi Manual
     if (!formData.market_id)
       return showToast("Area operasional wajib dipilih!", "error");
     if (!files.ktp || !files.sim || !files.selfie)
@@ -91,63 +105,67 @@ export const CourierPromoPage: React.FC = () => {
     setIsLoading(true);
 
     try {
+      // 1. Buat User Auth
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
       });
+
       if (error) throw error;
+      if (!data.user) throw new Error("Gagal membuat akun.");
+
+      // Delay agar user terbuat di database
       await new Promise((r) => setTimeout(r, 1500));
 
-      if (data.user) {
-        const userId = data.user.id;
-        const ktpUrl = await uploadImage(userId, files.ktp!, "ktp");
-        const simUrl = await uploadImage(userId, files.sim!, "sim");
-        const selfieUrl = await uploadImage(userId, files.selfie!, "selfie");
+      const userId = data.user.id;
 
-        const { error: profileError } = await supabase.from("profiles").upsert({
-          id: userId,
-          email: formData.email,
-          name: formData.name,
-          phone_number: formData.phone,
-          address: formData.address,
-          role: "COURIER",
-          vehicle_type: formData.vehicle,
-          plat_number: formData.plat,
-          ktp_url: ktpUrl,
-          sim_url: simUrl,
-          selfie_url: selfieUrl,
-          is_verified: false,
-          managed_market_id: formData.market_id,
-          created_at: new Date().toISOString(),
-        });
+      // 2. Upload Dokumen Paralel (Biar Cepat)
+      const [ktpUrl, simUrl, selfieUrl] = await Promise.all([
+        uploadImage(userId, files.ktp!, "ktp"),
+        uploadImage(userId, files.sim!, "sim"),
+        uploadImage(userId, files.selfie!, "selfie"),
+      ]);
 
-        if (profileError) throw profileError;
+      // 3. Simpan Profil Kurir
+      const { error: profileError } = await supabase.from("profiles").upsert({
+        id: userId,
+        email: formData.email,
+        name: formData.name,
+        phone_number: formData.phone,
+        address: formData.address,
+        role: "COURIER",
+        vehicle_type: formData.vehicle,
+        vehicle_plate: formData.plat, // Pastikan kolom ini ada di database (vehicle_plate atau plat_number)
+        ktp_url: ktpUrl,
+        sim_url: simUrl,
+        selfie_url: selfieUrl,
+        is_verified: false,
+        managed_market_id: formData.market_id,
+        created_at: new Date().toISOString(),
+      });
 
-        showToast(
-          "Pendaftaran Berhasil! Menunggu verifikasi berkas.",
-          "success",
-        );
-        // REDIRECT KE WAITING APPROVAL
-        setTimeout(() => {
-          navigate("/waiting-approval");
-        }, 1500);
-      }
+      if (profileError) throw profileError;
+
+      showToast("Pendaftaran Berhasil! Menunggu verifikasi berkas.", "success");
+      setTimeout(() => navigate("/waiting-approval"), 1500);
     } catch (err: any) {
       showToast(err.message, "error");
+    } finally {
       setIsLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans text-left">
+      {/* NAVBAR */}
       <nav className="border-b sticky top-0 bg-white z-50 shadow-sm">
         <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between">
           <div
             onClick={() => navigate("/")}
             className="cursor-pointer flex items-center gap-2"
           >
-            <div className="text-2xl font-black text-teal-600 tracking-tighter flex items-center gap-1">
-              <span className="bg-teal-600 text-white px-1.5 rounded">P</span>{" "}
+            <div className="text-2xl font-black text-orange-500 tracking-tighter flex items-center gap-1">
+              <span className="bg-orange-500 text-white px-1.5 rounded">P</span>
               PASARQU
             </div>
             <div className="h-6 w-[1px] bg-slate-200 hidden md:block mx-2"></div>
@@ -157,14 +175,16 @@ export const CourierPromoPage: React.FC = () => {
           </div>
           <button
             onClick={() => navigate("/portal")}
-            className="text-slate-500 hover:text-teal-600 flex items-center gap-1 font-bold text-sm"
+            className="text-slate-500 hover:text-orange-500 flex items-center gap-1 font-bold text-sm"
           >
             <ChevronLeft size={18} /> Kembali
           </button>
         </div>
       </nav>
 
+      {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col lg:flex-row max-w-[1200px] mx-auto w-full p-6 md:p-12 gap-12 lg:gap-20">
+        {/* KOLOM KIRI (BENEFIT) */}
         <div className="flex-1 space-y-10">
           <div className="space-y-6">
             <div className="inline-flex items-center gap-2 bg-teal-50 text-teal-600 px-4 py-1.5 rounded-full">
@@ -207,6 +227,7 @@ export const CourierPromoPage: React.FC = () => {
           </div>
         </div>
 
+        {/* KOLOM KANAN (FORMULIR) */}
         <div className="w-full lg:w-[480px] shrink-0">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 p-8 md:p-10 sticky top-24">
             <div className="text-center mb-8">
@@ -222,6 +243,7 @@ export const CourierPromoPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleRegister} className="space-y-4">
+              {/* AREA OPERASIONAL */}
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-500 uppercase ml-1">
                   Area Operasional (Pasar)
@@ -236,24 +258,31 @@ export const CourierPromoPage: React.FC = () => {
                     </span>
                   </div>
                 ) : (
-                  <select
-                    required
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:border-teal-600 outline-none text-sm font-bold appearance-none transition-all shadow-inner"
-                    value={formData.market_id}
-                    onChange={(e) =>
-                      setFormData({ ...formData, market_id: e.target.value })
-                    }
-                  >
-                    <option value="">-- Pilih Wilayah Operasi --</option>
-                    {markets.map((m: any) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative group">
+                    <Map
+                      size={16}
+                      className="absolute left-3 top-3.5 text-slate-400 z-10"
+                    />
+                    <select
+                      required
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:border-teal-600 outline-none text-sm font-bold appearance-none transition-all shadow-inner"
+                      value={formData.market_id}
+                      onChange={(e) =>
+                        setFormData({ ...formData, market_id: e.target.value })
+                      }
+                    >
+                      <option value="">-- Pilih Wilayah Operasi --</option>
+                      {markets.map((m: any) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
               </div>
 
+              {/* IDENTITAS DIRI */}
               <div className="grid grid-cols-2 gap-3">
                 <InputGroup
                   placeholder="Nama (Sesuai KTP)"
@@ -273,6 +302,7 @@ export const CourierPromoPage: React.FC = () => {
                 />
               </div>
 
+              {/* KENDARAAN */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="relative group">
                   <select
@@ -297,6 +327,17 @@ export const CourierPromoPage: React.FC = () => {
                 />
               </div>
 
+              {/* ALAMAT */}
+              <InputGroup
+                placeholder="Alamat Domisili Lengkap"
+                icon={<MapPin size={16} />}
+                value={formData.address}
+                onChange={(v: string) =>
+                  setFormData({ ...formData, address: v })
+                }
+              />
+
+              {/* AKUN LOGIN */}
               <div className="pt-2 flex flex-col gap-3">
                 <InputGroup
                   type="email"
@@ -318,6 +359,7 @@ export const CourierPromoPage: React.FC = () => {
                 />
               </div>
 
+              {/* UPLOAD BERKAS */}
               <div className="pt-2 space-y-3">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
                   Upload Berkas Wajib
@@ -344,15 +386,16 @@ export const CourierPromoPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* TOMBOL DAFTAR */}
               <button
                 disabled={isLoading}
-                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-teal-600 active:scale-95 transition-all flex items-center justify-center gap-2 mt-4 group"
+                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-orange-600 active:scale-95 transition-all flex items-center justify-center gap-2 mt-4 group"
               >
                 {isLoading ? (
                   <Loader2 className="animate-spin" />
                 ) : (
                   <>
-                    DAFTAR SEKARANG{" "}
+                    DAFTAR SEKARANG
                     <ArrowRight
                       size={16}
                       className="text-orange-500 group-hover:text-white transition-colors"
@@ -373,6 +416,8 @@ export const CourierPromoPage: React.FC = () => {
     </div>
   );
 };
+
+// --- SUB COMPONENTS ---
 
 const BenefitItem = ({ icon, title, desc }: any) => (
   <div className="flex gap-4 p-4 rounded-2xl hover:bg-slate-50 transition-colors group">
@@ -404,7 +449,7 @@ const InputGroup = ({
   onChange: (v: string) => void;
 }) => (
   <div className="relative group flex-1">
-    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-teal-600 transition-colors pointer-events-none">
+    <div className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-orange-500 transition-colors pointer-events-none">
       {icon}
     </div>
     <input
@@ -412,7 +457,7 @@ const InputGroup = ({
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full pl-9 pr-3 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:border-teal-600 focus:bg-white outline-none text-[11px] font-bold transition-all placeholder:text-slate-300 shadow-inner"
+      className="w-full pl-10 pr-3 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:border-orange-500 focus:bg-white outline-none text-xs font-bold transition-all placeholder:text-slate-300 shadow-inner"
       required
     />
   </div>
@@ -430,7 +475,11 @@ const FileBox = ({
   file: File | null;
 }) => (
   <label
-    className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 border-dashed cursor-pointer transition-all h-20 ${file ? "bg-teal-50 border-teal-400 text-teal-700 font-black" : "bg-white border-slate-200 text-slate-400 hover:border-orange-400 hover:bg-orange-50"}`}
+    className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 border-dashed cursor-pointer transition-all h-20 ${
+      file
+        ? "bg-teal-50 border-teal-400 text-teal-700 font-black"
+        : "bg-white border-slate-200 text-slate-400 hover:border-orange-400 hover:bg-orange-50"
+    }`}
   >
     <div
       className={`mb-1 transition-transform ${file ? "scale-110" : "scale-100"}`}
@@ -438,7 +487,7 @@ const FileBox = ({
       {icon}
     </div>
     <span className="text-[8px] font-black uppercase truncate w-full text-center tracking-tighter">
-      {file ? "OK" : label}
+      {file ? "TERUPLOAD" : label}
     </span>
     <input
       type="file"

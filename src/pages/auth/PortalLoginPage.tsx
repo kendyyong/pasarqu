@@ -1,4 +1,4 @@
-import React, { useState } from "react"; // Tambahkan useState untuk hitungan klik
+import React, { useState } from "react";
 import {
   Store,
   Truck,
@@ -18,24 +18,22 @@ export const PortalLoginPage = () => {
 
   const handleSecretClick = () => {
     const currentTime = Date.now();
-    // Jika jarak antar klik lebih dari 1 detik, reset hitungan ke 1
     if (currentTime - lastClickTime > 1000) {
       setClickCount(1);
     } else {
       const newCount = clickCount + 1;
       setClickCount(newCount);
 
-      // Jika sudah mencapai 5 klik cepat
       if (newCount === 5) {
         navigate("/login/master");
-        setClickCount(0); // Reset hitungan setelah diarahkan
+        setClickCount(0);
       }
     }
     setLastClickTime(currentTime);
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-6 font-sans relative overflow-hidden">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-6 font-sans relative overflow-hidden text-left">
       {/* BACKGROUND DECORATION */}
       <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-teal-500/10 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-slate-900/[0.03] rounded-full blur-[120px] pointer-events-none"></div>
@@ -89,18 +87,21 @@ export const PortalLoginPage = () => {
 
           {/* DUAL ACTION: DAFTAR */}
           <div className="mt-8 grid grid-cols-2 gap-3">
+            {/* ✅ FIXED: Arahkan ke /merchant-promo sesuai file yang Juragan berikan */}
             <button
-              onClick={() => navigate("/promo/toko")}
-              className="flex items-center justify-center gap-2 p-4 bg-white border border-slate-100 rounded-2xl hover:bg-teal-50 hover:border-teal-100 transition-all group"
+              onClick={() => navigate("/merchant-promo")}
+              className="flex items-center justify-center gap-2 p-4 bg-white border border-slate-100 rounded-2xl hover:bg-teal-50 hover:border-teal-100 transition-all group shadow-sm active:scale-95"
             >
               <UserPlus size={14} className="text-teal-600" />
               <span className="text-[9px] font-black uppercase text-slate-600 tracking-tighter">
                 Daftar Toko
               </span>
             </button>
+
+            {/* ✅ FIXED: Arahkan ke /promo/kurir */}
             <button
               onClick={() => navigate("/promo/kurir")}
-              className="flex items-center justify-center gap-2 p-4 bg-white border border-slate-100 rounded-2xl hover:bg-orange-50 hover:border-orange-100 transition-all group"
+              className="flex items-center justify-center gap-2 p-4 bg-white border border-slate-100 rounded-2xl hover:bg-orange-50 hover:border-orange-100 transition-all group shadow-sm active:scale-95"
             >
               <UserPlus size={14} className="text-orange-600" />
               <span className="text-[9px] font-black uppercase text-slate-600 tracking-tighter">
@@ -111,7 +112,7 @@ export const PortalLoginPage = () => {
         </div>
 
         {/* STATS SECTION */}
-        <div className="mt-12 w-full flex justify-between px-4 py-6 bg-slate-50/50 rounded-[2rem] border border-white/50 backdrop-blur-sm">
+        <div className="mt-12 w-full flex justify-between px-4 py-6 bg-slate-50/50 rounded-[2rem] border border-white/50 backdrop-blur-sm shadow-inner">
           <div className="text-center">
             <div className="text-[12px] font-black text-slate-800">500+</div>
             <div className="text-[7px] font-black text-slate-400 uppercase tracking-widest">
@@ -165,10 +166,10 @@ export const PortalLoginPage = () => {
             </button>
           </div>
 
-          {/* TOMBOL RAHASIA SUPER ADMIN (Klik cepat 5x pada v2.0) */}
+          {/* TOMBOL RAHASIA SUPER ADMIN */}
           <button
             onClick={handleSecretClick}
-            className="mt-8 text-[8px] font-bold text-slate-300 uppercase tracking-[0.5em] cursor-default select-none active:scale-95 transition-all"
+            className="mt-8 text-[8px] font-bold text-slate-300 hover:text-slate-400 uppercase tracking-[0.5em] cursor-pointer select-none active:scale-95 transition-all"
           >
             PASARQU PORTAL{" "}
             <span className={clickCount > 0 ? "text-teal-500/50" : ""}>

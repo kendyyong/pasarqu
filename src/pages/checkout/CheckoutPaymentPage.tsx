@@ -21,11 +21,12 @@ import {
   Navigation,
   ReceiptText,
   ShoppingBag,
+  Heart,
 } from "lucide-react";
 
 const mapContainerStyle = {
   width: "100%",
-  height: "200px",
+  height: "220px",
   borderRadius: "16px",
 };
 
@@ -67,7 +68,7 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
           };
           setDeliveryCoords(newPos);
           updateLogistics(newPos.lat, newPos.lng);
-          showToast("GPS Berhasil dikunci!", "success");
+          showToast("GPS Berhasil Dikunci!", "success");
         },
         () => showToast("Gagal akses GPS.", "error"),
       );
@@ -115,9 +116,11 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (isOpen && selectedMarket) {
       const lat =
-        Number(profile?.latitude) || Number(selectedMarket.latitude) || -6.2;
+        Number(profile?.latitude) || Number(selectedMarket?.latitude) || -6.2;
       const lng =
-        Number(profile?.longitude) || Number(selectedMarket.longitude) || 106.8;
+        Number(profile?.longitude) ||
+        Number(selectedMarket?.longitude) ||
+        106.8;
       setDeliveryCoords({ lat, lng });
       updateLogistics(lat, lng);
     }
@@ -129,10 +132,10 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
     (sum, item) => sum + item.price * item.quantity,
     0,
   );
-  const totalToPay = subtotal + (shippingDetails?.total_to_buyer || 0);
+  const totalTagihanValue = subtotal + (shippingDetails?.total_to_buyer || 0);
 
   const handlePayment = async () => {
-    if (isOutOfRange) return showToast("Lokasi terlalu jauh!", "error");
+    if (isOutOfRange) return showToast("Jarak terlalu jauh!", "error");
     setLoading(true);
     try {
       const { data: newOrder, error: orderErr } = await supabase
@@ -140,19 +143,20 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
         .insert({
           customer_id: user?.id,
           market_id: selectedMarket.id,
-          total_price: totalToPay,
+          total_price: totalTagihanValue,
           shipping_cost: shippingDetails?.total_ongkir || 0,
           service_fee: shippingDetails?.buyer_service_fee || 0,
           delivery_lat: deliveryCoords.lat,
           delivery_lng: deliveryCoords.lng,
           status: "PAID",
           shipping_status: "SEARCHING_COURIER",
-          address: profile?.address || "Alamat tidak terbaca",
+          address: profile?.address || "Alamat belum ditentukan",
         })
         .select()
         .single();
 
       if (orderErr) throw orderErr;
+
       await supabase.from("order_items").insert(
         cart.map((i) => ({
           order_id: newOrder.id,
@@ -167,7 +171,7 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
         selectedMarket.latitude,
         selectedMarket.longitude,
       );
-      showToast("Pembayaran Berhasil!", "success");
+      showToast("Pesanan Berhasil Dibayar!", "success");
       clearCart();
       onClose();
       navigate(`/track-order/${newOrder.id}`);
@@ -179,183 +183,204 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex items-end justify-center">
-      {/* Container Luas (W-Full di Mobile) */}
-      <div className="bg-slate-100 w-full max-w-2xl rounded-t-[2.5rem] shadow-2xl animate-in slide-in-from-bottom-full duration-500 max-h-[95vh] overflow-y-auto no-scrollbar text-left flex flex-col">
-        {/* Header Tetap Bersih */}
-        <div className="sticky top-0 bg-white p-6 border-b-2 border-teal-600 flex justify-between items-center z-30">
-          <div>
-            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter">
-              Kasir Pembayaran
+    <div className="fixed inset-0 z-[999] bg-white md:bg-slate-900/60 md:backdrop-blur-md flex flex-col items-center justify-center overflow-hidden">
+      <div className="w-full h-full md:h-[85vh] md:mt-16 md:max-w-[1100px] bg-slate-50 md:rounded-[2.5rem] shadow-2xl flex flex-col md:flex-row overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300">
+        {/* KOLOM KIRI (Desktop Only) */}
+        <div className="hidden md:flex md:w-5/12 bg-teal-600 p-10 flex-col justify-between text-white relative overflow-hidden text-left">
+          <div className="absolute -top-10 -right-10 opacity-10">
+            <ShoppingBag size={300} />
+          </div>
+          <div className="relative z-10 space-y-6">
+            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center border border-white/30">
+              <Heart size={24} fill="white" />
+            </div>
+            <h2 className="text-4xl font-black leading-none uppercase tracking-tighter">
+              Senang Belanja Di Pasarqu.
             </h2>
-            <p className="text-[10px] font-bold text-teal-600 uppercase tracking-widest mt-1">
-              {selectedMarket.name}
+            <p className="text-sm font-medium leading-relaxed opacity-90">
+              Setiap pesanan Anda membantu menghidupkan ekonomi pedagang pasar
+              tradisional lokal.
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-3 bg-slate-100 rounded-2xl text-slate-400 hover:text-red-500 transition-all"
-          >
-            <X size={20} />
-          </button>
         </div>
 
-        <div className="p-2 md:p-6 space-y-4">
-          {/* ✅ 1. RINCIAN PEMBELANJAAN (DETAIL BARANG) */}
-          <div className="bg-white p-5 rounded-[2rem] border-2 border-white shadow-sm space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
-              <ShoppingBag size={18} className="text-teal-600" />
-              <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">
-                Barang Belanjaan
+        {/* KOLOM KANAN */}
+        <div className="flex-1 flex flex-col bg-white overflow-y-auto no-scrollbar">
+          <div className="sticky top-0 bg-white p-4 md:p-6 border-b-2 border-teal-600 flex justify-between items-center z-50">
+            <div className="text-left">
+              <h3 className="text-lg md:text-xl font-black text-slate-900 uppercase tracking-tighter leading-none">
+                Konfirmasi Bayar
               </h3>
+              <p className="text-[9px] md:text-[10px] font-black text-teal-600 uppercase tracking-widest mt-1">
+                Pasar: {selectedMarket.name}
+              </p>
             </div>
-            <div className="space-y-4 max-h-[200px] overflow-y-auto no-scrollbar pr-2">
-              {cart.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex justify-between items-start gap-4"
-                >
-                  <div className="flex-1">
-                    <h4 className="text-[11px] font-black text-slate-800 uppercase leading-tight">
-                      {item.name}
-                    </h4>
-                    <p className="text-[10px] font-bold text-slate-400 mt-1">
-                      {item.quantity} x Rp {item.price.toLocaleString()}
-                    </p>
-                  </div>
-                  <span className="text-[11px] font-black text-slate-900 whitespace-nowrap">
-                    Rp {(item.price * item.quantity).toLocaleString()}
+            <button
+              onClick={onClose}
+              className="p-2 bg-slate-100 rounded-xl text-slate-500 hover:text-red-500 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="p-2 md:p-8 space-y-4 pb-40">
+            {/* 1. SATU KOLOM: RINCIAN BELANJA & TAGIHAN */}
+            <div className="bg-slate-50 rounded-[2rem] border-2 border-slate-100 overflow-hidden shadow-sm">
+              <div className="p-5 border-b border-slate-200 space-y-4 text-left">
+                <div className="flex items-center gap-2">
+                  <ShoppingBag size={18} className="text-teal-600" />
+                  <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">
+                    Daftar Belanjaan
+                  </h4>
+                </div>
+                <div className="space-y-3">
+                  {cart.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex justify-between items-start text-[11px]"
+                    >
+                      <div className="flex-1">
+                        <p className="font-black text-slate-800 uppercase leading-tight">
+                          {item.name}
+                        </p>
+                        <p className="font-bold text-slate-400 mt-0.5">
+                          {item.quantity} x Rp {item.price.toLocaleString()}
+                        </p>
+                      </div>
+                      <span className="font-black text-slate-900 ml-4">
+                        Rp {(item.price * item.quantity).toLocaleString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-5 bg-white space-y-3 text-left">
+                <div className="flex items-center gap-2 mb-2">
+                  <ReceiptText size={18} className="text-teal-600" />
+                  <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">
+                    Rincian Pembayaran
+                  </h4>
+                </div>
+                <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase">
+                  <span>Subtotal Belanja</span>
+                  <span className="text-slate-900 font-black">
+                    Rp {subtotal.toLocaleString()}
                   </span>
                 </div>
-              ))}
-            </div>
-          </div>
+                <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase">
+                  <span>
+                    Biaya Kurir ({shippingDetails?.distance?.toFixed(1) || 0}{" "}
+                    KM)
+                  </span>
+                  <span className="text-slate-900 font-black">
+                    Rp {shippingDetails?.total_ongkir?.toLocaleString() || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase">
+                  <span>Biaya Pelayanan</span>
+                  <span className="text-teal-600 font-black">
+                    Rp{" "}
+                    {shippingDetails?.buyer_service_fee?.toLocaleString() || 0}
+                  </span>
+                </div>
 
-          {/* 2. SEKSI LOKASI */}
-          <div className="bg-white p-4 rounded-[2rem] border-2 border-white shadow-sm space-y-4">
-            <div className="flex items-center justify-between px-1">
-              <div className="flex items-center gap-2">
-                <MapPin size={18} className="text-red-600" />
-                <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">
-                  Titik Antar
-                </span>
-              </div>
-              <button
-                onClick={handleAutoDetect}
-                className="bg-teal-600 text-white px-4 py-2 rounded-full text-[9px] font-black uppercase shadow-lg active:scale-90 transition-all"
-              >
-                <Navigation size={10} className="inline mr-1" /> GPS
-              </button>
-            </div>
-            <div className="relative rounded-2xl overflow-hidden border-2 border-slate-100">
-              {isLoaded ? (
-                <GoogleMap
-                  mapContainerStyle={mapContainerStyle}
-                  center={deliveryCoords}
-                  zoom={16}
-                  options={{
-                    disableDefaultUI: true,
-                    gestureHandling: "greedy",
-                  }}
-                >
-                  <MarkerF
-                    position={deliveryCoords}
-                    draggable={true}
-                    onDragEnd={(e) => {
-                      const newLat = e.latLng?.lat() || 0;
-                      const newLng = e.latLng?.lng() || 0;
-                      setDeliveryCoords({ lat: newLat, lng: newLng });
-                      updateLogistics(newLat, newLng);
-                    }}
-                  />
-                </GoogleMap>
-              ) : (
-                <div className="h-[200px] bg-slate-200 animate-pulse" />
-              )}
-              {isCalculating && (
-                <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center z-10">
-                  <div className="bg-slate-900 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase flex items-center gap-2 shadow-2xl">
-                    <Loader2 size={14} className="animate-spin" /> Sinkron
-                    Ongkir...
+                <div className="pt-3 border-t-2 border-dashed border-slate-100 flex justify-between items-end">
+                  <div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      Total Tagihan
+                    </span>
+                    {/* ✅ NILAI TAGIHAN BERWARNA ORANGE-600 */}
+                    <h3
+                      className={`text-2xl font-black tracking-tighter leading-none mt-1 ${isOutOfRange ? "text-red-500" : "text-orange-600"}`}
+                    >
+                      Rp {totalTagihanValue.toLocaleString()}
+                    </h3>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
-            <p className="text-[10px] font-bold text-slate-500 px-2 uppercase leading-relaxed">
-              {profile?.address || "Alamat belum diatur"}
-            </p>
-          </div>
 
-          {/* 3. RINCIAN PEMBAYARAN (FINANSIAL) */}
-          <div className="bg-white p-6 rounded-[2rem] border-2 border-white shadow-sm space-y-5">
-            <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
-              <ReceiptText size={18} className="text-teal-600" />
-              <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">
-                Rincian Pembayaran
-              </h3>
-            </div>
-            <div className="space-y-3">
-              <div className="flex justify-between text-xs font-bold text-slate-500 uppercase">
-                <span>Total Belanja</span>
-                <span className="text-slate-900 font-black">
-                  Rp {subtotal.toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between text-xs font-bold text-slate-500 uppercase">
-                <span>
-                  Biaya Kurir ({shippingDetails?.distance?.toFixed(1) || 0} KM)
-                </span>
-                <span className="text-slate-900 font-black">
-                  Rp {shippingDetails?.total_ongkir?.toLocaleString() || 0}
-                </span>
-              </div>
-              <div className="flex justify-between text-xs font-bold text-slate-500 uppercase">
-                <span>Biaya Pelayanan</span>
-                <span className="text-teal-600 font-black">
-                  Rp {shippingDetails?.buyer_service_fee?.toLocaleString() || 0}
-                </span>
-              </div>
-            </div>
-            <div className="pt-4 border-t-2 border-dashed border-slate-100 flex justify-between items-end">
-              <div>
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  Total Tagihan
-                </span>
-                <h3
-                  className={`text-3xl font-black tracking-tighter mt-1 ${isOutOfRange ? "text-red-500" : "text-teal-600"}`}
-                >
-                  Rp {totalToPay.toLocaleString()}
-                </h3>
-              </div>
-              {isOutOfRange && (
-                <div className="text-red-500 animate-pulse flex items-center gap-1">
-                  <AlertTriangle size={18} />
-                  <span className="text-[9px] font-black uppercase">Jauh</span>
+            {/* 2. Maps Area */}
+            <div className="bg-slate-50 p-4 rounded-[2rem] border-2 border-slate-100 space-y-4">
+              <div className="flex justify-between items-center px-1">
+                <div className="flex items-center gap-2">
+                  <MapPin size={18} className="text-red-600" />
+                  <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">
+                    Titik Antar
+                  </span>
                 </div>
-              )}
+                <button
+                  onClick={handleAutoDetect}
+                  className="bg-teal-600 text-white px-3 py-1.5 rounded-full text-[9px] font-black uppercase shadow-md active:scale-95 transition-all"
+                >
+                  <Navigation size={10} className="inline mr-1" /> Auto GPS
+                </button>
+              </div>
+              <div className="relative rounded-2xl overflow-hidden border-2 border-white shadow-md">
+                {isLoaded ? (
+                  <GoogleMap
+                    mapContainerStyle={mapContainerStyle}
+                    center={deliveryCoords}
+                    zoom={16}
+                    options={{
+                      disableDefaultUI: true,
+                      gestureHandling: "greedy",
+                    }}
+                  >
+                    <MarkerF
+                      position={deliveryCoords}
+                      draggable={true}
+                      onDragEnd={(e) => {
+                        const newLat = e.latLng?.lat() || 0;
+                        const newLng = e.latLng?.lng() || 0;
+                        setDeliveryCoords({ lat: newLat, lng: newLng });
+                        updateLogistics(newLat, newLng);
+                      }}
+                    />
+                  </GoogleMap>
+                ) : (
+                  <div className="h-[220px] bg-slate-200 animate-pulse" />
+                )}
+              </div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase leading-tight px-1 text-left">
+                {profile?.address || "Alamat tidak terbaca"}
+              </p>
             </div>
-          </div>
 
-          {/* TOMBOL BAYAR GAGAH */}
-          <button
-            disabled={
-              loading || isCalculating || isOutOfRange || cart.length === 0
-            }
-            onClick={handlePayment}
-            className={`w-full py-6 mb-10 rounded-[2rem] font-black uppercase text-sm tracking-[0.4em] shadow-2xl flex items-center justify-center gap-3 transition-all active:scale-95 ${
-              isOutOfRange
-                ? "bg-slate-300 text-slate-500"
-                : "bg-slate-900 text-white hover:bg-teal-600 shadow-slate-300"
-            }`}
-          >
-            {loading ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <>
-                KONFIRMASI BAYAR <ArrowRight size={20} />
-              </>
+            {/* 3. Tombol Bayar */}
+            <div className="pt-4">
+              <button
+                disabled={
+                  loading || isCalculating || isOutOfRange || cart.length === 0
+                }
+                onClick={handlePayment}
+                className={`w-full py-5 rounded-[2rem] font-black uppercase text-sm tracking-[0.3em] shadow-2xl flex items-center justify-center gap-3 transition-all active:scale-95 ${
+                  isOutOfRange
+                    ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+                    : "bg-slate-900 text-white hover:bg-teal-600 shadow-orange-500/10"
+                }`}
+              >
+                {loading ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <>
+                    {isOutOfRange ? "JARAK TERLALU JAUH" : "KONFIRMASI BAYAR"}
+                    <ArrowRight size={20} />
+                  </>
+                )}
+              </button>
+            </div>
+
+            {isOutOfRange && (
+              <div className="bg-red-50 text-red-600 p-4 rounded-2xl flex items-center gap-3 border border-red-100 text-left">
+                <AlertTriangle size={20} />
+                <p className="text-[10px] font-black uppercase">
+                  Mohon geser pin lokasi lebih dekat ke area pasar.
+                </p>
+              </div>
             )}
-          </button>
+          </div>
         </div>
       </div>
     </div>
