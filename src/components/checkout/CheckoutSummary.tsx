@@ -1,7 +1,10 @@
 import React from "react";
 import { useMarket } from "../../contexts/MarketContext";
+import { useAuth } from "../../contexts/AuthContext"; // ✅ 1. Import Auth
+import { useToast } from "../../contexts/ToastContext"; // ✅ 2. Import Toast
+import { useNavigate } from "react-router-dom"; // ✅ 3. Import Navigate
 import { calculateMultiPickupOngkir } from "../../utils/financeHelpers";
-import { ShoppingBag, Truck, Store, ArrowRight } from "lucide-react";
+import { ShoppingBag, Truck, Store, ArrowRight, UserPlus } from "lucide-react";
 
 interface Props {
   distance: string;
@@ -15,6 +18,11 @@ export const CheckoutSummary: React.FC<Props> = ({
   onCheckout,
 }) => {
   const { cart } = useMarket();
+
+  // ✅ PANGGIL HOOKS DI SINI
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const navigate = useNavigate();
 
   // 1. Hitung Subtotal Barang
   const subtotal = cart.reduce(
@@ -32,6 +40,21 @@ export const CheckoutSummary: React.FC<Props> = ({
 
   // 3. Total Akhir
   const totalBayar = subtotal + pricing.totalToBuyer;
+
+  // ✅ FUNGSI SATPAM (PENGHADANG TAMU)
+  const handleSecurityCheck = () => {
+    if (!user) {
+      // JIKA TAMU: Tampilkan pesan & lempar ke Register
+      showToast("Eits, daftar member dulu ya biar aman!", "info");
+
+      // Kita bawa parameter '?redirect=checkout' agar RegisterPage tahu
+      // kalau user ini asalnya dari keranjang belanja
+      navigate("/register?redirect=checkout");
+    } else {
+      // JIKA MEMBER: Lanjut buka modal pembayaran
+      onCheckout();
+    }
+  };
 
   if (cart.length === 0) return null;
 
@@ -74,13 +97,13 @@ export const CheckoutSummary: React.FC<Props> = ({
           <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">
             Total Bayar
           </p>
-          <h3 className="text-2xl font-black text-slate-900 tracking-tighter leading-none">
+          <h3 className="text-2xl font-black text-slate-900 tracking-tighter leading-none italic">
             Rp {totalBayar.toLocaleString()}
           </h3>
         </div>
 
         <button
-          onClick={onCheckout}
+          onClick={handleSecurityCheck} // ✅ GANTI onClick LAMA DENGAN SATPAM KITA
           disabled={pricing.merchantCount > 3}
           className={`px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] flex items-center gap-3 transition-all active:scale-95 shadow-xl ${
             pricing.merchantCount > 3
@@ -92,7 +115,9 @@ export const CheckoutSummary: React.FC<Props> = ({
             "Max 3 Toko"
           ) : (
             <>
-              Checkout <ArrowRight size={16} />
+              {/* Teks Tombol Berubah Sesuai Status */}
+              {user ? "BAYAR SEKARANG" : "DAFTAR & BAYAR"}
+              <ArrowRight size={16} />
             </>
           )}
         </button>

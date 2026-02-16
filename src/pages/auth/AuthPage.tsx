@@ -27,6 +27,9 @@ export const AuthPage = () => {
   const params = new URLSearchParams(location.search);
   const roleParam = params.get("role");
 
+  // ✅ TANGKAP PARAMETER REDIRECT (Kabel untuk Tamu ke Member)
+  const redirectTarget = params.get("redirect");
+
   const [uiConfig, setUiConfig] = useState({
     title: "Masuk",
     subtitle: "Silakan masuk ke akun Anda",
@@ -79,7 +82,7 @@ export const AuthPage = () => {
         finalEmail = `${finalEmail}@pasarqu.com`;
       }
 
-      // 1. SIGN IN (Cek Auth)
+      // 1. SIGN IN
       const { data, error } = await supabase.auth.signInWithPassword({
         email: finalEmail,
         password: formData.password,
@@ -88,7 +91,7 @@ export const AuthPage = () => {
       if (error) throw error;
 
       if (data.user) {
-        // 2. AMBIL DATA PROFILE (Cek Role & Profil Status)
+        // 2. AMBIL DATA PROFILE
         const { data: profile } = await supabase
           .from("profiles")
           .select("role, name, is_verified, status")
@@ -97,7 +100,6 @@ export const AuthPage = () => {
 
         if (profile) {
           // --- VALIDASI ROLE ---
-          // Pastikan user login di portal yang benar (kecuali customer/super admin)
           if (
             roleParam &&
             roleParam !== profile.role &&
@@ -113,31 +115,30 @@ export const AuthPage = () => {
           }
 
           // --- VALIDASI STATUS 1 (PROFIL) ---
-          // Cek apakah profil sudah disetujui Admin
           if (
             profile.role !== "CUSTOMER" &&
             (profile.status !== "APPROVED" || !profile.is_verified)
           ) {
             showToast("Pendaftaran sedang ditinjau Admin.", "info");
-            navigate("/waiting-approval"); // Lempar ke ruang tunggu
+            navigate("/waiting-approval");
             return;
           }
 
-          // --- VALIDASI STATUS 2 (OPERASIONAL TOKO/KURIR) ---
-          // Ini adalah "Kabel Tambahan" untuk memastikan tabel merchants/couriers juga sudah aktif
+          // --- VALIDASI STATUS 2 (MERCHANT) ---
           if (profile.role === "MERCHANT") {
             const { data: merchant } = await supabase
               .from("merchants")
               .select("status")
-              .eq("user_id", data.user.id) // Cek via user_id
+              .eq("user_id", data.user.id)
               .maybeSingle();
 
-            // Jika data toko belum ada atau belum APPROVED
             if (!merchant || merchant.status !== "APPROVED") {
               navigate("/waiting-approval");
               return;
             }
-          } else if (profile.role === "COURIER") {
+          }
+          // --- VALIDASI STATUS 3 (COURIER) ---
+          else if (profile.role === "COURIER") {
             const { data: courier } = await supabase
               .from("couriers")
               .select("status")
@@ -151,18 +152,25 @@ export const AuthPage = () => {
           }
 
           // --- JIKA SEMUA LOLOS ---
-          showToast(`Selamat bekerja, ${profile.name}!`, "success");
+          showToast(`Selamat datang kembali, ${profile.name}!`, "success");
+
           setTimeout(() => {
-            if (profile.role === "MERCHANT") navigate("/merchant-dashboard");
-            else if (profile.role === "COURIER") navigate("/courier-dashboard");
-            else if (profile.role === "LOCAL_ADMIN") navigate("/admin-wilayah");
-            else if (profile.role === "SUPER_ADMIN") navigate("/super-admin");
-            else navigate("/");
+            // ✅ LOGIKA REDIRECT PINTAR (BALIK KE CHECKOUT)
+            if (redirectTarget === "checkout") {
+              navigate("/"); // Kembali ke home (nanti modal checkout terbuka otomatis)
+            } else {
+              if (profile.role === "MERCHANT") navigate("/merchant-dashboard");
+              else if (profile.role === "COURIER")
+                navigate("/courier-dashboard");
+              else if (profile.role === "LOCAL_ADMIN")
+                navigate("/admin-wilayah");
+              else if (profile.role === "SUPER_ADMIN") navigate("/super-admin");
+              else navigate("/");
+            }
           }, 800);
         }
       }
     } catch (error: any) {
-      // Pastikan logout jika terjadi error agar sesi bersih
       await supabase.auth.signOut();
       showToast("Email/HP atau Password salah", "error");
     } finally {
@@ -199,17 +207,17 @@ export const AuthPage = () => {
       >
         <div className="w-full max-w-[1000px] flex items-center justify-center md:justify-end min-h-[500px]">
           <div className="hidden lg:flex flex-col text-white mr-20 max-w-md animate-in slide-in-from-left duration-500 text-left">
-            <h1 className="text-5xl font-black mb-4 leading-tight uppercase tracking-tighter">
+            <h1 className="text-5xl font-black mb-4 leading-tight uppercase tracking-tighter italic">
               Mulai Langkah <br /> Digital Anda.
             </h1>
-            <p className="text-lg font-medium opacity-80 leading-relaxed uppercase text-[12px] tracking-widest">
+            <p className="text-lg font-medium opacity-80 leading-relaxed uppercase text-[12px] tracking-widest italic">
               {uiConfig.subtitle}. Bersama Pasarqu, kelola operasional lebih
               cerdas dan efisien.
             </p>
           </div>
 
           <div className="bg-white w-full max-w-[400px] rounded-[2rem] shadow-2xl overflow-hidden p-10 text-left">
-            <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2 uppercase tracking-tight">
+            <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2 uppercase tracking-tight italic">
               {uiConfig.icon} {uiConfig.title}
             </h2>
 
@@ -274,8 +282,9 @@ export const AuthPage = () => {
                 <GoogleLoginButton />
                 <div className="mt-8 text-center text-[11px] font-bold text-slate-400 uppercase tracking-widest">
                   Baru di Pasarqu?{" "}
+                  {/* ✅ TERUSKAN PARAMETER REDIRECT KE HALAMAN DAFTAR */}
                   <Link
-                    to="/register"
+                    to={`/register?redirect=${redirectTarget || ""}`}
                     className="text-teal-600 font-black hover:underline ml-1"
                   >
                     Daftar
@@ -285,7 +294,11 @@ export const AuthPage = () => {
             ) : (
               <div className="mt-10 pt-6 border-t border-slate-50 space-y-4">
                 <button
-                  onClick={() => navigate(uiConfig.regPath)}
+                  onClick={() =>
+                    navigate(
+                      `${uiConfig.regPath}?redirect=${redirectTarget || ""}`,
+                    )
+                  }
                   className="w-full py-3 bg-teal-50 border border-teal-100 rounded-xl text-[10px] font-black text-teal-600 uppercase tracking-widest hover:bg-teal-600 hover:text-white transition-all flex items-center justify-center gap-2"
                 >
                   {uiConfig.regLabel} <ArrowRight size={14} />

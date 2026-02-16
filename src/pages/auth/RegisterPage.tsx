@@ -1,35 +1,34 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
-import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api";
+import { GoogleMap, useJsApiLoader, MarkerF } from "@react-google-maps/api";
 import { supabase } from "../../lib/supabaseClient";
 import { useToast } from "../../contexts/ToastContext";
+import { GoogleLoginButton } from "../../components/GoogleLoginButton";
 import {
   Eye,
   EyeOff,
   MapPin,
   Phone,
-  Mail,
   Lock,
   Loader2,
   Navigation,
   ChevronLeft,
+  User,
 } from "lucide-react";
 
-// Style Map
 const mapContainerStyle = {
   width: "100%",
   height: "200px",
-  borderRadius: "8px",
+  borderRadius: "16px",
 };
+
 const defaultCenter = { lat: -6.2, lng: 106.816666 };
 
 export const RegisterPage = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
-
-  // 1. TANGKAP PARAMETER REDIRECT (KUNCI UTAMA)
   const [searchParams] = useSearchParams();
-  const redirectTarget = searchParams.get("redirect"); // Isinya akan "checkout" jika dari keranjang
+  const redirectTarget = searchParams.get("redirect");
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -52,13 +51,14 @@ export const RegisterPage = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setCoordinates({
+          const newPos = {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
-          });
-          showToast("Lokasi terkunci akurat!", "success");
+          };
+          setCoordinates(newPos);
+          showToast("Lokasi akurat terkunci!", "success");
         },
-        () => showToast("Aktifkan GPS untuk akurasi pengiriman", "error"),
+        () => showToast("Gagal akses GPS.", "error"),
       );
     }
   };
@@ -75,14 +75,13 @@ export const RegisterPage = () => {
 
     try {
       if (formData.password.length < 6)
-        throw new Error("Password min. 6 karakter");
+        throw new Error("Password minimal 6 karakter");
 
       const finalEmail =
         formData.email.trim() !== ""
           ? formData.email
           : `${formData.phone.replace(/\D/g, "")}@pasarqu.user`;
 
-      // 1. Daftar Auth
       const { data, error } = await supabase.auth.signUp({
         email: finalEmail,
         password: formData.password,
@@ -91,15 +90,13 @@ export const RegisterPage = () => {
 
       if (error) {
         if (error.message.includes("already registered")) {
-          showToast("Akun sudah ada. Silakan Login.", "info");
-          // Redirect login juga harus membawa parameter checkout
+          showToast("Akun sudah ada. Silakan login.", "info");
           navigate(`/login?redirect=${redirectTarget || ""}`);
           return;
         }
         throw error;
       }
 
-      // 2. Simpan Data Profil
       if (data.user) {
         const { error: profileError } = await supabase.from("profiles").insert({
           id: data.user.id,
@@ -114,21 +111,12 @@ export const RegisterPage = () => {
         });
 
         if (profileError) throw profileError;
+        showToast("Pendaftaran Berhasil!", "success");
 
-        showToast("Registrasi Berhasil!", "success");
-
-        // 3. LOGIKA REDIRECT (PERBAIKAN DI SINI)
         if (redirectTarget === "checkout") {
-          // Beri jeda sedikit agar toast terbaca, lalu lempar ke Checkout
-          showToast("Mengalihkan ke pembayaran...", "info");
-          setTimeout(() => {
-            navigate("/checkout"); // KE HALAMAN PEMBAYARAN
-          }, 1000);
+          setTimeout(() => navigate("/?openCheckout=true"), 1000);
         } else {
-          // Jika daftar biasa, baru ke Beranda
-          setTimeout(() => {
-            navigate("/"); // KE HALAMAN BERANDA
-          }, 1500);
+          setTimeout(() => navigate("/"), 1500);
         }
       }
     } catch (error: any) {
@@ -139,16 +127,16 @@ export const RegisterPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col font-sans bg-slate-50">
+    <div className="min-h-screen flex flex-col bg-slate-50 font-sans antialiased text-left italic">
       {/* HEADER */}
-      <header className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="max-w-[1200px] mx-auto px-4 h-16 md:h-20 flex items-center justify-between">
+      <header className="bg-white border-b-2 border-teal-600 sticky top-0 z-50 shadow-sm">
+        <div className="max-w-[1200px] mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}
-              className="md:hidden text-slate-500"
+              className="p-2 text-slate-400 active:scale-90 transition-transform"
             >
-              <ChevronLeft />
+              <ChevronLeft size={24} />
             </button>
             <div
               onClick={() => navigate("/")}
@@ -156,187 +144,188 @@ export const RegisterPage = () => {
             >
               PASARQU
             </div>
-            <h1 className="hidden md:block text-xl text-slate-800 font-medium ml-4">
-              {redirectTarget === "checkout"
-                ? "Lengkapi Data Pengiriman"
-                : "Daftar Akun"}
-            </h1>
           </div>
-          <Link
-            to="/help"
-            className="text-teal-600 text-sm font-bold hover:underline"
-          >
-            Bantuan
-          </Link>
         </div>
       </header>
 
-      {/* BODY */}
-      <div
-        className="flex-1 flex items-center justify-center md:py-10"
-        style={{
-          background:
-            window.innerWidth >= 768
-              ? "linear-gradient(135deg, #0d9488 0%, #115e59 100%)"
-              : "#FFFFFF",
-        }}
-      >
-        <div className="w-full max-w-[1040px] flex items-start justify-center lg:justify-between px-4">
-          {/* Slogan Desktop */}
-          <div className="hidden lg:flex flex-col justify-center min-h-[480px] text-white max-w-[500px] animate-in slide-in-from-left-10 duration-700">
-            <h2 className="text-5xl font-black leading-tight mb-6">
-              Belanja Cepat <br /> Tanpa Ribet
+      <main className="flex-1 flex items-center justify-center p-4 md:p-10 bg-slate-50 lg:bg-teal-950">
+        <div className="w-full max-w-[1000px] flex flex-col lg:flex-row items-center justify-between gap-10">
+          <div className="hidden lg:block text-white max-w-md space-y-6">
+            <h2 className="text-6xl font-black leading-tight uppercase tracking-tighter">
+              Gabung <br /> Sekarang.
             </h2>
-            <p className="text-lg opacity-90 font-medium leading-relaxed">
-              Satu akun untuk semua kebutuhan pasar Anda. Daftar sekarang dan
-              nikmati pengiriman instan.
+            <p className="text-lg text-teal-100 opacity-80 font-bold uppercase tracking-wider">
+              Nikmati akses belanja pasar tradisional dalam genggaman.
             </p>
           </div>
 
-          {/* Form Card */}
-          <div className="w-full max-w-[420px] bg-white rounded-none md:rounded-lg shadow-none md:shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-            <div className="p-0 md:p-8 space-y-6">
-              <div className="hidden md:flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-slate-800">Data Diri</h3>
-                {redirectTarget === "checkout" && (
-                  <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-1 rounded font-bold uppercase">
-                    Mode Belanja
-                  </span>
-                )}
+          {/* FORM CARD */}
+          <div className="w-full max-w-[440px] bg-white rounded-[3rem] shadow-2xl border-4 border-white overflow-hidden animate-in zoom-in-95 duration-300 mb-20 md:mb-0">
+            <div className="p-8 md:p-10 space-y-6">
+              <div className="border-l-8 border-teal-600 pl-4 mb-4">
+                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">
+                  Pendaftaran
+                </h3>
               </div>
 
-              <form onSubmit={handleRegister} className="space-y-4">
-                {/* Nama */}
-                <div className="space-y-1">
-                  <input
-                    type="text"
-                    name="fullName"
-                    placeholder="Nama Lengkap"
-                    value={formData.fullName}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-sm focus:border-teal-600 outline-none text-sm transition-all"
-                    required
-                  />
-                </div>
+              {/* ✅ 1. TOMBOL GOOGLE DI PALING ATAS */}
+              <div className="space-y-4">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center italic">
+                  Cepat & Instan
+                </p>
+                <GoogleLoginButton />
+              </div>
 
-                {/* Ponsel */}
-                <div className="space-y-1">
-                  <input
-                    type="tel"
-                    name="phone"
-                    placeholder="Nomor Telepon/WA"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-sm focus:border-teal-600 outline-none text-sm transition-all"
-                    required
-                  />
+              {/* Garis Pemisah */}
+              <div className="relative my-8 text-center">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t-2 border-slate-100"></div>
                 </div>
+                <span className="relative bg-white px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
+                  Atau Isi Manual
+                </span>
+              </div>
 
-                {/* Peta Google Maps */}
-                <div className="space-y-2 border border-slate-200 p-3 rounded-sm bg-slate-50">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
-                      <MapPin size={12} /> Titik Lokasi Pengiriman
-                    </label>
-                    <button
-                      type="button"
-                      onClick={getCurrentLocation}
-                      className="text-[10px] font-bold text-teal-600 border border-teal-600 px-2 py-1 rounded hover:bg-teal-50 flex items-center gap-1"
-                    >
-                      <Navigation size={10} /> GPS Otomatis
-                    </button>
+              {/* Form Isian Manual */}
+              <form onSubmit={handleRegister} className="space-y-5">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-900 uppercase ml-4 tracking-[0.2em]">
+                    Nama Lengkap
+                  </label>
+                  <div className="relative group">
+                    <User
+                      className="absolute left-5 top-4 text-teal-600"
+                      size={18}
+                    />
+                    <input
+                      required
+                      name="fullName"
+                      placeholder="NAMA LENGKAP"
+                      value={formData.fullName}
+                      onChange={handleChange}
+                      className="w-full bg-teal-50/50 border-2 border-teal-600 rounded-2xl py-4 pl-14 pr-6 text-sm font-black text-slate-800 focus:bg-white focus:ring-4 focus:ring-teal-500/20 outline-none transition-all uppercase"
+                    />
                   </div>
-                  {isLoaded ? (
-                    <GoogleMap
-                      mapContainerStyle={mapContainerStyle}
-                      center={coordinates}
-                      zoom={15}
-                      onClick={(e) =>
-                        e.latLng &&
-                        setCoordinates({
-                          lat: e.latLng.lat(),
-                          lng: e.latLng.lng(),
-                        })
-                      }
-                      options={{
-                        disableDefaultUI: true,
-                        gestureHandling: "cooperative",
-                      }}
-                    >
-                      <Marker
-                        position={coordinates}
-                        draggable={true}
-                        onDragEnd={(e) =>
-                          e.latLng &&
-                          setCoordinates({
-                            lat: e.latLng.lat(),
-                            lng: e.latLng.lng(),
-                          })
-                        }
-                      />
-                    </GoogleMap>
-                  ) : (
-                    <div className="h-[200px] bg-slate-200 flex items-center justify-center text-xs text-slate-500">
-                      Memuat Peta...
-                    </div>
-                  )}
-                  <p className="text-[10px] text-slate-400 italic text-center">
-                    * Pastikan pin merah sesuai lokasi rumah
-                  </p>
                 </div>
 
-                {/* Alamat Text */}
-                <div className="space-y-1">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-900 uppercase ml-4 tracking-[0.2em]">
+                    WhatsApp
+                  </label>
+                  <div className="relative group">
+                    <Phone
+                      className="absolute left-5 top-4 text-teal-600"
+                      size={18}
+                    />
+                    <input
+                      required
+                      type="tel"
+                      name="phone"
+                      placeholder="NOMOR HP AKTIF"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      className="w-full bg-teal-50/50 border-2 border-teal-600 rounded-2xl py-4 pl-14 pr-6 text-sm font-black text-slate-800 focus:bg-white focus:ring-4 focus:ring-teal-500/20 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-teal-600 p-1 rounded-3xl shadow-lg">
+                  <div className="bg-white p-4 rounded-[1.6rem] space-y-4">
+                    <div className="flex justify-between items-center px-1">
+                      <label className="text-[10px] font-black text-teal-600 uppercase tracking-widest flex items-center gap-2">
+                        <MapPin size={14} className="text-red-600" /> Lokasi
+                        Rumah
+                      </label>
+                      <button
+                        type="button"
+                        onClick={getCurrentLocation}
+                        className="text-[9px] font-black text-white bg-teal-600 px-4 py-2 rounded-full flex items-center gap-1 uppercase hover:bg-slate-900 transition-all shadow-md"
+                      >
+                        <Navigation size={10} /> GPS AUTO
+                      </button>
+                    </div>
+
+                    {isLoaded ? (
+                      <div className="rounded-xl overflow-hidden border-2 border-teal-100 shadow-inner">
+                        <GoogleMap
+                          mapContainerStyle={mapContainerStyle}
+                          center={coordinates}
+                          zoom={15}
+                          options={{
+                            disableDefaultUI: true,
+                            gestureHandling: "greedy",
+                          }}
+                        >
+                          <MarkerF
+                            position={coordinates}
+                            draggable={true}
+                            onDragEnd={(e) =>
+                              e.latLng &&
+                              setCoordinates({
+                                lat: e.latLng.lat(),
+                                lng: e.latLng.lng(),
+                              })
+                            }
+                          />
+                        </GoogleMap>
+                      </div>
+                    ) : (
+                      <div className="h-[200px] bg-slate-100 rounded-xl flex items-center justify-center text-xs font-black text-teal-600 uppercase">
+                        Mencari Koordinat...
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-900 uppercase ml-4 tracking-[0.2em]">
+                    Detail Alamat Rumah
+                  </label>
                   <textarea
+                    required
                     name="address"
-                    placeholder="Detail Alamat (Jalan, No. Rumah, Patokan)"
+                    placeholder="DETAIL ALAMAT (RT/RW, PATOKAN)"
                     value={formData.address}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-sm focus:border-teal-600 outline-none text-sm transition-all resize-none h-20"
-                    required
+                    className="w-full bg-teal-50/50 border-2 border-teal-600 rounded-2xl py-4 px-6 text-sm font-black text-slate-800 focus:bg-white focus:ring-4 focus:ring-teal-500/20 outline-none h-24 resize-none transition-all uppercase"
                   />
                 </div>
 
-                {/* Email (Opsional) */}
-                <div className="space-y-1">
-                  <input
-                    type="email"
-                    name="email"
-                    placeholder="Email (Opsional)"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-sm focus:border-teal-600 outline-none text-sm transition-all"
-                  />
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-900 uppercase ml-4 tracking-[0.2em]">
+                    Password
+                  </label>
+                  <div className="relative group">
+                    <Lock
+                      className="absolute left-5 top-4 text-teal-600"
+                      size={18}
+                    />
+                    <input
+                      required
+                      type={showPassword ? "text" : "password"}
+                      name="password"
+                      placeholder="MIN. 6 DIGIT"
+                      value={formData.password}
+                      onChange={handleChange}
+                      className="w-full bg-teal-50/50 border-2 border-teal-600 rounded-2xl py-4 pl-14 pr-12 text-sm font-black text-slate-800 focus:bg-white focus:ring-4 focus:ring-teal-500/20 outline-none transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-5 top-4 text-teal-600"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Password */}
-                <div className="relative group space-y-1">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    name="password"
-                    placeholder="Password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-sm focus:border-teal-600 outline-none text-sm transition-all"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600"
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-
-                {/* Tombol Submit */}
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-teal-600 text-white font-bold py-3.5 rounded-sm shadow hover:bg-teal-700 active:scale-95 transition-all uppercase text-sm mt-4 tracking-wide"
+                  className="w-full bg-slate-900 text-white font-black py-5 rounded-[2rem] shadow-2xl hover:bg-teal-600 active:scale-95 transition-all uppercase text-sm tracking-[0.4em] flex items-center justify-center gap-3 mt-4"
                 >
                   {loading ? (
-                    <Loader2 className="animate-spin mx-auto" />
+                    <Loader2 className="animate-spin" />
                   ) : redirectTarget === "checkout" ? (
                     "SIMPAN & BAYAR"
                   ) : (
@@ -345,23 +334,21 @@ export const RegisterPage = () => {
                 </button>
               </form>
 
-              <div className="mt-6 text-center text-sm">
-                <span className="text-slate-400">Sudah punya akun? </span>
-                <Link
-                  to={`/login?redirect=${redirectTarget || ""}`}
-                  className="text-teal-600 font-bold hover:underline"
-                >
-                  Log in
-                </Link>
-              </div>
-
-              <div className="md:hidden mt-8 text-center text-[10px] text-slate-400 px-4">
-                Dengan mendaftar, Anda menyetujui Ketentuan Layanan Pasarqu.
+              <div className="text-center pt-6 border-t border-slate-50">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  Sudah Ada Akun?{" "}
+                  <Link
+                    to={`/login?redirect=${redirectTarget || ""}`}
+                    className="text-teal-600 hover:text-slate-900 underline ml-1"
+                  >
+                    Login Di Sini
+                  </Link>
+                </p>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };

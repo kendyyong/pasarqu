@@ -4,10 +4,8 @@ import { supabase } from "../../lib/supabaseClient";
 import {
   ArrowLeft,
   MapPin,
-  Star,
   CheckCircle,
   MessageCircle,
-  Store,
   Search,
   Share2,
   MoreVertical,
@@ -34,25 +32,49 @@ export const ShopDetail: React.FC = () => {
   const fetchShopData = async () => {
     setLoading(true);
     try {
-      // 1. Ambil data profil merchant
-      const { data: shopData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", merchantId)
+      // 1. Ambil data profil DAN status merchant menggunakan Join Table
+      const { data: shopData, error: shopError } = await supabase
+        .from("merchants")
+        .select(
+          `
+          status,
+          profiles:user_id (
+            name,
+            address,
+            avatar_url,
+            phone
+          )
+        `,
+        )
+        .eq("user_id", merchantId)
         .single();
 
-      if (shopData) setShop(shopData);
+      if (shopError || !shopData || shopData.status !== "APPROVED") {
+        console.warn("Toko tidak aktif atau tidak ditemukan");
+        setShop(null);
+      } else {
+        // FIX: Casting ke 'any' untuk menghindari error TypeScript pada Join Table
+        const profileData: any = shopData.profiles;
 
-      // 2. Ambil produk yang sudah APPROVED (Huruf besar sesuai standar DB)
+        setShop({
+          shop_name: profileData?.name || "Toko Pasarqu",
+          avatar_url: profileData?.avatar_url,
+          address: profileData?.address,
+          phone_number: profileData?.phone,
+          is_verified: true,
+        });
+      }
+
+      // 2. Ambil produk yang sudah APPROVED
       const { data: prodData, error } = await supabase
         .from("products")
         .select("*, categories(name)")
         .eq("merchant_id", merchantId)
-        .eq("status", "APPROVED") // Pastikan APPROVED huruf besar
+        .eq("status", "APPROVED")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      if (prodData) setProducts(prodData);
+      setProducts(prodData || []);
     } catch (error) {
       console.error("Gagal mengambil data toko:", error);
     } finally {
@@ -63,8 +85,12 @@ export const ShopDetail: React.FC = () => {
   const handleWhatsApp = () => {
     if (shop?.phone_number) {
       const msg = `Halo ${shop.shop_name}, saya melihat produk Anda di Pasarqu...`;
+      const cleanPhone = shop.phone_number.replace(/\D/g, "");
+      const finalPhone = cleanPhone.startsWith("0")
+        ? "62" + cleanPhone.slice(1)
+        : cleanPhone;
       window.open(
-        `https://wa.me/${shop.phone_number.replace(/^0/, "62")}?text=${encodeURIComponent(msg)}`,
+        `https://wa.me/${finalPhone}?text=${encodeURIComponent(msg)}`,
         "_blank",
       );
     }
@@ -79,8 +105,17 @@ export const ShopDetail: React.FC = () => {
 
   if (!shop)
     return (
-      <div className="p-10 text-center font-black text-slate-400 uppercase">
-        Toko Tidak Ditemukan
+      <div className="p-20 text-center flex flex-col items-center justify-center">
+        <ShoppingBag size={64} className="text-slate-200 mb-4" />
+        <h2 className="font-black text-slate-400 uppercase tracking-widest leading-none">
+          Toko Sedang Libur / Tidak Aktif
+        </h2>
+        <button
+          onClick={() => navigate("/")}
+          className="mt-4 text-teal-600 font-bold text-sm uppercase tracking-tighter hover:underline"
+        >
+          Kembali ke Beranda
+        </button>
       </div>
     );
 
@@ -114,7 +149,7 @@ export const ShopDetail: React.FC = () => {
         <div className="max-w-[1200px] mx-auto p-6 md:p-10 relative z-10 flex flex-col md:flex-row gap-6 md:items-center">
           <div className="flex gap-4 items-center">
             <div className="relative shrink-0">
-              <div className="w-16 h-16 md:w-24 md:h-24 bg-white rounded-full p-0.5 shadow-lg border-2 border-teal-400 overflow-hidden">
+              <div className="w-16 h-16 md:w-24 md:h-24 bg-white rounded-full p-0.5 shadow-lg border-2 border-teal-400 overflow-hidden text-center flex items-center justify-center">
                 {shop.avatar_url ? (
                   <img
                     src={shop.avatar_url}
@@ -122,7 +157,7 @@ export const ShopDetail: React.FC = () => {
                     alt="logo"
                   />
                 ) : (
-                  <div className="w-full h-full bg-slate-100 rounded-full flex items-center justify-center text-2xl md:text-4xl font-black text-teal-600 uppercase">
+                  <div className="w-full h-full bg-slate-100 rounded-full flex items-center justify-center text-2xl md:text-4xl font-black text-teal-600 uppercase italic">
                     {shop.shop_name?.[0]}
                   </div>
                 )}
@@ -133,23 +168,23 @@ export const ShopDetail: React.FC = () => {
                 </div>
               )}
             </div>
-            <div className="flex-1">
-              <h1 className="text-lg md:text-3xl font-black text-white uppercase tracking-tight italic">
+            <div className="flex-1 text-left">
+              <h1 className="text-lg md:text-3xl font-black text-white uppercase tracking-tight italic leading-none">
                 {shop.shop_name}
               </h1>
               <div className="flex items-center gap-1.5 mt-1">
                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                <span className="text-[10px] text-teal-100 font-bold uppercase tracking-widest opacity-80">
+                <span className="text-[10px] text-teal-100 font-bold uppercase tracking-widest opacity-80 italic">
                   Online
                 </span>
               </div>
               <div className="flex gap-2 mt-3">
-                <button className="px-5 py-1.5 bg-white/10 border border-white/30 rounded-sm text-[10px] font-black uppercase text-white hover:bg-white/20 transition-all">
+                <button className="px-5 py-1.5 bg-white/10 border border-white/30 rounded-sm text-[10px] font-black uppercase text-white hover:bg-white/20 transition-all italic">
                   + Ikuti
                 </button>
                 <button
                   onClick={handleWhatsApp}
-                  className="px-5 py-1.5 bg-orange-500 border border-orange-500 rounded-sm text-[10px] font-black uppercase text-white flex items-center gap-1.5 hover:bg-orange-600 shadow-lg"
+                  className="px-5 py-1.5 bg-orange-500 border border-orange-500 rounded-sm text-[10px] font-black uppercase text-white flex items-center gap-1.5 hover:bg-orange-600 shadow-lg italic"
                 >
                   <MessageCircle size={12} fill="currentColor" /> Chat
                 </button>
@@ -188,8 +223,8 @@ export const ShopDetail: React.FC = () => {
 
       <div className="max-w-[1200px] mx-auto px-2 md:px-0 mt-2">
         {/* 4. LOKASI */}
-        <div className="bg-white p-4 mb-2 flex items-start gap-4 border border-slate-100 rounded-xl md:rounded-none">
-          <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-orange-500 shrink-0 border border-slate-100">
+        <div className="bg-white p-4 mb-2 flex items-start gap-4 border border-slate-100 rounded-xl md:rounded-none text-left">
+          <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-orange-500 shrink-0 border border-slate-100 shadow-sm">
             <MapPin size={20} />
           </div>
           <div>
@@ -197,19 +232,19 @@ export const ShopDetail: React.FC = () => {
               Lokasi Toko
             </p>
             <p className="text-xs font-bold text-slate-600 leading-relaxed italic">
-              {shop.address || "Belum ada alamat"}
+              {shop.address || "Belum ada alamat operasional"}
             </p>
           </div>
         </div>
 
-        {/* 5. DAFTAR PRODUK (GRID BARU) */}
+        {/* 5. DAFTAR PRODUK */}
         <div className="mt-4">
           <div className="bg-white p-4 border-b border-slate-100 flex justify-between items-center rounded-t-xl md:rounded-none">
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest italic">
               Etalase <span className="text-teal-600">Produk</span>
             </h3>
-            <span className="text-[9px] font-black text-orange-600 uppercase">
-              Total {products.length}
+            <span className="text-[9px] font-black text-orange-600 uppercase tracking-tighter">
+              Total {products.length} Item
             </span>
           </div>
 
@@ -219,7 +254,7 @@ export const ShopDetail: React.FC = () => {
                 <div
                   key={item.id}
                   onClick={() => navigate(`/product/${item.id}`)}
-                  className="bg-white rounded-xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer"
+                  className="bg-white rounded-xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer text-left"
                 >
                   <div className="aspect-square relative bg-slate-50">
                     <img
@@ -228,7 +263,7 @@ export const ShopDetail: React.FC = () => {
                       alt={item.name}
                     />
                     {item.is_po && (
-                      <div className="absolute top-2 left-2 bg-orange-600 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg flex items-center gap-1">
+                      <div className="absolute top-2 left-2 bg-orange-600 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg flex items-center gap-1 uppercase tracking-tighter italic animate-pulse">
                         <Timer size={10} /> PO {item.po_days} HARI
                       </div>
                     )}
@@ -241,7 +276,7 @@ export const ShopDetail: React.FC = () => {
                       {item.name}
                     </h4>
                     <div className="pt-2 border-t border-slate-50">
-                      <p className="text-sm font-black text-orange-600 tracking-tighter">
+                      <p className="text-sm font-black text-[#FF6600] tracking-tighter italic">
                         Rp {item.price.toLocaleString()}
                       </p>
                     </div>
@@ -254,7 +289,7 @@ export const ShopDetail: React.FC = () => {
                   size={48}
                   className="mx-auto text-slate-200 mb-4"
                 />
-                <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] italic">
                   Etalase sedang kosong
                 </p>
               </div>
@@ -266,7 +301,7 @@ export const ShopDetail: React.FC = () => {
       {/* 6. FLOATING CHAT */}
       <button
         onClick={handleWhatsApp}
-        className="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-orange-500 text-white rounded-full shadow-2xl flex items-center justify-center z-[90] border-4 border-white active:scale-90 transition-all"
+        className="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-orange-500 text-white rounded-full shadow-2xl flex items-center justify-center z-[90] border-4 border-white active:scale-90 transition-all hover:bg-orange-600"
       >
         <MessageCircle size={28} fill="currentColor" />
       </button>
@@ -277,10 +312,10 @@ export const ShopDetail: React.FC = () => {
 // Sub-components
 const Stat = ({ label, value }: any) => (
   <div className="text-center md:text-left">
-    <p className="text-orange-400 font-black text-sm md:text-xl leading-none mb-1">
+    <p className="text-orange-400 font-black text-sm md:text-xl leading-none mb-1 italic">
       {value}
     </p>
-    <p className="text-[8px] md:text-[10px] text-white/50 uppercase font-black tracking-tighter">
+    <p className="text-[8px] md:text-[10px] text-white/50 uppercase font-black tracking-tighter italic">
       {label}
     </p>
   </div>
@@ -289,7 +324,7 @@ const Stat = ({ label, value }: any) => (
 const Tab = ({ active, label, onClick }: any) => (
   <button
     onClick={onClick}
-    className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all ${active ? "text-orange-600 border-b-2 border-orange-500" : "text-slate-400 hover:text-slate-600"}`}
+    className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all italic ${active ? "text-orange-600 border-b-2 border-orange-500" : "text-slate-400 hover:text-slate-600"}`}
   >
     {label}
   </button>

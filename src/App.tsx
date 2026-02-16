@@ -67,8 +67,8 @@ const RoleBasedRedirect = () => {
 
   if (loading)
     return (
-      <div className="h-screen flex items-center justify-center bg-white font-sans">
-        <Loader2 className="animate-spin text-teal-600" size={40} />
+      <div className="h-screen flex items-center justify-center bg-white font-sans text-teal-600">
+        <Loader2 className="animate-spin" size={40} />
       </div>
     );
 
@@ -89,9 +89,10 @@ const RoleBasedRedirect = () => {
 };
 
 const MarketplaceApp = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const marketContext = useMarket();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Mengambil data cart dengan aman
   const cart = marketContext?.cart || [];
@@ -105,40 +106,35 @@ const MarketplaceApp = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [userName, setUserName] = useState<string>("Tamu");
-  const [userAvatar, setUserAvatar] = useState<string | null>(null);
 
   const totalCartItems = useMemo(() => {
     return cart.reduce((sum, item) => sum + (item.quantity || 0), 0);
   }, [cart]);
 
+  // ✅ LOGIKA SINKRONISASI: Jika user baru daftar/login dari alur checkout
   useEffect(() => {
-    const fetchUserData = async () => {
-      if (user?.id) {
-        try {
-          const { data: profileData } = await supabase
-            .from("profiles")
-            .select("full_name, avatar_url")
-            .eq("id", user.id)
-            .maybeSingle();
+    const params = new URLSearchParams(location.search);
+    if (params.get("openCheckout") === "true" && user) {
+      setTimeout(() => setIsCheckoutOpen(true), 500);
+      navigate("/", { replace: true });
+    }
+  }, [location, user, navigate]);
 
-          setUserName(
-            profileData?.full_name || user.email?.split("@")[0] || "User",
-          );
-          setUserAvatar(profileData?.avatar_url || null);
-        } catch (e) {
-          console.error("User fetch error", e);
-        }
-      } else {
-        setUserName("Tamu");
-        setUserAvatar(null);
-      }
-    };
-    fetchUserData();
-  }, [user]);
+  // ✅ LOGIKA SATPAM: Mencegat Tamu saat Klik Checkout
+  const handleCheckoutTrigger = () => {
+    setIsCartOpen(false); // Tutup drawer keranjang dulu
+
+    if (!user) {
+      // Jika tamu, lempar ke pendaftaran dengan tanda redirect
+      navigate("/register?redirect=checkout");
+    } else {
+      // Jika sudah member, langsung buka halaman bayar
+      setTimeout(() => setIsCheckoutOpen(true), 300);
+    }
+  };
 
   return (
-    <div className="bg-white min-h-screen">
+    <div className="bg-white min-h-screen font-sans">
       <MobileLayout
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -147,8 +143,8 @@ const MarketplaceApp = () => {
         cartCount={totalCartItems}
       >
         <AppHeader
-          userName={userName}
-          userAvatar={userAvatar}
+          userName={user ? profile?.name || "Member" : "Tamu"}
+          userAvatar={profile?.avatar_url || null}
           cartCount={totalCartItems}
           regionName={selectedMarket?.brandName || selectedMarket?.name}
           onCartClick={() => setIsCartOpen(true)}
@@ -158,18 +154,10 @@ const MarketplaceApp = () => {
           }
         />
 
-        {/* ✅ SOLUSI FINAL "JARAK TINGGI":
-            1. Ubah pt-[70px] menjadi pt-0 (atau pt-16 jika MobileLayout tidak punya padding).
-            2. Saya set `pt-0 md:pt-[10px]` dulu. Jika nanti kontennya malah 'ketutup' header,
-               berarti MobileLayout Juragan polos, baru nanti kita tambah pt-nya pelan-pelan.
-            3. Hapus semua margin negatif (-mt) karena kita mulai dari 0.
-        */}
-        <div className="w-full max-w-[1200px] mx-auto bg-white pt-0 md:pt-4 pb-24">
+        <div className="w-full max-w-[1200px] mx-auto bg-white pt-0 md:pt-4 pb-24 text-left">
           {!searchQuery && (
             <div className="flex flex-col m-0 p-0">
-              {/* Pastikan HeroOnboarding sudah bersih (mt-0 di file-nya) */}
               <HeroOnboarding />
-
               <div className="mt-0 px-4 md:px-5">
                 <HomeMenuGrid />
               </div>
@@ -186,15 +174,16 @@ const MarketplaceApp = () => {
           cart={cart}
           onUpdateQty={updateQty}
           onRemove={removeFromCart}
-          onCheckout={() => {
-            setIsCartOpen(false);
-            setTimeout(() => setIsCheckoutOpen(true), 300);
-          }}
+          onCheckout={handleCheckoutTrigger} // ✅ Pakai Satpam baru kita
         />
-        <CheckoutPaymentPage
-          isOpen={isCheckoutOpen}
-          onClose={() => setIsCheckoutOpen(false)}
-        />
+
+        {/* Modal bayar HANYA bisa tampil jika sudah Login */}
+        {user && (
+          <CheckoutPaymentPage
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
+          />
+        )}
       </MobileLayout>
     </div>
   );
