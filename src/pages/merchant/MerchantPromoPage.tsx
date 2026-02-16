@@ -27,10 +27,15 @@ export const MerchantPromoPage: React.FC = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Ambil nama pasar langsung dari localStorage agar instan
-  const [detectedMarketName, setDetectedMarketName] = useState<string>(
-    localStorage.getItem("selected_market_name") || "",
-  );
+  // ✅ LOGIKA ANTI-GAGAL: Langsung ambil nama dari memori mana pun yang ada
+  const savedMarketName =
+    localStorage.getItem("selected_market_name") ||
+    localStorage.getItem("market_name") ||
+    "";
+  const savedMarketId = localStorage.getItem("selected_market_id") || "";
+
+  const [detectedMarketName, setDetectedMarketName] =
+    useState<string>(savedMarketName);
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
@@ -44,15 +49,14 @@ export const MerchantPromoPage: React.FC = () => {
     phone: "",
     shopName: "",
     address: "",
-    market_id: localStorage.getItem("selected_market_id") || "",
+    market_id: savedMarketId,
     latitude: -6.2,
     longitude: 106.8,
   });
 
-  // Sinkronisasi data detail dari database
+  // Sinkronisasi data detail koordinat pasar dari database
   useEffect(() => {
-    const syncMarketData = async () => {
-      const savedMarketId = formData.market_id;
+    const syncMarketDetails = async () => {
       if (savedMarketId) {
         const { data, error } = await supabase
           .from("markets")
@@ -61,6 +65,7 @@ export const MerchantPromoPage: React.FC = () => {
           .single();
 
         if (data && !error) {
+          // Update nama jika di database berbeda, dan ambil titik koordinat pusat pasar
           setDetectedMarketName(data.name);
           setFormData((prev) => ({
             ...prev,
@@ -70,8 +75,8 @@ export const MerchantPromoPage: React.FC = () => {
         }
       }
     };
-    syncMarketData();
-  }, [formData.market_id]);
+    syncMarketDetails();
+  }, [savedMarketId]);
 
   const handleAutoDetect = () => {
     if (navigator.geolocation) {
@@ -82,9 +87,10 @@ export const MerchantPromoPage: React.FC = () => {
             latitude: Number(position.coords.latitude),
             longitude: Number(position.coords.longitude),
           }));
-          showToast("Posisi Anda berhasil dikunci!", "success");
+          showToast("Lokasi toko berhasil dideteksi!", "success");
         },
-        () => showToast("Gagal akses GPS. Berikan izin lokasi.", "error"),
+        () =>
+          showToast("Gagal akses GPS. Pastikan izin lokasi aktif.", "error"),
       );
     }
   };
@@ -97,7 +103,7 @@ export const MerchantPromoPage: React.FC = () => {
     try {
       if (!formData.market_id)
         throw new Error(
-          "Wilayah pasar tidak terdeteksi. Silakan pilih pasar di beranda.",
+          "Data pasar hilang. Silakan kembali ke Beranda dan pilih pasar Muara Jawa lagi.",
         );
 
       const { data, error } = await supabase.auth.signUp({
@@ -125,7 +131,10 @@ export const MerchantPromoPage: React.FC = () => {
         });
 
         if (profileError) throw profileError;
-        showToast("Pendaftaran Berhasil! Menunggu Verifikasi.", "success");
+        showToast(
+          "Pendaftaran Berhasil! Admin akan segera memverifikasi lapak Anda.",
+          "success",
+        );
         setTimeout(() => navigate("/waiting-approval"), 1500);
       }
     } catch (err: any) {
@@ -146,7 +155,7 @@ export const MerchantPromoPage: React.FC = () => {
               <span className="bg-teal-600 text-white px-1.5 rounded">P</span>{" "}
               PASARQU
             </div>
-            <div className="text-slate-800 font-bold text-lg hidden md:block border-l pl-2 ml-2 border-slate-200 uppercase">
+            <div className="text-slate-800 font-bold text-lg hidden md:block border-l pl-2 ml-2 border-slate-200 uppercase tracking-tight">
               Seller Portal
             </div>
           </div>
@@ -163,7 +172,7 @@ export const MerchantPromoPage: React.FC = () => {
         {/* INFO KIRI */}
         <div className="hidden lg:block flex-1 space-y-10 text-left">
           <div className="space-y-6">
-            <div className="inline-flex items-center gap-2 bg-orange-50 text-orange-600 px-4 py-1.5 rounded-full">
+            <div className="inline-flex items-center gap-2 bg-orange-50 text-orange-600 px-4 py-1.5 rounded-full border border-orange-100">
               <Star size={14} className="fill-orange-500" />
               <span className="text-xs font-black uppercase tracking-widest">
                 Kesempatan Terbatas
@@ -173,31 +182,31 @@ export const MerchantPromoPage: React.FC = () => {
               Buka Toko Digital, <br />
               <span className="text-teal-600">Jangkau Satu Wilayah.</span>
             </h1>
-            <p className="text-lg text-slate-500 leading-relaxed max-w-md">
+            <p className="text-lg text-slate-500 leading-relaxed max-w-md font-medium">
               Daftarkan lapak Anda sekarang. Kelola stok, harga, dan pesanan
-              pelanggan pasar secara otomatis.
+              pelanggan pasar secara otomatis dalam satu genggaman.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-8">
             <BenefitItem
               icon={<BarChart3 className="text-teal-600" />}
               title="Analisis Akurat"
-              desc="Pantau performa penjualan."
+              desc="Pantau performa harian."
             />
             <BenefitItem
               icon={<Zap className="text-orange-500" />}
               title="Pencairan Cepat"
-              desc="Tarik saldo kapan saja."
+              desc="Tarik hasil jualan harian."
             />
             <BenefitItem
               icon={<Globe className="text-blue-500" />}
               title="Jangkauan Luas"
-              desc="Toko tampil di aplikasi warga."
+              desc="Tampil di seluruh aplikasi warga."
             />
             <BenefitItem
               icon={<ShieldCheck className="text-green-600" />}
               title="Verifikasi Aman"
-              desc="Diawasi Admin Lokal."
+              desc="Sistem resmi Admin Lokal."
             />
           </div>
         </div>
@@ -218,19 +227,19 @@ export const MerchantPromoPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleRegister} className="space-y-4">
-              {/* ✅ AREA TERKUNCI - NAMA WILAYAH LANGSUNG MUNCUL */}
+              {/* ✅ AREA TERKUNCI - DIJAMIN MUNCUL MUARA JAWA */}
               <div className="space-y-1 text-left">
-                <label className="text-[10px] font-black text-slate-500 uppercase ml-1">
-                  Area Operasional (Pasar)
+                <label className="text-[10px] font-black text-slate-500 uppercase ml-1 tracking-widest">
+                  Wilayah Operasional
                 </label>
-                <div className="w-full px-4 py-3 bg-teal-50 border border-teal-200 rounded-xl text-sm font-bold text-teal-800 flex justify-between items-center shadow-inner">
+                <div className="w-full px-4 py-3 bg-teal-50 border border-teal-200 rounded-xl text-sm font-black text-teal-900 flex justify-between items-center shadow-inner">
                   <span className="flex items-center gap-2">
                     <MapIcon size={16} className="text-teal-600" />
-                    {detectedMarketName || "Wilayah Belum Dipilih"}
+                    {detectedMarketName || "MUARA JAWA"}
                   </span>
-                  <span className="text-[8px] bg-teal-200 px-2 py-1 rounded font-black text-teal-900 tracking-widest uppercase">
-                    AREA TERKUNCI
-                  </span>
+                  <div className="flex items-center gap-1 bg-teal-200 px-2 py-1 rounded text-[8px] font-black tracking-tighter">
+                    <Lock size={8} /> AREA TERKUNCI
+                  </div>
                 </div>
               </div>
 
@@ -256,10 +265,11 @@ export const MerchantPromoPage: React.FC = () => {
                 onChange={(v) => setFormData({ ...formData, shopName: v })}
               />
 
+              {/* AREA MAPS */}
               <div className="space-y-2 pt-2 text-left">
                 <div className="flex justify-between items-center px-1">
-                  <label className="text-[10px] font-black text-slate-500 uppercase">
-                    Tentukan Titik Alamat Toko
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                    Titik Koordinat Toko
                   </label>
                   <button
                     type="button"
@@ -270,7 +280,7 @@ export const MerchantPromoPage: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="w-full h-[280px] rounded-xl overflow-hidden border-2 border-slate-200 relative shadow-inner bg-slate-50">
+                <div className="w-full h-[280px] rounded-xl overflow-hidden border-2 border-slate-200 relative shadow-inner bg-slate-100">
                   {isLoaded ? (
                     <GoogleMap
                       mapContainerStyle={{ width: "100%", height: "100%" }}
@@ -306,19 +316,19 @@ export const MerchantPromoPage: React.FC = () => {
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center gap-2">
                       <Loader2 className="animate-spin text-teal-600" />
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Memuat Radar...
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        Mengaktifkan Radar...
                       </span>
                     </div>
                   )}
                   <div className="absolute top-2 right-2 bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg text-[9px] font-black text-slate-600 border shadow-sm pointer-events-none z-10 uppercase">
-                    Geser Pin Ke Posisi Toko
+                    Geser Pin ke Lokasi Lapak
                   </div>
                 </div>
               </div>
 
               <InputGroup
-                placeholder="Alamat Detail (No. Lapak, Nama Jalan)"
+                placeholder="Alamat Detail (No. Lapak / Nama Jalan)"
                 icon={<MapPin size={18} />}
                 value={formData.address}
                 onChange={(v) => setFormData({ ...formData, address: v })}
@@ -360,7 +370,7 @@ export const MerchantPromoPage: React.FC = () => {
 
       <footer className="py-8 md:py-10 bg-slate-50 border-t border-slate-100 text-center">
         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">
-          © 2026 PASARQU - Digitalisasi Pasar Tradisional
+          © 2026 PASARQU - Ekosistem Pasar Digital
         </p>
       </footer>
     </div>
@@ -368,15 +378,15 @@ export const MerchantPromoPage: React.FC = () => {
 };
 
 const BenefitItem = ({ icon, title, desc }: any) => (
-  <div className="flex gap-5 text-left">
-    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shrink-0 shadow-sm border border-slate-100">
+  <div className="flex gap-5 text-left items-start">
+    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shrink-0 shadow-md border border-slate-50">
       {icon}
     </div>
     <div className="text-left">
-      <h3 className="font-black text-slate-800 text-sm uppercase tracking-tight leading-none text-left">
+      <h3 className="font-black text-slate-800 text-sm uppercase tracking-tight leading-none mb-1.5">
         {title}
       </h3>
-      <p className="text-xs text-slate-500 mt-1.5 leading-relaxed text-left">
+      <p className="text-xs text-slate-500 leading-relaxed font-medium">
         {desc}
       </p>
     </div>

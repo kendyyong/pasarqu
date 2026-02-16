@@ -3,28 +3,63 @@ import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../contexts/AuthContext";
 import {
   MessageSquare,
-  User,
-  Bike,
   Loader2,
   ChevronRight,
-  Power,
   Headset,
   ShieldAlert,
+  Bike,
+  ArrowLeft,
 } from "lucide-react";
 import { OrderChatRoom } from "../../../components/Chat/OrderChatRoom";
 import { useToast } from "../../../contexts/ToastContext";
 
 export const MerchantMessages = () => {
   const { user } = useAuth();
-  const { showToast } = useToast();
   const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChat, setSelectedChat] = useState<any>(null);
-  const [isServiceActive, setIsServiceActive] = useState(true);
+  const [isShopOpen, setIsShopOpen] = useState(true);
 
+  // ✅ MONITOR STATUS TOKO SECARA REALTIME
   useEffect(() => {
-    fetchConversations();
+    if (!user?.id) return;
+
+    const fetchStatus = async () => {
+      const { data } = await supabase
+        .from("merchants")
+        .select("is_shop_open")
+        .eq("id", user.id)
+        .single();
+      if (data) setIsShopOpen(data.is_shop_open);
+    };
+
+    fetchStatus();
+
+    const shopSub = supabase
+      .channel("chat_sync_final")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "merchants",
+          filter: `id=eq.${user.id}`,
+        },
+        (payload) => {
+          setIsShopOpen(payload.new.is_shop_open);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(shopSub);
+    };
   }, [user]);
+
+  // AMBIL DAFTAR PERCAKAPAN
+  useEffect(() => {
+    if (user && isShopOpen) fetchConversations();
+  }, [user, isShopOpen]);
 
   const fetchConversations = async () => {
     try {
@@ -45,58 +80,61 @@ export const MerchantMessages = () => {
     }
   };
 
-  const toggleService = () => {
-    const newState = !isServiceActive;
-    setIsServiceActive(newState);
-    showToast(
-      newState ? "Layanan Chat Aktif" : "Layanan Chat Ditutup",
-      newState ? "success" : "info",
-    );
-  };
-
   if (loading)
     return (
-      <div className="p-20 text-center">
-        <Loader2 className="animate-spin mx-auto text-teal-600" />
+      <div className="p-10 text-center flex flex-col items-center gap-3">
+        <Loader2 className="animate-spin text-slate-900" size={24} />
       </div>
     );
 
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500 text-left">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">
+  // ✅ TAMPILAN JIKA TOKO TUTUP (TIDAK ADA INDIKATOR STATUS LAGI)
+  if (!isShopOpen) {
+    return (
+      <div className="animate-in fade-in duration-500">
+        <div className="bg-white p-4 md:p-6 border border-slate-200 mb-4">
+          <h1 className="text-lg md:text-xl font-black text-slate-900 uppercase tracking-tighter leading-none text-left">
             Layanan <span className="text-teal-600">Chat</span>
           </h1>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-            Layanan CS & Koordinasi Kurir
+          <p className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 text-left">
+            Koordinasi Pelanggan & Driver
           </p>
         </div>
-        <button
-          onClick={toggleService}
-          className={`px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center gap-3 transition-all shadow-xl ${isServiceActive ? "bg-slate-900 text-white" : "bg-red-500 text-white"}`}
-        >
-          <Power size={14} />{" "}
-          {isServiceActive ? "STATUS: BUKA" : "STATUS: TUTUP"}
-        </button>
+
+        <div className="py-24 text-center bg-slate-50 border border-slate-200 flex flex-col items-center">
+          <ShieldAlert size={48} className="text-slate-200 mb-4" />
+          <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter">
+            Layanan Chat Non-Aktif
+          </h3>
+          <p className="text-[9px] text-slate-400 font-bold uppercase mt-2 max-w-[220px] leading-tight">
+            Toko sedang tutup. Harap buka status toko Anda untuk kembali
+            melayani pelanggan.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 animate-in fade-in duration-300 text-left">
+      {/* HEADER INTERNAL - BERSIH TANPA STATUS */}
+      <div className="bg-white p-4 md:p-6 border border-slate-200">
+        <h1 className="text-lg md:text-xl font-black text-slate-900 uppercase tracking-tighter leading-none">
+          Layanan <span className="text-teal-600">Chat</span>
+        </h1>
+        <p className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+          Koordinasi Pelanggan & Driver
+        </p>
       </div>
 
-      {!isServiceActive ? (
-        <div className="py-32 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100 flex flex-col items-center">
-          <ShieldAlert size={60} className="text-slate-200 mb-6" />
-          <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">
-            Layanan Non-Aktif
-          </h3>
-        </div>
-      ) : selectedChat ? (
-        <div className="space-y-4">
+      {selectedChat ? (
+        <div className="space-y-3">
           <button
             onClick={() => setSelectedChat(null)}
-            className="text-[10px] font-black text-teal-600 uppercase tracking-widest flex items-center gap-2 mb-4 hover:bg-teal-50 px-6 py-3 rounded-full transition-all border border-teal-100"
+            className="text-[9px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2 bg-slate-100 px-4 py-2 border border-slate-200"
           >
-            ← Kembali ke Daftar
+            <ArrowLeft size={14} /> Kembali
           </button>
-          <div className="h-[650px] border border-slate-100 rounded-[3rem] overflow-hidden shadow-2xl bg-white">
+          <div className="h-[550px] border border-slate-200 bg-white">
             <OrderChatRoom
               orderId={selectedChat.orderId}
               receiverName={selectedChat.name}
@@ -105,79 +143,92 @@ export const MerchantMessages = () => {
           </div>
         </div>
       ) : (
-        <div className="grid gap-4">
-          {conversations.map((order) => (
-            <div
-              key={order.id}
-              className="bg-white p-3 rounded-[3rem] border border-slate-50 shadow-sm"
-            >
-              <div className="px-8 py-3">
-                <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
-                  Order #{order.id.slice(0, 8)}
-                </p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-2">
-                <button
-                  onClick={() =>
-                    setSelectedChat({
-                      orderId: order.id,
-                      name: order.profiles?.full_name || "Pelanggan",
-                      type: "merchant_customer",
-                    })
-                  }
-                  className="p-6 rounded-[2.2rem] bg-slate-50 hover:bg-slate-900 hover:text-white transition-all flex items-center justify-between border border-slate-100 group"
-                >
-                  <div className="flex items-center gap-4 text-left">
-                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-900 group-hover:bg-teal-500 group-hover:text-white transition-all">
-                      <Headset size={24} />
-                    </div>
-                    <div>
-                      <h4 className="font-black text-xs uppercase tracking-tight">
-                        {order.profiles?.full_name || "Pelanggan"}
-                      </h4>
-                      <p className="text-[8px] font-bold uppercase opacity-50">
-                        Layanan Pelanggan (CS)
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronRight
-                    size={18}
-                    className="opacity-20 group-hover:opacity-100 group-hover:translate-x-1 transition-all"
-                  />
-                </button>
-                {order.couriers && (
+        <div className="grid gap-2">
+          {conversations.length > 0 ? (
+            conversations.map((order) => (
+              <div key={order.id} className="bg-white border border-slate-200">
+                <div className="px-4 py-2 border-b border-slate-100 bg-slate-50">
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest text-left">
+                    Order #{order.id.slice(0, 8)}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2">
                   <button
                     onClick={() =>
                       setSelectedChat({
                         orderId: order.id,
-                        name: order.couriers?.full_name || "Kurir",
-                        type: "courier_merchant",
+                        name: order.profiles?.full_name || "Pelanggan",
+                        type: "merchant_customer",
                       })
                     }
-                    className="p-6 rounded-[2.2rem] bg-orange-50 hover:bg-orange-500 hover:text-white transition-all flex items-center justify-between border border-orange-100 group"
+                    className="p-4 hover:bg-slate-900 hover:text-white transition-all flex items-center justify-between group border-b md:border-b-0 md:border-r border-slate-100"
                   >
-                    <div className="flex items-center gap-4 text-left">
-                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-orange-600 group-hover:bg-white group-hover:text-orange-500 transition-all">
-                        <Bike size={24} />
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 bg-slate-100 rounded-none flex items-center justify-center text-slate-900 group-hover:bg-teal-600 group-hover:text-white">
+                        <Headset size={18} />
                       </div>
-                      <div>
-                        <h4 className="font-black text-xs uppercase tracking-tight">
-                          {order.couriers?.full_name}
+                      <div className="text-left">
+                        <h4 className="font-black text-[10px] uppercase truncate max-w-[120px]">
+                          {order.profiles?.full_name || "Pelanggan"}
                         </h4>
-                        <p className="text-[8px] font-bold uppercase opacity-50">
-                          Koordinasi Driver
+                        <p className="text-[7px] font-bold uppercase opacity-50">
+                          Buyer (Layanan CS)
                         </p>
                       </div>
                     </div>
                     <ChevronRight
-                      size={18}
-                      className="opacity-20 group-hover:opacity-100 group-hover:translate-x-1 transition-all"
+                      size={14}
+                      className="opacity-20 group-hover:opacity-100"
                     />
                   </button>
-                )}
+
+                  {order.couriers ? (
+                    <button
+                      onClick={() =>
+                        setSelectedChat({
+                          orderId: order.id,
+                          name: order.couriers?.full_name || "Kurir",
+                          type: "courier_merchant",
+                        })
+                      }
+                      className="p-4 bg-orange-50/20 hover:bg-orange-600 hover:text-white transition-all flex items-center justify-between group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 bg-white border border-orange-100 rounded-none flex items-center justify-center text-orange-600 group-hover:bg-white group-hover:text-orange-600">
+                          <Bike size={18} />
+                        </div>
+                        <div className="text-left">
+                          <h4 className="font-black text-[10px] uppercase truncate max-w-[120px]">
+                            {order.couriers?.full_name}
+                          </h4>
+                          <p className="text-[7px] font-bold uppercase opacity-60">
+                            Koordinasi Driver
+                          </p>
+                        </div>
+                      </div>
+                      <ChevronRight
+                        size={14}
+                        className="opacity-20 group-hover:opacity-100"
+                      />
+                    </button>
+                  ) : (
+                    <div className="p-4 bg-slate-50 flex items-center justify-center">
+                      <p className="text-[7px] font-black text-slate-300 uppercase tracking-widest">
+                        Menunggu Kurir
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
+            ))
+          ) : (
+            <div className="py-20 text-center bg-white border border-slate-200">
+              <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
+                Tidak ada percakapan aktif
+              </p>
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>

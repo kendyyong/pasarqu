@@ -92,6 +92,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
     user: any;
   }>({ isOpen: false, user: null });
 
+  // --- AMBIL DATA UTAMA ---
   const fetchData = async () => {
     if (!profile?.managed_market_id) {
       setIsLoading(false);
@@ -120,14 +121,16 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
       ]);
 
       if (marketRes.data) setMyMarket(marketRes.data);
+
       if (usersRes.data) {
+        // Filter data berdasarkan role
         setMyMerchants(usersRes.data.filter((p) => p.role === "MERCHANT"));
         setMyCouriers(usersRes.data.filter((p) => p.role === "COURIER"));
         setMyCustomers(usersRes.data.filter((p) => p.role === "CUSTOMER"));
       }
+
       setPendingProducts(prodRes.data || []);
 
-      // Hitung Keuangan Wilayah Hari Ini
       if (financeRes.data) {
         const total = financeRes.data.reduce(
           (acc, curr) => acc + Number(curr.total_price),
@@ -163,15 +166,16 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
     }
   };
 
+  // --- LOGIKA REALTIME ---
   useEffect(() => {
     alarmAudio.current = new Audio(
       "https://actions.google.com/sounds/v1/alarms/beep_short.ogg",
     );
     if (!profile?.managed_market_id) return;
 
-    // REAL-TIME: Ada Produk Baru
+    // 1. Monitor Produk Baru
     const productSub = supabase
-      .channel("engine_wilayah")
+      .channel("engine_produk")
       .on(
         "postgres_changes",
         {
@@ -183,13 +187,34 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
         () => {
           fetchData();
           triggerAlarm();
-          showToast("🚨 ADA PRODUK BARU PERLU DIVALIDASI!", "error");
+          showToast("🚨 PRODUK BARU MENUNGGU VALIDASI!", "error");
+        },
+      )
+      .subscribe();
+
+    // 2. ✅ MONITOR PENDAFTARAN TOKO/KURIR BARU (REALTIME NOTIF)
+    const profileSub = supabase
+      .channel("engine_mitra")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "profiles",
+          filter: `managed_market_id=eq.${profile.managed_market_id}`,
+        },
+        (payload) => {
+          fetchData();
+          triggerAlarm();
+          const role = payload.new.role === "MERCHANT" ? "TOKO" : "KURIR";
+          showToast(`🚨 ADA MITRA ${role} BARU MENDAFTAR!`, "success");
         },
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(productSub);
+      supabase.removeChannel(profileSub);
       stopAlarm();
     };
   }, [profile?.managed_market_id, isMuted]);
@@ -217,12 +242,9 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
         marketName={myMarket?.name || "Pasar Wilayah"}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        pendingMerchants={
-          myMerchants.filter((m) => m.status === "PENDING").length
-        }
-        pendingCouriers={
-          myCouriers.filter((c) => c.status === "PENDING").length
-        }
+        // ✅ BADGE: Hitung yang is_verified === false
+        pendingMerchants={myMerchants.filter((m) => !m.is_verified).length}
+        pendingCouriers={myCouriers.filter((c) => !c.is_verified).length}
         pendingProducts={pendingProducts.length}
         onLogout={logout}
       />
@@ -236,13 +258,13 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
               className={`w-2.5 h-2.5 rounded-full ${isAlarmActive ? "bg-white animate-ping" : "bg-teal-500 animate-pulse"}`}
             ></div>
             <span className="text-[10px] font-black uppercase tracking-[0.3em]">
-              Mode Area:{" "}
+              Sistem Area:{" "}
               <span
                 className={
                   isAlarmActive ? "text-white underline" : "text-teal-600"
                 }
               >
-                {isAlarmActive ? "DARURAT / ALARM" : "NORMAL"}
+                {isAlarmActive ? "PERLU TINDAKAN" : "NORMAL"}
               </span>
             </span>
           </div>
@@ -263,7 +285,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
             <div
               className={`px-4 py-1.5 rounded-2xl border font-black text-[10px] uppercase ${isAlarmActive ? "bg-white/10 border-white/20 text-white" : "bg-slate-50 border-slate-100 text-slate-800"}`}
             >
-              {profile?.full_name}
+              {profile?.name}
             </div>
           </div>
         </header>
@@ -271,7 +293,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
         <main className="p-10 max-w-7xl mx-auto w-full pb-32">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
             <div className="text-left text-slate-800">
-              <h1 className="text-4xl font-black uppercase tracking-tighter leading-none mb-3 italic">
+              <h1 className="text-4xl font-black uppercase tracking-tighter leading-none mb-3">
                 {activeTab === "overview"
                   ? "Dashboard Wilayah"
                   : activeTab.replace("_", " ")}
@@ -297,9 +319,7 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                   </span>
                 )}
               </button>
-
               <div className="w-[1px] h-8 bg-slate-100 mx-2 self-center"></div>
-
               <QuickActionBtn
                 active={activeTab === "orders"}
                 icon={<ShoppingBag size={18} />}
@@ -337,7 +357,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             {activeTab === "overview" && (
               <div className="space-y-8">
-                {/* FINANCE SUMMARY AREA */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white flex justify-between items-center relative overflow-hidden shadow-2xl">
                     <div className="relative z-10">
@@ -388,11 +407,9 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 }}
               />
             )}
-
             {activeTab === "orders" && (
               <LocalOrdersTab marketId={profile?.managed_market_id || ""} />
             )}
-
             {activeTab === "radar" && (
               <LocalRadarTab
                 isLoaded={isLoaded}
@@ -402,7 +419,6 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                 customers={myCustomers}
               />
             )}
-
             {activeTab === "finance" && (
               <LocalFinanceTab merchants={myMerchants} couriers={myCouriers} />
             )}
@@ -434,20 +450,17 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
                   size={60}
                   className="mx-auto text-red-500 mb-6 animate-bounce"
                 />
-                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">
-                  Ada Produk Menunggu Verifikasi!
+                <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">
+                  Tindakan Diperlukan!
                 </h3>
                 <p className="text-xs font-bold text-slate-400 uppercase mt-2">
-                  Segera periksa kelayakan produk mitra Anda.
+                  Periksa pendaftaran mitra atau produk baru.
                 </p>
                 <button
-                  onClick={() => {
-                    stopAlarm();
-                    setActiveTab("products");
-                  }}
-                  className="mt-8 px-10 py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-red-700 transition-all active:scale-95"
+                  onClick={() => stopAlarm()}
+                  className="mt-8 px-10 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95"
                 >
-                  Buka Menu Verifikasi Produk
+                  Matikan Alarm
                 </button>
               </div>
             )}
@@ -457,10 +470,20 @@ export const LocalAdminDashboard: React.FC<Props> = ({ onBack }) => {
 
       <PartnerDetailModal
         user={detailModal.user}
+        isOpen={detailModal.isOpen} // Pastikan prop isOpen dikirim
         onClose={() => setDetailModal({ isOpen: false, user: null })}
-        onApprove={() => fetchData()}
-        onDeactivate={() => fetchData()}
-        onActivate={() => fetchData()}
+        onApprove={() => {
+          fetchData();
+          showToast("Mitra disetujui!", "success");
+        }}
+        onDeactivate={() => {
+          fetchData();
+          showToast("Mitra dinonaktifkan", "error");
+        }}
+        onActivate={() => {
+          fetchData();
+          showToast("Mitra diaktifkan", "success");
+        }}
       />
     </div>
   );

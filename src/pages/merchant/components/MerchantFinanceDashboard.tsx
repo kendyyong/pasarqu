@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-// ✅ FIX 2307: Jalur mundur 3 kali karena sekarang file di merchant/components/
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useToast } from "../../../contexts/ToastContext";
@@ -10,7 +9,6 @@ import {
   History,
   TrendingUp,
   Store,
-  Clock,
   CheckCircle2,
   Loader2,
   RefreshCw,
@@ -20,10 +18,9 @@ import {
   X,
   Building,
   CreditCard,
-  AlertCircle,
 } from "lucide-react";
 
-export const MerchantFinanceDashboard: React.FC<any> = ({ theme }) => {
+export const MerchantFinanceDashboard: React.FC<any> = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -46,13 +43,12 @@ export const MerchantFinanceDashboard: React.FC<any> = ({ theme }) => {
     accName: "",
   });
 
-  const MIN_WITHDRAWAL = 50000; // Batas Minimal Penarikan
+  const MIN_WITHDRAWAL = 50000;
 
   const fetchData = async () => {
     if (!user) return;
     setLoading(true);
     try {
-      // 1. Ambil Profil & Saldo Merchant
       const { data: profile } = await supabase
         .from("profiles")
         .select("*, merchants!merchant_id(*)")
@@ -62,7 +58,6 @@ export const MerchantFinanceDashboard: React.FC<any> = ({ theme }) => {
       setMerchantData(profile);
       setWdAmount(profile?.wallet_balance || 0);
 
-      // 2. Ambil Statistik Penjualan
       const { data: orders } = await supabase
         .from("order_items")
         .select(
@@ -79,15 +74,12 @@ export const MerchantFinanceDashboard: React.FC<any> = ({ theme }) => {
         let fees = 0;
         let pending = 0;
 
-        // ✅ FIX 7006: Menambahkan tipe data :any pada parameter item
         orders.forEach((item: any) => {
           const itemTotal = item.quantity * item.price_at_purchase;
           const adminPercent = item.orders.seller_admin_fee_percent || 0;
           const itemFee = (itemTotal * adminPercent) / 100;
-
           gross += itemTotal;
           fees += itemFee;
-
           if (
             item.orders.status === "PAID" &&
             item.orders.shipping_status !== "COMPLETED"
@@ -104,7 +96,6 @@ export const MerchantFinanceDashboard: React.FC<any> = ({ theme }) => {
         });
       }
 
-      // 3. Ambil Riwayat Transaksi
       const { data: history } = await supabase
         .from("order_items")
         .select(
@@ -132,24 +123,13 @@ export const MerchantFinanceDashboard: React.FC<any> = ({ theme }) => {
     fetchData();
   }, [user]);
 
-  // --- FUNGSI EKSEKUSI PENARIKAN ---
   const handleRequestWD = async () => {
     if (!wdForm.accNo || !wdForm.accName) {
-      showToast("Lengkapi data rekening Anda!", "error");
+      showToast("Lengkapi data rekening!", "error");
       return;
     }
-
-    if (wdAmount < MIN_WITHDRAWAL) {
-      showToast(
-        `Minimal penarikan Rp ${MIN_WITHDRAWAL.toLocaleString()}`,
-        "error",
-      );
-      return;
-    }
-
     setWdLoading(true);
     try {
-      // 1. Catat Permintaan Penarikan
       const { error: wdErr } = await supabase.from("payout_requests").insert({
         merchant_id: merchantData.merchant_id,
         amount: wdAmount,
@@ -158,28 +138,15 @@ export const MerchantFinanceDashboard: React.FC<any> = ({ theme }) => {
         account_name: wdForm.accName,
         status: "REQUESTED",
       });
-
       if (wdErr) throw wdErr;
 
-      // 2. Potong Saldo Merchant via RPC (Aman dari Race Condition)
       const { error: balanceErr } = await supabase.rpc("decrement_wallet", {
         user_id: user?.id,
         amount: wdAmount,
       });
-
       if (balanceErr) throw balanceErr;
 
-      // 3. Catat di Jurnal Transaksi
-      await supabase.from("transactions").insert({
-        type: "WITHDRAWAL",
-        credit: wdAmount,
-        debit: 0,
-        account_code: "2002-WAL",
-        merchant_id: merchantData.merchant_id,
-        description: `Penarikan ke ${wdForm.bank} (${wdForm.accNo})`,
-      });
-
-      showToast("Permintaan terkirim. Dana segera diproses!", "success");
+      showToast("Pencairan dana sedang diproses!", "success");
       setShowWDModal(false);
       fetchData();
     } catch (err: any) {
@@ -191,282 +158,210 @@ export const MerchantFinanceDashboard: React.FC<any> = ({ theme }) => {
 
   if (loading)
     return (
-      <div className="flex flex-col items-center justify-center py-40 gap-4">
-        <Loader2 className="animate-spin text-orange-500" size={48} />
-        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
-          Sinkronisasi Laporan...
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <Loader2 className="animate-spin text-slate-900" size={32} />
+        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+          Loading Keuangan...
         </p>
       </div>
     );
 
   return (
-    <div className="w-full max-w-5xl mx-auto space-y-8 animate-in fade-in duration-700 pb-20 px-4 text-left relative">
-      {/* MODAL WITHDRAWAL */}
-      {showWDModal && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl relative border border-slate-100 overflow-hidden">
-            <button
-              onClick={() => setShowWDModal(false)}
-              className="absolute top-8 right-8 text-slate-400 hover:text-red-500 transition-all"
-            >
-              <X size={24} />
-            </button>
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-orange-600 shadow-inner">
-                <Building size={32} />
-              </div>
-              <h2 className="text-xl font-black uppercase italic text-slate-800 tracking-tighter">
-                Cairkan Saldo
-              </h2>
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-2">
-                Dana akan dikirim ke rekening bank
-              </p>
-            </div>
-
-            <div className="space-y-6">
-              <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 text-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase">
-                  Jumlah yang dicairkan
-                </p>
-                <h3 className="text-3xl font-black text-orange-600 mt-1 italic leading-none tracking-tighter">
-                  Rp {wdAmount.toLocaleString()}
-                </h3>
-              </div>
-
-              <div className="space-y-4">
-                <select
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-xs outline-none"
-                  value={wdForm.bank}
-                  onChange={(e) =>
-                    setWdForm({ ...wdForm, bank: e.target.value })
-                  }
-                >
-                  <option>BCA</option>
-                  <option>MANDIRI</option>
-                  <option>BNI</option>
-                  <option>BRI</option>
-                  <option>DANA / OVO</option>
-                </select>
-                <input
-                  type="text"
-                  placeholder="Nomor Rekening"
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-xs outline-none focus:ring-2 ring-orange-500"
-                  value={wdForm.accNo}
-                  onChange={(e) =>
-                    setWdForm({ ...wdForm, accNo: e.target.value })
-                  }
-                />
-                <input
-                  type="text"
-                  placeholder="Nama Pemilik Rekening"
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-xs outline-none focus:ring-2 ring-orange-500"
-                  value={wdForm.accName}
-                  onChange={(e) =>
-                    setWdForm({ ...wdForm, accName: e.target.value })
-                  }
-                />
-              </div>
-
-              <button
-                disabled={wdLoading}
-                onClick={handleRequestWD}
-                className="w-full py-5 bg-orange-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-xl shadow-orange-600/20 active:scale-95 transition-all flex items-center justify-center gap-3"
-              >
-                {wdLoading ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <CreditCard size={20} />
-                )}
-                Kirim Dana Sekarang
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* HEADER */}
-      <header className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-black uppercase tracking-tighter text-slate-800 flex items-center gap-2 italic">
-            <Store className="text-orange-500" />{" "}
-            {merchantData?.merchants?.shop_name || "Merchant Dashboard"}
-          </h1>
-          <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mt-1 italic">
-            Financial Ledger & Statement
+    <div className="w-full space-y-4 animate-in fade-in duration-500 pb-10 text-left">
+      {/* 1. SALDO UTAMA (SHARP BOX) */}
+      <div className="bg-slate-900 border-b-4 border-orange-600 p-6 md:p-8 text-white flex flex-col md:flex-row justify-between items-center gap-6 rounded-none">
+        <div className="text-center md:text-left">
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-orange-500 mb-2">
+            Saldo Dompet Juragan
           </p>
-        </div>
-        <button
-          onClick={fetchData}
-          className="p-3 bg-white border border-slate-100 rounded-2xl shadow-sm hover:rotate-180 transition-all duration-500"
-        >
-          <RefreshCw size={18} className="text-slate-400" />
-        </button>
-      </header>
-
-      {/* SALDO UTAMA */}
-      <div className="bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden shadow-2xl">
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-2 opacity-50">
-            <Wallet size={16} className="text-orange-400" />
-            <span className="text-[10px] font-black uppercase tracking-widest">
-              Saldo Siap Cair (Net Profit)
-            </span>
-          </div>
-          <h2 className="text-5xl font-black tracking-tighter italic leading-none">
+          <h2 className="text-3xl md:text-5xl font-black tracking-tighter italic">
             Rp{" "}
             {Number(merchantData?.wallet_balance || 0).toLocaleString("id-ID")}
           </h2>
-
-          <div className="flex gap-3 mt-10">
-            <button
-              onClick={() => {
-                if (merchantData?.wallet_balance < MIN_WITHDRAWAL) {
-                  showToast(
-                    `Saldo minimal penarikan Rp ${MIN_WITHDRAWAL.toLocaleString()}`,
-                    "info",
-                  );
-                  return;
-                }
-                setShowWDModal(true);
-              }}
-              className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg transition-all flex items-center justify-center gap-2 ${
-                merchantData?.wallet_balance >= MIN_WITHDRAWAL
-                  ? "bg-orange-500 hover:bg-orange-400 text-white"
-                  : "bg-slate-800 text-slate-500 cursor-not-allowed"
-              }`}
-            >
-              <ArrowDownLeft size={16} /> Cairkan Dana
-            </button>
-            <button className="flex-1 py-4 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all">
-              Bantuan
-            </button>
-          </div>
         </div>
-        <Banknote className="absolute -bottom-10 -right-10 text-white/5 w-64 h-64 rotate-12" />
+        <div className="flex gap-2 w-full md:w-auto">
+          <button
+            onClick={() => {
+              if (merchantData?.wallet_balance < MIN_WITHDRAWAL) {
+                showToast(
+                  `Minimal penarikan Rp ${MIN_WITHDRAWAL.toLocaleString()}`,
+                  "info",
+                );
+                return;
+              }
+              setShowWDModal(true);
+            }}
+            className="flex-1 md:px-8 py-4 bg-orange-600 hover:bg-orange-700 text-white font-black text-[10px] uppercase tracking-widest transition-all rounded-none flex items-center justify-center gap-2"
+          >
+            <ArrowUpRight size={16} /> Cairkan Dana
+          </button>
+          <button
+            onClick={fetchData}
+            className="p-4 bg-white/10 hover:bg-white/20 text-white border border-white/10 rounded-none"
+          >
+            <RefreshCw size={18} />
+          </button>
+        </div>
       </div>
 
-      {/* THREE BUCKETS STATS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-50 shadow-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
-              <TrendingUp size={20} />
-            </div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+      {/* 2. STATS GRID (COMPACT) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        <div className="bg-white border border-slate-200 p-4 rounded-none flex items-center justify-between">
+          <div>
+            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">
               Omzet Kotor
             </p>
+            <p className="text-sm font-black text-slate-900">
+              Rp {stats.total_gross_sales.toLocaleString()}
+            </p>
           </div>
-          <h4 className="text-xl font-black text-slate-800 tracking-tighter">
-            Rp {stats.total_gross_sales.toLocaleString()}
-          </h4>
+          <TrendingUp size={20} className="text-blue-500" />
         </div>
-
-        <div className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-50 shadow-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-red-50 text-red-600 rounded-xl flex items-center justify-center">
-              <BadgePercent size={20} />
-            </div>
-            <p className="text-[10px] font-black text-red-400 uppercase tracking-widest">
+        <div className="bg-white border border-slate-200 p-4 rounded-none flex items-center justify-between">
+          <div>
+            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">
               Biaya Admin
             </p>
-          </div>
-          <h4 className="text-xl font-black text-red-600 tracking-tighter">
-            - Rp {stats.total_admin_fees.toLocaleString()}
-          </h4>
-        </div>
-
-        <div className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-50 shadow-sm bg-gradient-to-br from-white to-teal-50/30">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center">
-              <CheckCircle2 size={20} />
-            </div>
-            <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest">
-              Gaji Bersih
+            <p className="text-sm font-black text-red-600">
+              - Rp {stats.total_admin_fees.toLocaleString()}
             </p>
           </div>
-          <h4 className="text-xl font-black text-teal-700 tracking-tighter">
-            Rp {stats.total_net_sales.toLocaleString()}
-          </h4>
+          <BadgePercent size={20} className="text-red-500" />
+        </div>
+        <div className="bg-white border border-slate-200 p-4 rounded-none flex items-center justify-between border-b-2 border-b-teal-500">
+          <div>
+            <p className="text-[8px] font-black text-teal-600 uppercase tracking-widest mb-1">
+              Gaji Bersih
+            </p>
+            <p className="text-sm font-black text-teal-600">
+              Rp {stats.total_net_sales.toLocaleString()}
+            </p>
+          </div>
+          <CheckCircle2 size={20} className="text-teal-500" />
         </div>
       </div>
 
-      {/* RIWAYAT PENJUALAN */}
-      <div className="bg-white rounded-[3rem] border-2 border-slate-50 shadow-xl overflow-hidden">
-        <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-          <h3 className="font-black uppercase text-xs tracking-widest text-slate-800 flex items-center gap-2">
-            <History size={16} className="text-orange-500" /> Log Transaksi
+      {/* 3. LOG TRANSAKSI (TABLE STYLE) */}
+      <div className="bg-white border border-slate-200 rounded-none">
+        <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+          <h3 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-2">
+            <History size={14} className="text-orange-500" /> Log Transaksi
             Terakhir
           </h3>
         </div>
-
-        <div className="divide-y divide-slate-50">
+        <div className="divide-y divide-slate-100">
           {recentOrders.length > 0 ? (
             recentOrders.map((item: any) => {
               const itemTotal = item.quantity * item.price_at_purchase;
               const adminPercent = item.orders.seller_admin_fee_percent || 0;
-              const itemFee = (itemTotal * adminPercent) / 100;
-              const netAmount = itemTotal - itemFee;
+              const netAmount = itemTotal - (itemTotal * adminPercent) / 100;
 
               return (
                 <div
                   key={item.id}
-                  className="p-8 flex flex-col md:flex-row md:items-center justify-between hover:bg-slate-50 transition-all gap-6"
+                  className="p-4 flex items-center justify-between hover:bg-slate-50 transition-all"
                 >
-                  <div className="flex items-center gap-5 text-left">
-                    <div className="w-14 h-14 bg-slate-900 text-white rounded-[1.2rem] flex flex-col items-center justify-center shadow-lg">
-                      <span className="text-[8px] font-black leading-none mb-1">
-                        UNIT
-                      </span>
-                      <span className="text-lg font-black leading-none">
-                        {item.quantity}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="font-black text-slate-800 text-sm uppercase tracking-tight leading-none italic">
-                        {item.products?.name}
-                      </p>
-                      <div className="flex items-center gap-3 mt-2">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">
-                          Gross: Rp {itemTotal.toLocaleString()}
-                        </span>
-                        <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                        <span className="text-[9px] font-black text-red-400 uppercase italic">
-                          Admin Fee: {adminPercent}%
-                        </span>
-                      </div>
-                    </div>
+                  <div className="flex flex-col text-left">
+                    <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight">
+                      {item.products?.name}
+                    </p>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase mt-1">
+                      QTY: {item.quantity} •{" "}
+                      {new Date(item.orders.created_at).toLocaleDateString()}
+                    </p>
                   </div>
-
-                  <div className="flex items-center gap-8 justify-between md:justify-end border-t md:border-t-0 pt-4 md:pt-0 border-dashed border-slate-200">
-                    <div className="text-right">
-                      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">
-                        Terima Bersih
-                      </p>
-                      <h4 className="font-black text-teal-600 text-lg leading-none italic tracking-tighter">
+                  <div className="text-right flex items-center gap-4">
+                    <div>
+                      <p className="text-[11px] font-black text-teal-600 tracking-tighter leading-none italic">
                         Rp {netAmount.toLocaleString()}
-                      </h4>
+                      </p>
+                      <p className="text-[7px] font-black text-slate-300 uppercase mt-1">
+                        Net Income
+                      </p>
                     </div>
                     <div
-                      className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest ${item.orders.shipping_status === "COMPLETED" ? "bg-teal-100 text-teal-700" : "bg-orange-100 text-orange-700 animate-pulse"}`}
+                      className={`px-2 py-1 text-[7px] font-black uppercase ${item.orders.shipping_status === "COMPLETED" ? "bg-teal-100 text-teal-700" : "bg-orange-100 text-orange-600"}`}
                     >
                       {item.orders.shipping_status === "COMPLETED"
                         ? "Selesai"
-                        : "Pengantaran"}
+                        : "Proses"}
                     </div>
                   </div>
                 </div>
               );
             })
           ) : (
-            <div className="py-24 text-center">
-              <Info className="mx-auto text-slate-200 mb-4" size={48} />
-              <p className="text-slate-300 font-black uppercase text-xs tracking-widest">
-                Belum ada aktivitas perdagangan
-              </p>
+            <div className="p-10 text-center text-slate-300 text-[9px] font-black uppercase tracking-widest">
+              Belum ada aktivitas
             </div>
           )}
         </div>
       </div>
+
+      {/* MODAL WD (SHARP DESIGN) */}
+      {showWDModal && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-none border-2 border-slate-900 p-8 relative animate-in zoom-in-95">
+            <button
+              onClick={() => setShowWDModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-red-500"
+            >
+              <X size={20} />
+            </button>
+            <div className="text-center mb-6">
+              <h2 className="text-lg font-black uppercase italic text-slate-900 tracking-tighter">
+                Pencairan Dana
+              </h2>
+              <p className="text-[8px] font-black text-orange-600 uppercase mt-1">
+                Saldo: Rp {wdAmount.toLocaleString()}
+              </p>
+            </div>
+            <div className="space-y-3">
+              <select
+                className="w-full p-3 bg-slate-100 border-none font-black text-[10px] outline-none rounded-none uppercase"
+                value={wdForm.bank}
+                onChange={(e) => setWdForm({ ...wdForm, bank: e.target.value })}
+              >
+                <option>BCA</option>
+                <option>MANDIRI</option>
+                <option>BNI</option>
+                <option>BRI</option>
+                <option>DANA</option>
+              </select>
+              <input
+                type="text"
+                placeholder="NO. REKENING"
+                className="w-full p-3 bg-slate-100 border-none font-black text-[10px] outline-none rounded-none uppercase"
+                value={wdForm.accNo}
+                onChange={(e) =>
+                  setWdForm({ ...wdForm, accNo: e.target.value })
+                }
+              />
+              <input
+                type="text"
+                placeholder="NAMA PENERIMA"
+                className="w-full p-3 bg-slate-100 border-none font-black text-[10px] outline-none rounded-none uppercase"
+                value={wdForm.accName}
+                onChange={(e) =>
+                  setWdForm({ ...wdForm, accName: e.target.value })
+                }
+              />
+              <button
+                disabled={wdLoading}
+                onClick={handleRequestWD}
+                className="w-full py-4 bg-orange-600 text-white font-black text-[10px] uppercase tracking-[0.2em] hover:bg-slate-900 transition-all rounded-none flex items-center justify-center gap-2"
+              >
+                {wdLoading ? (
+                  <Loader2 className="animate-spin" size={14} />
+                ) : (
+                  <CreditCard size={14} />
+                )}{" "}
+                Proses Sekarang
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

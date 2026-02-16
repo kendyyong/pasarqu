@@ -33,7 +33,10 @@ import { HomeMenuGrid } from "./components/HomeMenuGrid";
 // --- PAGES ---
 import { Home } from "./pages/Home";
 import { AuthPage } from "./pages/auth/AuthPage";
-import { RegisterPage } from "./pages/auth/RegisterPage";
+import { RegisterPage } from "./pages/auth/RegisterPage"; // Register Customer
+// ✅ IMPORT HALAMAN REGISTER MERCHANT BARU
+import { RegisterMerchantPage } from "./pages/auth/RegisterMerchantPage";
+
 import { WaitingApprovalPage } from "./pages/auth/WaitingApprovalPage";
 import { PortalLoginPage } from "./pages/auth/PortalLoginPage";
 import { ShopDetail } from "./pages/customer/ShopDetail";
@@ -42,10 +45,8 @@ import { OrderTrackingPage } from "./pages/customer/OrderTrackingPage";
 import { MarketSelectionPage } from "./pages/MarketSelection/MarketSelectionPage";
 import { CheckoutPaymentPage } from "./pages/checkout/CheckoutPaymentPage";
 
-// ✅ JALUR IMPORT YANG BENAR (Sesuai posisi file Juragan)
+// --- PROMO PAGES ---
 import { MerchantPromoPage } from "./pages/merchant/MerchantPromoPage";
-// Pastikan file CourierPromoPage.tsx ada di folder src/pages/courier/
-// Jika belum ada, buat foldernya atau sementara comment baris di bawah ini
 import { CourierPromoPage } from "./pages/courier/CourierPromoPage";
 
 // --- DASHBOARDS ---
@@ -202,13 +203,14 @@ const MainContent = () => {
   const bypassRoutes = [
     "/login",
     "/register",
+    "/register-merchant", // ✅ Bypass pengecekan market untuk halaman register ini
     "/portal",
     "/super-admin",
     "/admin",
     "/waiting-approval",
     "/track-order",
-    "/merchant-promo", // ✅ Rute Pendaftaran Toko (Agar tidak dicegat)
-    "/promo/kurir", // ✅ Rute Pendaftaran Kurir
+    "/merchant-promo",
+    "/promo/kurir",
   ];
 
   const isBypassRoute = bypassRoutes.some((route) =>
@@ -226,10 +228,16 @@ const MainContent = () => {
       <Route path="/login/toko" element={<MerchantLogin />} />
       <Route path="/login/kurir" element={<CourierLogin />} />
       <Route path="/login/admin-wilayah" element={<AdminLogin />} />
+
+      {/* REGISTER CUSTOMER */}
       <Route path="/register" element={<RegisterPage />} />
+
+      {/* ✅ REGISTER KHUSUS MERCHANT (YANG OTOMATIS BUAT DATA TOKO) */}
+      <Route path="/register-merchant" element={<RegisterMerchantPage />} />
+
       <Route path="/waiting-approval" element={<WaitingApprovalPage />} />
 
-      {/* ✅ PENDAFTARAN MITRA TERHUBUNG */}
+      {/* PROMO PAGES */}
       <Route path="/merchant-promo" element={<MerchantPromoPage />} />
       <Route path="/promo/kurir" element={<CourierPromoPage />} />
 

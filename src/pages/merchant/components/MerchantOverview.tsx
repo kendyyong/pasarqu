@@ -1,15 +1,13 @@
 import React from "react";
 import {
-  ShoppingBag,
-  Box,
-  Wallet,
   TrendingUp,
-  ArrowUpRight,
-  ChevronRight,
-  AlertCircle,
+  Package,
+  ShoppingBag,
+  CheckCircle2,
+  Lightbulb,
+  ArrowRight,
 } from "lucide-react";
 
-// 1. UPDATE INTERFACE: Tambahkan 'stats' agar sesuai dengan data dari Dashboard
 interface Props {
   merchantProfile: any;
   stats: {
@@ -22,172 +20,127 @@ export const MerchantOverview: React.FC<Props> = ({
   merchantProfile,
   stats,
 }) => {
-  // 2. GUNAKAN DATA DARI PROPS (Bukan Dummy Lagi)
-  const statCards = [
-    {
-      label: "Pesanan Baru",
-      value: stats.orders.toString(), // Data Real dari Database
-      desc: "Total pesanan masuk",
-      icon: <ShoppingBag size={24} />,
-      color: "bg-orange-50 text-orange-600",
-    },
-    {
-      label: "Produk Aktif",
-      value: stats.products.toString(), // Data Real dari Database
-      desc: "Tampil di etalase",
-      icon: <Box size={24} />,
-      color: "bg-teal-50 text-teal-600",
-    },
-    {
-      label: "Estimasi Saldo",
-      value: "Rp 0", // Placeholder (Nanti bisa diupdate jika fitur keuangan aktif)
-      desc: "Belum ada transaksi cair",
-      icon: <Wallet size={24} />,
-      color: "bg-blue-50 text-blue-600",
-    },
-  ];
-
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 text-left">
-      {/* GREETING SECTION */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase">
-            Ringkasan Penjualan
-          </h2>
-          <p className="text-sm text-slate-400 font-medium">
-            Pantau statistik toko{" "}
-            <span className="text-teal-600 font-bold">
-              {merchantProfile?.name}
-            </span>{" "}
-            hari ini.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-2xl shadow-sm w-fit">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
-            Sistem Online
-          </span>
-        </div>
+    <div className="space-y-4 animate-in fade-in duration-500 text-left">
+      {/* 1. STATS CARDS (UTAMA) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
+        <StatCard
+          icon={<ShoppingBag size={18} />}
+          label="Total Pesanan"
+          value={stats.orders}
+          color="text-slate-900"
+          bgColor="bg-slate-50"
+        />
+        <StatCard
+          icon={<Package size={18} />}
+          label="Total Produk"
+          value={stats.products}
+          color="text-teal-600"
+          bgColor="bg-teal-50"
+        />
+        <StatCard
+          icon={<TrendingUp size={18} />}
+          label="Performa"
+          value="100%"
+          color="text-orange-600"
+          bgColor="bg-orange-50"
+        />
+        <StatCard
+          icon={<CheckCircle2 size={18} />}
+          label="Toko Aktif"
+          value={merchantProfile?.is_shop_open ? "YA" : "TIDAK"}
+          color="text-blue-600"
+          bgColor="bg-blue-50"
+        />
       </div>
 
-      {/* STATS GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {statCards.map((item, index) => (
-          <div
-            key={index}
-            className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group"
-          >
-            <div className="flex items-start justify-between relative z-10">
-              <div
-                className={`w-12 h-12 ${item.color} rounded-2xl flex items-center justify-center shadow-sm`}
-              >
-                {item.icon}
-              </div>
-              <ArrowUpRight
-                size={20}
-                className="text-slate-200 group-hover:text-teal-500 transition-colors"
-              />
-            </div>
-            <div className="mt-5 relative z-10">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                {item.label}
-              </p>
-              <h3 className="text-2xl font-black text-slate-800 tracking-tighter">
-                {item.value}
-              </h3>
-              <p className="text-[9px] text-slate-400 font-bold uppercase mt-2 tracking-tighter">
-                {item.desc}
-              </p>
-            </div>
-            {/* Dekorasi Background */}
-            <div className="absolute bottom-[-20px] right-[-20px] opacity-[0.03] group-hover:scale-110 transition-transform duration-700">
-              {React.cloneElement(item.icon as React.ReactElement, {
-                size: 100,
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* BANNER EDUKASI / TIPS */}
-      <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl shadow-slate-200">
-        <div className="relative z-10 max-w-lg">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-teal-500/20 text-teal-400 rounded-full mb-4">
-            <TrendingUp size={14} />
-            <span className="text-[10px] font-black uppercase tracking-widest">
-              Tips Juragan
-            </span>
-          </div>
-          <h3 className="text-xl font-bold mb-4 italic leading-tight">
-            "Produk dengan foto yang terang dan judul yang jelas terbukti 2x
-            lebih cepat laku di Pasarqu!"
+      {/* 2. AREA GRAFIK / AKTIVITAS (SIMULASI) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-2 bg-white border border-slate-200 p-4 rounded-none">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+            <TrendingUp size={14} /> Grafik Penjualan
           </h3>
-          <div className="flex flex-wrap gap-3">
-            <div className="px-4 py-1.5 bg-white/10 rounded-xl text-[10px] font-bold uppercase tracking-widest border border-white/5">
-              Foto Cerah
-            </div>
-            <div className="px-4 py-1.5 bg-white/10 rounded-xl text-[10px] font-bold uppercase tracking-widest border border-white/5">
-              Fast Respon
-            </div>
-            <div className="px-4 py-1.5 bg-white/10 rounded-xl text-[10px] font-bold uppercase tracking-widest border border-white/5">
-              Update Stok
-            </div>
+          <div className="h-48 bg-slate-50 border border-dashed border-slate-200 flex items-center justify-center">
+            <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
+              Data penjualan akan muncul di sini
+            </p>
           </div>
         </div>
-        <TrendingUp className="absolute right-[-30px] bottom-[-30px] text-white/5 w-64 h-64 rotate-[-10deg]" />
+
+        <div className="bg-white border border-slate-200 p-4 rounded-none">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">
+            Pesanan Terbaru
+          </h3>
+          <div className="space-y-3">
+            <p className="text-[9px] font-bold text-slate-300 uppercase text-center py-10">
+              Belum ada pesanan masuk
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* RECENT ACTIVITY / TASKS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden text-left">
-          <div className="p-6 border-b border-slate-50 flex justify-between items-center">
-            <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">
-              Daftar Tugas
-            </h4>
-            <AlertCircle size={16} className="text-slate-300" />
+      {/* 3. TIPS JURAGAN (SEKARANG DI PALING BAWAH) */}
+      <div className="bg-slate-900 text-white p-5 rounded-none border-b-4 border-teal-500">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-8 h-8 bg-teal-500 flex items-center justify-center text-white">
+            <Lightbulb size={18} />
           </div>
-          <div className="divide-y divide-slate-50">
-            <TaskLink title="Lengkapi Foto Produk" label="Meningkatkan Minat" />
-            <TaskLink title="Update Lokasi Toko" label="Perhitungan Ongkir" />
-            <TaskLink title="Lihat Laporan Penjualan" label="Pantau Cuan" />
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-tight">
+              Tips Juragan Pasarqu
+            </h3>
+            <p className="text-[8px] font-bold text-teal-400 uppercase tracking-widest">
+              Tingkatkan Omzet Toko Anda
+            </p>
           </div>
         </div>
 
-        <div className="bg-teal-50/30 rounded-[2rem] border border-teal-100/50 p-8 flex flex-col items-center justify-center text-center">
-          <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center shadow-md mb-4 text-teal-600">
-            <TrendingUp size={32} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+          <div className="p-3 bg-slate-800 border-l-2 border-teal-500">
+            <p className="text-[9px] font-black uppercase text-slate-300 mb-1">
+              Foto Produk
+            </p>
+            <p className="text-[10px] leading-relaxed text-slate-400">
+              Gunakan foto produk yang terang dan jelas agar pelanggan lebih
+              tertarik berbelanja di lapak Anda.
+            </p>
           </div>
-          <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight mb-2">
-            Ingin Omzet Naik?
-          </h4>
-          <p className="text-[11px] text-slate-500 font-medium leading-relaxed max-w-[200px] mb-6">
-            Mulai tambahkan produk-produk unggulan pasar Anda ke etalase digital
-            sekarang.
-          </p>
-          <button className="px-6 py-3 bg-teal-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-teal-600/20 hover:bg-teal-700 transition-all">
-            Edukasi Seller
-          </button>
+          <div className="p-3 bg-slate-800 border-l-2 border-teal-500">
+            <p className="text-[9px] font-black uppercase text-slate-300 mb-1">
+              Respon Chat
+            </p>
+            <p className="text-[10px] leading-relaxed text-slate-400">
+              Balas chat pelanggan secepat mungkin untuk menjaga kepercayaan dan
+              rating toko tetap tinggi.
+            </p>
+          </div>
         </div>
+
+        <button className="mt-4 flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-teal-400 hover:text-white transition-colors">
+          Lihat Panduan Lengkap <ArrowRight size={12} />
+        </button>
       </div>
     </div>
   );
 };
 
-// SUB-COMPONENTS
-const TaskLink = ({ title, label }: { title: string; label: string }) => (
-  <div className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors cursor-pointer group">
-    <div className="flex flex-col">
-      <span className="text-xs font-bold text-slate-700 group-hover:text-teal-600 transition-colors">
-        {title}
-      </span>
-      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
-        {label}
-      </span>
+// SUB-KOMPONEN CARD STATS
+const StatCard = ({ icon, label, value, color, bgColor }: any) => (
+  <div className="bg-white border border-slate-200 p-3 md:p-4 rounded-none flex items-center gap-3 md:gap-4">
+    <div
+      className={`w-10 h-10 md:w-12 md:h-12 ${bgColor} ${color} flex items-center justify-center shrink-0`}
+    >
+      {icon}
     </div>
-    <ChevronRight
-      size={14}
-      className="text-slate-300 group-hover:translate-x-1 transition-transform"
-    />
+    <div className="min-w-0">
+      <p className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5 md:mb-1">
+        {label}
+      </p>
+      <p
+        className={`text-sm md:text-xl font-black leading-none ${color} tracking-tighter`}
+      >
+        {value}
+      </p>
+    </div>
   </div>
 );

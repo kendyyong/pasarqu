@@ -1,57 +1,31 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
+// ✅ FIX 2307: Jalur import mundur 2 langkah (../../)
 import { supabase } from "../../lib/supabaseClient";
 import { useToast } from "../../contexts/ToastContext";
 import {
   CheckCircle,
   XCircle,
-  Clock,
   Search,
-  Filter,
   Package,
   Store,
-  ExternalLink,
   Loader2,
-  ChevronRight,
+  Filter,
+  ArrowRight,
 } from "lucide-react";
 
-export const AdminProductVerification: React.FC = () => {
+// ✅ Interface Props menerima data matang dari Dashboard Admin Lokal
+interface Props {
+  products: any[];
+  onAction: () => void;
+}
+
+export const AdminProductVerification: React.FC<Props> = ({
+  products,
+  onAction,
+}) => {
   const { showToast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [products, setProducts] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<
-    "PENDING" | "APPROVED" | "REJECTED"
-  >("PENDING");
   const [processingId, setProcessingId] = useState<string | null>(null);
-
-  const fetchAllProducts = async () => {
-    setLoading(true);
-    try {
-      // Kita ambil semua produk agar tetap terdata
-      const { data, error } = await supabase
-        .from("products")
-        .select(
-          `
-          *,
-          merchants (shop_name),
-          categories (name),
-          markets (name)
-        `,
-        )
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setProducts(data || []);
-    } catch (err: any) {
-      showToast("Gagal mengambil data: " + err.message, "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAllProducts();
-  }, []);
 
   const handleUpdateStatus = async (
     productId: string,
@@ -66,15 +40,11 @@ export const AdminProductVerification: React.FC = () => {
 
       if (error) throw error;
 
-      // Update state lokal agar tidak perlu refresh halaman
-      setProducts((prev) =>
-        prev.map((p) => (p.id === productId ? { ...p, status: newStatus } : p)),
-      );
-
       showToast(
         `Produk berhasil ${newStatus === "APPROVED" ? "Disetujui" : "Ditolak"}`,
         "success",
       );
+      onAction(); // Refresh data dashboard
     } catch (err: any) {
       showToast("Gagal update: " + err.message, "error");
     } finally {
@@ -82,179 +52,139 @@ export const AdminProductVerification: React.FC = () => {
     }
   };
 
-  // Filter data berdasarkan tab dan pencarian
-  const filteredProducts = products.filter((p) => {
-    const matchesTab = p.status === activeTab;
+  // Filter Lokal (Hanya Pencarian, data sudah difilter market_id di Dashboard)
+  const filteredData = products.filter((p) => {
     const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.merchants?.shop_name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesTab && matchesSearch;
+      p.merchants?.shop_name?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 font-sans text-left antialiased">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* HEADER SECTION */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* HEADER & SEARCH (SHARP STYLE) */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-5 rounded-none border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-3 text-slate-800">
+          <div className="w-10 h-10 bg-orange-500 text-white flex items-center justify-center rounded-none">
+            <Package size={20} />
+          </div>
           <div>
-            <h1 className="text-2xl font-black text-slate-800 uppercase tracking-tight italic">
-              Verifikasi Produk
-            </h1>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
-              Manajemen Persetujuan Etalase Pasar
+            <h2 className="text-sm font-black uppercase tracking-tight leading-none">
+              Antrian Verifikasi
+            </h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+              {filteredData.length} Produk Menunggu
             </p>
-          </div>
-
-          <div className="relative">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              size={16}
-            />
-            <input
-              type="text"
-              placeholder="Cari produk atau toko..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold outline-none focus:border-teal-500 w-full md:w-64 transition-all"
-            />
           </div>
         </div>
 
-        {/* TABS MENU - SUPAYA TETAP TERDATA */}
-        <div className="flex gap-2 p-1 bg-slate-200/50 rounded-xl w-fit">
-          <button
-            onClick={() => setActiveTab("PENDING")}
-            className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === "PENDING" ? "bg-white text-orange-500 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-          >
-            <Clock size={14} /> Perlu Verifikasi
-          </button>
-          <button
-            onClick={() => setActiveTab("APPROVED")}
-            className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === "APPROVED" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-          >
-            <CheckCircle size={14} /> Telah Disetujui
-          </button>
-          <button
-            onClick={() => setActiveTab("REJECTED")}
-            className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === "REJECTED" ? "bg-white text-red-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-          >
-            <XCircle size={14} /> Ditolak
-          </button>
+        <div className="relative w-full md:w-auto">
+          <Search
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+            size={16}
+          />
+          <input
+            type="text"
+            placeholder="CARI NAMA BARANG / TOKO..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full md:w-72 pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-none text-[10px] font-black uppercase outline-none focus:border-orange-500 transition-all placeholder:text-slate-400"
+          />
         </div>
+      </div>
 
-        {/* DATA GRID */}
-        {loading ? (
-          <div className="py-20 text-center">
-            <Loader2 className="animate-spin text-teal-600 mx-auto" size={40} />
+      {/* GRID PRODUK */}
+      {filteredData.length === 0 ? (
+        <div className="py-24 text-center bg-white border border-dashed border-slate-300 rounded-none">
+          <div className="w-16 h-16 bg-slate-50 mx-auto flex items-center justify-center text-slate-300 mb-4 rounded-full">
+            <CheckCircle size={32} />
           </div>
-        ) : filteredProducts.length === 0 ? (
-          <div className="py-20 text-center bg-white rounded-xl border border-dashed border-slate-200">
-            <Package size={48} className="mx-auto text-slate-200 mb-4" />
-            <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">
-              Tidak ada data di kategori ini
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProducts.map((p) => (
-              <div
-                key={p.id}
-                className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-md transition-all flex flex-col"
-              >
-                {/* IMAGE HEADER */}
-                <div className="aspect-video bg-slate-100 relative">
-                  <img
-                    src={p.image_url}
-                    className="w-full h-full object-cover"
-                    alt={p.name}
-                  />
-                  <div className="absolute top-3 right-3">
-                    <span className="bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-[9px] font-black text-slate-800 shadow-sm uppercase">
-                      {p.categories?.name}
-                    </span>
-                  </div>
+          <p className="text-slate-400 font-black uppercase text-[10px] tracking-[0.2em]">
+            Tidak ada antrian produk saat ini
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredData.map((p) => (
+            <div
+              key={p.id}
+              className="bg-white border border-slate-200 hover:border-slate-800 transition-all group rounded-none flex flex-col"
+            >
+              {/* IMAGE AREA */}
+              <div className="aspect-video bg-slate-100 relative overflow-hidden border-b border-slate-100">
+                <img
+                  src={p.image_url}
+                  alt={p.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                />
+                <div className="absolute top-0 left-0 bg-orange-600 text-white px-3 py-1 text-[8px] font-black uppercase tracking-widest">
+                  PENDING
                 </div>
-
-                {/* CONTENT */}
-                <div className="p-5 flex-1 space-y-4">
-                  <div>
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight leading-tight">
-                      {p.name}
-                    </h3>
-                    <div className="flex items-center gap-1 mt-1 text-slate-400">
-                      <Store size={12} />
-                      <span className="text-[10px] font-bold uppercase">
-                        {p.merchants?.shop_name}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 py-3 border-y border-slate-50">
-                    <div>
-                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
-                        Harga
-                      </p>
-                      <p className="text-xs font-black text-teal-600">
-                        Rp {p.price.toLocaleString()}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
-                        Pasar
-                      </p>
-                      <p className="text-xs font-black text-slate-700">
-                        {p.markets?.name}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* ACTION BUTTONS */}
-                  <div className="pt-2 flex gap-2">
-                    {p.status === "PENDING" ? (
-                      <>
-                        <button
-                          disabled={processingId === p.id}
-                          onClick={() => handleUpdateStatus(p.id, "APPROVED")}
-                          className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
-                        >
-                          {processingId === p.id ? (
-                            <Loader2 size={12} className="animate-spin" />
-                          ) : (
-                            <>
-                              <CheckCircle size={14} /> Terima
-                            </>
-                          )}
-                        </button>
-                        <button
-                          disabled={processingId === p.id}
-                          onClick={() => handleUpdateStatus(p.id, "REJECTED")}
-                          className="flex-1 bg-red-50 text-red-600 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2"
-                        >
-                          <XCircle size={14} /> Tolak
-                        </button>
-                      </>
-                    ) : (
-                      <div
-                        className={`w-full py-2 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 ${p.status === "APPROVED" ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"}`}
-                      >
-                        {p.status === "APPROVED" ? (
-                          <>
-                            <CheckCircle size={14} /> Sudah Disetujui
-                          </>
-                        ) : (
-                          <>
-                            <XCircle size={14} /> Sudah Ditolak
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-slate-900/80 to-transparent">
+                  <p className="text-white text-[9px] font-bold uppercase flex items-center gap-1 tracking-wide">
+                    <Store size={10} className="text-orange-400" />{" "}
+                    {p.merchants?.shop_name || "Toko Tidak Diketahui"}
+                  </p>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+
+              {/* CONTENT AREA */}
+              <div className="p-5 flex-1 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-[7px] font-black text-slate-400 uppercase border border-slate-200 px-1.5 py-0.5">
+                      {p.categories?.name || "UMUM"}
+                    </span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">
+                      Stok: {p.stock} {p.unit}
+                    </span>
+                  </div>
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-tight leading-snug line-clamp-2 min-h-[2.5em]">
+                    {p.name}
+                  </h3>
+                  <p className="text-sm font-black text-teal-600 mt-2 tracking-tighter italic">
+                    Rp {p.price.toLocaleString()}
+                  </p>
+
+                  <div className="mt-3 p-3 bg-slate-50 border-l-2 border-slate-300">
+                    <p className="text-[8px] text-slate-500 line-clamp-2 leading-relaxed italic">
+                      "{p.description || "Tidak ada deskripsi."}"
+                    </p>
+                  </div>
+                </div>
+
+                {/* ACTION BUTTONS */}
+                <div className="flex gap-2 pt-5 mt-2 border-t border-slate-100">
+                  <button
+                    disabled={processingId === p.id}
+                    onClick={() => handleUpdateStatus(p.id, "REJECTED")}
+                    className="flex-1 py-3 bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-600 rounded-none text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                  >
+                    {processingId === p.id ? (
+                      <Loader2 className="animate-spin" size={14} />
+                    ) : (
+                      <XCircle size={14} />
+                    )}
+                    Tolak
+                  </button>
+                  <button
+                    disabled={processingId === p.id}
+                    onClick={() => handleUpdateStatus(p.id, "APPROVED")}
+                    className="flex-[2] py-3 bg-slate-900 text-white rounded-none text-[9px] font-black uppercase tracking-widest hover:bg-teal-600 transition-all flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    {processingId === p.id ? (
+                      <Loader2 className="animate-spin" size={14} />
+                    ) : (
+                      <CheckCircle size={14} />
+                    )}
+                    Setujui & Rilis
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

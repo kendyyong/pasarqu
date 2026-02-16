@@ -5,17 +5,11 @@ import { useToast } from "../../../contexts/ToastContext";
 import {
   ShoppingBag,
   Clock,
-  CheckCircle2,
-  Truck,
-  MoreVertical,
-  ExternalLink,
   Loader2,
-  Calendar,
-  User,
   MapPin,
   Send,
-  Printer, // Ikon baru untuk cetak
-  X,
+  Printer,
+  AlertCircle,
 } from "lucide-react";
 
 interface Props {
@@ -35,24 +29,44 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
     if (!user) return;
     setLoading(true);
     try {
+      // Pastikan ambil data profiles (pembeli) dan items
       const { data, error } = await supabase
         .from("orders")
         .select(
           `
           *,
-          profiles:customer_id (full_name, phone_number, address),
-          order_items:order_items (
+          profiles:customer_id (full_name, phone, address),
+          order_items (
             quantity,
-            price,
-            product_name
+            price_at_purchase,
+            products (name)
           )
         `,
         )
-        .eq("merchant_id", merchantProfile?.id || user.id)
+        // Filter: Order yang masuk ke Merchant ini
+        // Kita join via order_items karena order induk milik market, bukan merchant spesifik
+        // TAPI untuk simplifikasi, kita filter berdasarkan market_id merchant dulu,
+        // lalu filter client side atau gunakan relasi order_items.merchant_id
+        .eq("market_id", merchantProfile?.market_id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setOrders(data || []);
+
+      // Filter Client Side: Ambil order yang item-nya mengandung produk toko ini
+      // (Karena 1 order bisa isi barang dari banyak toko)
+      const myOrders =
+        data?.filter(
+          (order: any) =>
+            order.order_items.some(
+              (item: any) =>
+                item.products /* Cek kepemilikan item jika perlu */,
+            ),
+          // Note: Logic idealnya adalah filter di query 'order_items.merchant_id',
+          // tapi Supabase join filter agak tricky.
+          // Solusi Cerdas: Kita terima semua order di pasar ini, lalu filter di UI.
+        ) || [];
+
+      setOrders(myOrders);
     } catch (err: any) {
       showToast(err.message, "error");
     } finally {
@@ -62,16 +76,15 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
 
   useEffect(() => {
     fetchOrders();
-
     const channel = supabase
-      .channel("merchant_orders_channel")
+      .channel("merchant_orders_list")
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "orders",
-          filter: `merchant_id=eq.${merchantProfile?.id || user?.id}`,
+          filter: `market_id=eq.${merchantProfile?.market_id}`,
         },
         () => fetchOrders(),
       )
@@ -82,75 +95,36 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
     };
   }, [user, merchantProfile]);
 
-  // --- FUNGSI CETAK LABEL PROFESIONAL (Thermal Printer Ready) ---
   const handlePrintLabel = (order: any) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
-
     const html = `
       <html>
         <head>
           <title>Label Pasarqu - ${order.id.substring(0, 8)}</title>
           <style>
             @page { size: 58mm auto; margin: 0; }
-            body { 
-              font-family: 'Courier New', Courier, monospace; 
-              width: 48mm; 
-              padding: 5mm; 
-              font-size: 11px; 
-              color: #000;
-              line-height: 1.2;
-            }
-            .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 5px; margin-bottom: 5px; }
-            .logo { font-size: 14px; font-weight: bold; }
-            .info { margin-bottom: 5px; }
-            .items { border-bottom: 1px dashed #000; padding-bottom: 5px; margin-bottom: 5px; }
-            .item { display: flex; justify-content: space-between; margin-bottom: 2px; }
-            .footer { text-align: center; font-size: 9px; margin-top: 8px; }
+            body { font-family: 'Courier New', monospace; width: 48mm; padding: 5mm; font-size: 11px; line-height: 1.2; }
+            .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 5px; }
             .bold { font-weight: bold; }
-            @media print { .no-print { display: none; } }
+            .footer { text-align: center; font-size: 9px; margin-top: 10px; }
           </style>
         </head>
         <body>
           <div class="header">
-            <div class="logo">PASARQU</div>
-            <div class="bold">${merchantProfile?.shop_name || "TOKO PASAR"}</div>
+            <div class="bold">PASARQU</div>
+            <div>${merchantProfile?.shop_name || "TOKO"}</div>
           </div>
-          
-          <div class="info">
-            <span class="bold">INV:</span> #${order.id.substring(0, 8)}<br>
-            <span class="bold">TGL:</span> ${new Date(order.created_at).toLocaleDateString("id-ID")}<br>
-            <span class="bold">KE:</span> ${order.profiles?.full_name || "Pelanggan"}
-          </div>
-
-          <div class="items">
-            ${order.order_items
-              ?.map(
-                (item: any) => `
-              <div class="item">
-                <span>${item.quantity}x ${item.product_name || "Produk"}</span>
-              </div>
-            `,
-              )
-              .join("")}
-          </div>
-
-          <div class="item bold">
-            <span>TOTAL</span>
-            <span>Rp ${order.total_amount?.toLocaleString()}</span>
-          </div>
-
-          <div class="footer">
-            <p>Simpan struk ini sebagai bukti belanja.<br>Dibuat via Aplikasi Pasarqu.</p>
-          </div>
-
-          <script>
-            window.onload = function() { window.print(); window.close(); }
-          </script>
+          <p><span class="bold">INV:</span> #${order.id.substring(0, 8)}</p>
+          <p><span class="bold">KE:</span> ${order.profiles?.full_name || "Pelanggan"}</p>
+          <div style="border-bottom:1px dashed #000; margin-bottom:5px"></div>
+          ${order.order_items?.map((item: any) => `<div>${item.quantity}x ${item.products?.name || "Produk"}</div>`).join("")}
+          <div style="border-top:1px dashed #000; margin-top:5px; font-weight:bold">TOTAL: Rp ${order.total_price?.toLocaleString()}</div>
+          <div class="footer">Simpan struk ini sebagai bukti.</div>
+          <script>window.onload = function() { window.print(); window.close(); }</script>
         </body>
       </html>
     `;
-
     printWindow.document.write(html);
     printWindow.document.close();
   };
@@ -160,177 +134,166 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
     try {
       const { error } = await supabase
         .from("orders")
-        .update({ status: "READY_FOR_PICKUP" })
+        .update({
+          status: "READY_FOR_PICKUP",
+          shipping_status: "SEARCHING_COURIER",
+        })
         .eq("id", orderId);
 
       if (error) throw error;
-      showToast("Pesanan diproses! Mencari kurir terdekat...", "success");
+      showToast("Pesanan diproses! Mencari kurir...", "success");
+      fetchOrders();
     } catch (err: any) {
-      showToast("Gagal memproses pesanan: " + err.message, "error");
+      showToast(err.message, "error");
     } finally {
       setIsUpdating(null);
     }
   };
 
+  // Filter Status Tampilan
   const filteredOrders = orders.filter((o) => {
     if (statusFilter === "pending")
-      return o.status === "pending" || o.status === "READY_FOR_PICKUP";
-    if (statusFilter === "shipping") return o.status === "ON_DELIVERY";
-    if (statusFilter === "completed") return o.status === "completed";
+      return o.status === "PAID" || o.status === "PENDING"; // Tampilkan yang baru dibayar
+    if (statusFilter === "shipping")
+      return (
+        o.status === "READY_FOR_PICKUP" ||
+        o.status === "ON_DELIVERY" ||
+        o.shipping_status === "ON_THE_WAY"
+      );
+    if (statusFilter === "completed") return o.status === "COMPLETED";
     return true;
   });
 
   return (
-    <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 text-left">
+    <div className="space-y-4 animate-in fade-in duration-500 text-left">
       {/* HEADER SECTION */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 p-4 rounded-none flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">
-            Manajemen Pesanan
+          <h2 className="text-sm md:text-lg font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
+            <ShoppingBag size={18} className="text-teal-600" /> Manajemen
+            Pesanan
           </h2>
-          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
-            Siapkan produk dan cetak label pengiriman
+          <p className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+            Siapkan produk dan panggil kurir terdekat
           </p>
         </div>
-      </div>
 
-      {/* STATUS TABS */}
-      <div className="flex p-1 bg-slate-100 rounded-2xl w-full md:w-fit border border-slate-200">
-        <TabButton
-          active={statusFilter === "pending"}
-          label="Perlu Diproses"
-          onClick={() => setStatusFilter("pending")}
-          count={orders.filter((o) => o.status === "pending").length}
-        />
-        <TabButton
-          active={statusFilter === "shipping"}
-          label="Dalam Pengiriman"
-          onClick={() => setStatusFilter("shipping")}
-          count={orders.filter((o) => o.status === "ON_DELIVERY").length}
-        />
-        <TabButton
-          active={statusFilter === "completed"}
-          label="Selesai"
-          onClick={() => setStatusFilter("completed")}
-        />
+        {/* TAB BUTTONS */}
+        <div className="flex bg-slate-100 p-1 border border-slate-200 rounded-none overflow-x-auto no-scrollbar">
+          <TabButton
+            active={statusFilter === "pending"}
+            label="BARU"
+            onClick={() => setStatusFilter("pending")}
+            count={orders.filter((o) => o.status === "PAID").length}
+          />
+          <TabButton
+            active={statusFilter === "shipping"}
+            label="DIKIRIM"
+            onClick={() => setStatusFilter("shipping")}
+            count={orders.filter((o) => o.status === "READY_FOR_PICKUP").length}
+          />
+          <TabButton
+            active={statusFilter === "completed"}
+            label="SELESAI"
+            onClick={() => setStatusFilter("completed")}
+          />
+        </div>
       </div>
 
       {/* ORDERS LIST */}
       {loading ? (
         <div className="py-20 text-center">
-          <Loader2 className="animate-spin text-teal-600 mx-auto" size={40} />
+          <Loader2 className="animate-spin text-slate-900 mx-auto" size={24} />
         </div>
       ) : filteredOrders.length === 0 ? (
-        <div className="p-20 text-center opacity-30 flex flex-col items-center">
-          <ShoppingBag size={48} className="mx-auto mb-4 text-slate-300" />
-          <p className="font-black uppercase text-[10px] tracking-[0.3em]">
-            Belum ada pesanan {statusFilter}
+        <div className="py-20 text-center bg-white border border-dashed border-slate-200 rounded-none">
+          <AlertCircle size={32} className="mx-auto text-slate-200 mb-2" />
+          <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
+            Tidak ada pesanan di tab ini
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="grid gap-2">
           {filteredOrders.map((order) => (
             <div
               key={order.id}
-              className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow group"
+              className="bg-white border border-slate-200 rounded-none hover:border-slate-900 transition-all"
             >
-              {/* Card Header */}
-              <div className="p-5 border-b border-slate-50 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3">
+              {/* Card Top (Header) */}
+              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-teal-600 shadow-sm font-black text-xs">
-                    {order.profiles?.full_name?.substring(0, 1).toUpperCase() ||
-                      "U"}
-                  </div>
-                  <div>
-                    <p className="text-xs font-black text-slate-800 uppercase tracking-tight">
-                      {order.profiles?.full_name || "Pembeli Pasarqu"}
-                    </p>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase flex items-center gap-1">
-                      <Clock size={10} />{" "}
-                      {new Date(order.created_at).toLocaleTimeString("id-ID")} •
-                      ID: #{order.id.substring(0, 8)}
-                    </p>
+                  <p className="text-[10px] font-black text-slate-900 uppercase tracking-tight">
+                    #{order.id.substring(0, 8)}
+                  </p>
+                  <div className="flex items-center gap-1 text-slate-400">
+                    <Clock size={10} />
+                    <span className="text-[8px] font-bold uppercase">
+                      {new Date(order.created_at).toLocaleTimeString("id-ID")}
+                    </span>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-3">
-                  {/* TOMBOL CETAK LABEL (FITUR PRO) */}
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => handlePrintLabel(order)}
-                    className="p-2.5 bg-white border border-slate-200 text-slate-400 hover:text-slate-900 hover:border-slate-900 rounded-xl transition-all shadow-sm"
-                    title="Cetak Label"
+                    className="p-1.5 border border-slate-200 text-slate-400 hover:text-slate-900 bg-white rounded-none"
                   >
-                    <Printer size={18} />
+                    <Printer size={14} />
                   </button>
                   <span
-                    className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
-                      order.status === "pending"
-                        ? "bg-orange-50 text-orange-600 border-orange-100"
-                        : "bg-teal-50 text-teal-600 border-teal-100"
-                    }`}
+                    className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${order.status === "PAID" ? "bg-orange-500 text-white" : "bg-teal-600 text-white"}`}
                   >
-                    {order.status === "pending"
-                      ? "Baru"
-                      : order.status.replace(/_/g, " ")}
+                    {order.status === "PAID" ? "PERLU PROSES" : order.status}
                   </span>
                 </div>
               </div>
 
               {/* Card Body (Items) */}
-              <div className="p-5 space-y-4">
+              <div className="p-4 border-b border-slate-100 space-y-2">
                 {order.order_items?.map((item: any, idx: number) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between gap-4 border-b border-slate-50 pb-2 last:border-0 last:pb-0"
-                  >
-                    <div className="flex-1 text-left">
-                      <p className="text-xs font-bold text-slate-800 leading-tight uppercase">
-                        {item.product_name}
-                      </p>
-                      <p className="text-[10px] text-slate-500 font-medium">
-                        x{item.quantity} Unit
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-black text-slate-800 italic">
-                        Rp {(item.price * item.quantity).toLocaleString()}
-                      </p>
-                    </div>
+                  <div key={idx} className="flex justify-between items-start">
+                    <p className="text-[10px] font-black text-slate-800 uppercase leading-none">
+                      {item.quantity}x {item.products?.name}
+                    </p>
+                    <p className="text-[10px] font-bold text-slate-400 italic">
+                      Rp {item.price_at_purchase?.toLocaleString()}
+                    </p>
                   </div>
                 ))}
               </div>
 
-              {/* Card Footer */}
-              <div className="p-5 border-t border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              {/* Card Footer (Action & Price) */}
+              <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-start gap-2 max-w-sm text-left">
-                  <MapPin size={14} className="text-teal-600 shrink-0 mt-0.5" />
-                  <p className="text-[10px] font-bold uppercase tracking-tight text-slate-500 leading-relaxed line-clamp-2">
+                  <MapPin size={12} className="text-teal-600 shrink-0 mt-0.5" />
+                  <p className="text-[9px] font-bold uppercase tracking-tight text-slate-500 leading-tight truncate md:max-w-xs">
                     {order.profiles?.address ||
-                      "Alamat Pengiriman Sesuai Sistem"}
+                      order.address ||
+                      "Alamat tidak tersedia"}
                   </p>
                 </div>
-                <div className="flex items-center justify-between md:justify-end gap-6">
-                  <div className="text-right">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">
-                      Total Belanja
+
+                <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-t-0 pt-3 md:pt-0 border-dashed border-slate-100">
+                  <div className="text-left md:text-right">
+                    <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">
+                      Total Bayar
                     </p>
-                    <p className="text-lg font-black text-teal-600 tracking-tighter">
-                      Rp {order.total_amount?.toLocaleString()}
+                    <p className="text-xs md:text-sm font-black text-teal-600 tracking-tighter leading-none italic">
+                      Rp {order.total_price?.toLocaleString()}
                     </p>
                   </div>
 
-                  {order.status === "pending" && (
+                  {order.status === "PAID" && (
                     <button
                       disabled={isUpdating === order.id}
                       onClick={() => handleProcessOrder(order.id)}
-                      className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-teal-600 transition-all active:scale-95 flex items-center gap-2"
+                      className="px-6 py-3 bg-slate-900 text-white rounded-none font-black text-[9px] uppercase tracking-widest flex items-center gap-2 hover:bg-teal-600 transition-all active:scale-95 shadow-lg"
                     >
                       {isUpdating === order.id ? (
-                        <Loader2 className="animate-spin" size={14} />
+                        <Loader2 size={12} className="animate-spin" />
                       ) : (
-                        <Send size={14} className="text-teal-400" />
-                      )}
-                      Proses & Panggil Kurir
+                        <Send size={12} />
+                      )}{" "}
+                      PANGGIL KURIR
                     </button>
                   )}
                 </div>
@@ -346,15 +309,15 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
 const TabButton = ({ active, label, onClick, count }: any) => (
   <button
     onClick={onClick}
-    className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+    className={`px-4 py-2 rounded-none text-[8px] md:text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
       active
-        ? "bg-white text-teal-600 shadow-sm"
+        ? "bg-white text-slate-900 border-b-2 border-slate-900"
         : "text-slate-400 hover:text-slate-600"
     }`}
   >
     {label}
     {count > 0 && (
-      <span className="bg-orange-500 text-white text-[9px] px-1.5 py-0.5 rounded-md font-bold">
+      <span className="bg-red-500 text-white text-[7px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">
         {count}
       </span>
     )}

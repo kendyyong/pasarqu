@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Search as SearchIcon,
   ShoppingBasket,
   Zap,
   ArrowRight,
@@ -9,7 +8,10 @@ import {
   Star,
   Loader2,
   Timer,
-} from "lucide-react"; // ✅ SUDAH DIPERBAIKI (Bukan lucide-center)
+  Package,
+  Store,
+  AlertCircle,
+} from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useMarket } from "../contexts/MarketContext";
 import { useToast } from "../contexts/ToastContext";
@@ -63,8 +65,9 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
     try {
       let query = supabase
         .from("products")
-        .select("*, merchants:merchant_id(name)")
+        .select("*, merchants:merchant_id(shop_name)")
         .eq("status", "APPROVED")
+        .order("stock", { ascending: false }) // Stok ada tampil duluan
         .order("created_at", { ascending: false });
 
       if (selectedMarket?.id) {
@@ -146,7 +149,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                     alt={ad.title}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-6">
-                    <h2 className="text-white text-xl md:text-4xl font-black uppercase italic tracking-tighter leading-none">
+                    <h2 className="text-white text-xl md:text-4xl font-black uppercase tracking-tighter leading-none">
                       {ad.title}
                     </h2>
                   </div>
@@ -197,61 +200,107 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                 ))}
               </>
             ) : (
-              filteredProducts.map((product) => (
-                <div
-                  key={product.id}
-                  className="flex flex-col h-full bg-white rounded-none md:rounded-xl md:border md:border-slate-100 md:shadow-sm overflow-hidden group transition-all"
-                >
+              filteredProducts.map((product) => {
+                const isHabis = product.stock <= 0;
+                const isLowStock = product.stock > 0 && product.stock < 5;
+
+                return (
                   <div
+                    key={product.id}
                     onClick={() => navigate(`/product/${product.id}`)}
-                    className="aspect-square w-full overflow-hidden bg-slate-50 cursor-pointer relative"
+                    className={`flex flex-col h-full bg-white rounded-none md:rounded-xl md:border md:border-slate-100 md:shadow-sm overflow-hidden group transition-all ${isHabis ? "opacity-90" : ""}`}
                   >
-                    <img
-                      src={
-                        product.image_url ||
-                        "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400"
-                      }
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      alt={product.name}
-                    />
+                    {/* AREA GAMBAR (BERSIH DARI STOCK BADGE) */}
+                    <div className="aspect-square w-full overflow-hidden bg-slate-50 cursor-pointer relative">
+                      <img
+                        src={
+                          product.image_url ||
+                          "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400"
+                        }
+                        className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${isHabis ? "grayscale contrast-125" : ""}`}
+                        alt={product.name}
+                      />
 
-                    {product.is_po && (
-                      <div className="absolute top-2 left-2 bg-orange-600 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg flex items-center gap-1 uppercase animate-pulse">
-                        <Timer size={10} /> PO {product.po_days} HARI
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="p-3 flex flex-col flex-1">
-                    <p className="text-[8px] font-black text-slate-300 uppercase truncate mb-1">
-                      {product.merchants?.name || "Toko Pasarqu"}
-                    </p>
-                    <h4 className="text-[11px] font-bold text-slate-800 line-clamp-2 mb-2 leading-tight min-h-[32px]">
-                      {product.name}
-                    </h4>
-                    <div className="mt-auto mb-3">
-                      <span className="text-[15px] font-black text-[#FF6600] tracking-tighter">
-                        Rp {product.price.toLocaleString()}
-                      </span>
+                      {product.is_po && (
+                        <div className="absolute bottom-2 left-2 bg-orange-600 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg flex items-center gap-1 uppercase">
+                          <Timer size={10} /> PO {product.po_days} HARI
+                        </div>
+                      )}
                     </div>
 
-                    {/* ✅ TAMU BOLEH TAMBAH BARANG SESUAI INSTRUKSI JURAGAN */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        addToCart(product);
-                        showToast("Berhasil masuk keranjang", "success");
-                      }}
-                      className="w-full bg-teal-600 hover:bg-teal-700 text-white py-2.5 rounded-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
-                    >
-                      <ShoppingBasket size={14} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">
-                        Tambah
-                      </span>
-                    </button>
+                    <div className="p-3 flex flex-col flex-1">
+                      <div className="flex items-center gap-1 mb-1 opacity-70">
+                        <Store size={10} className="text-slate-400" />
+                        <p className="text-[8px] font-black text-slate-400 uppercase truncate">
+                          {product.merchants?.shop_name || "Toko Pasarqu"}
+                        </p>
+                      </div>
+
+                      <h4
+                        className={`text-[11px] font-bold text-slate-800 line-clamp-2 mb-2 leading-tight min-h-[32px] ${isHabis ? "line-through text-slate-400" : ""}`}
+                      >
+                        {product.name}
+                      </h4>
+
+                      {/* ✅ AREA HARGA & STOK (POSISI BAWAH) */}
+                      <div className="mt-auto mb-3 flex items-center justify-between">
+                        <span className="text-[15px] font-black text-[#FF6600] tracking-tighter">
+                          Rp {product.price.toLocaleString()}
+                        </span>
+
+                        {/* LABEL STOK DI SINI (SEBELAH HARGA) */}
+                        {!isHabis && (
+                          <div
+                            className={`flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded ${
+                              isLowStock
+                                ? "bg-red-50 text-red-600 border border-red-100"
+                                : "bg-teal-50 text-teal-600 border border-teal-100"
+                            }`}
+                          >
+                            <Package size={10} />
+                            <span className="uppercase tracking-wide">
+                              {isLowStock
+                                ? `SISA ${product.stock}`
+                                : `STOK ${product.stock}`}
+                            </span>
+                          </div>
+                        )}
+                        {/* Jika habis, tidak perlu label di sini karena tombol sudah bilang 'STOK HABIS' */}
+                      </div>
+
+                      {/* TOMBOL PINTAR */}
+                      <button
+                        disabled={isHabis}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!isHabis) {
+                            addToCart(product);
+                            showToast("Berhasil masuk keranjang", "success");
+                          }
+                        }}
+                        className={`w-full py-2.5 rounded-lg flex items-center justify-center gap-2 active:scale-95 transition-all ${
+                          isHabis
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-teal-600 hover:bg-teal-700 text-white"
+                        }`}
+                      >
+                        {isHabis ? (
+                          <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-1">
+                            <AlertCircle size={12} /> STOK HABIS
+                          </span>
+                        ) : (
+                          <>
+                            <ShoppingBasket size={14} />
+                            <span className="text-[10px] font-black uppercase tracking-widest">
+                              TAMBAH
+                            </span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

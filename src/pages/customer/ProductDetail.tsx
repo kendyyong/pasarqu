@@ -3,10 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   ShoppingBag,
-  Share2,
   Star,
   Store,
-  ChevronRight,
   ShoppingCart,
   Timer,
   Package,
@@ -14,8 +12,9 @@ import {
   ShieldCheck,
   MessageCircle,
   MoreVertical,
-  Heart,
   MapPin,
+  Minus,
+  Plus,
 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { useMarket } from "../../contexts/MarketContext";
@@ -31,14 +30,12 @@ export const ProductDetail = () => {
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeImg, setActiveImg] = useState(0);
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [qty, setQty] = useState(1); // Perbaikan: State quantity ditambahkan kembali
+  const [qty, setQty] = useState(1);
 
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   // --- FUNGSI NAVIGASI ---
   const goToShop = () => {
-    // Perbaikan: Fungsi goToShop ditambahkan kembali
     if (product?.merchant_id) {
       navigate(`/shop/${product.merchant_id}`);
     }
@@ -87,9 +84,32 @@ export const ProductDetail = () => {
     window.scrollTo(0, 0);
   }, [productId]);
 
+  // ✅ LOGIKA CERDAS: HANDLE QUANTITY
+  const handleQuantity = (type: "inc" | "dec") => {
+    if (!product) return;
+
+    if (type === "dec" && qty > 1) {
+      setQty(qty - 1);
+    }
+    if (type === "inc") {
+      // Cek apakah kuantitas melebihi stok yang tersedia
+      if (qty < product.stock) {
+        setQty(qty + 1);
+      } else {
+        showToast(`Stok mentok! Hanya tersisa ${product.stock} unit.`, "error");
+      }
+    }
+  };
+
   const handleAddToCart = () => {
     if (!product) return;
-    addToCart(product, qty); // Mengirim qty yang dipilih
+
+    // Cek Stok Sebelum Masuk Keranjang
+    if (product.stock <= 0) {
+      return showToast("Maaf, stok barang ini sedang habis.", "error");
+    }
+
+    addToCart(product, qty);
     showToast(`Berhasil masuk keranjang`, "success");
   };
 
@@ -121,8 +141,10 @@ export const ProductDetail = () => {
       ? product.image_urls
       : [product.image_url];
 
+  const isOutOfStock = product.stock <= 0;
+
   return (
-    <div className="bg-[#F5F5F5] min-h-screen font-sans antialiased text-left pb-20 md:pb-10">
+    <div className="bg-[#F5F5F5] min-h-screen font-sans antialiased text-left pb-24 md:pb-10">
       {/* 1. HEADER MOBILE (Hidden on Desktop) */}
       <header className="md:hidden fixed top-0 z-50 w-full flex items-center justify-between px-4 py-3 bg-white/80 backdrop-blur-md shadow-sm">
         <button
@@ -153,17 +175,29 @@ export const ProductDetail = () => {
         <div className="bg-white md:rounded-sm md:shadow-sm flex flex-col md:flex-row overflow-hidden">
           {/* AREA GAMBAR */}
           <div className="w-full md:w-[450px] p-0 md:p-4 shrink-0">
-            <div className="relative aspect-square overflow-hidden bg-white">
+            <div className="relative aspect-square overflow-hidden bg-white group">
               <img
                 src={productImages[activeImg]}
                 alt={product.name}
-                className="w-full h-full object-cover"
+                className={`w-full h-full object-cover transition-all duration-500 ${isOutOfStock ? "grayscale opacity-50" : ""}`}
               />
+
+              {/* ✅ OVERLAY STOK HABIS */}
+              {isOutOfStock && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px] z-10">
+                  <div className="bg-red-600 text-white px-6 py-2 rounded-xl border-2 border-white shadow-2xl transform -rotate-12 font-black uppercase tracking-[0.2em] text-sm">
+                    STOK HABIS
+                  </div>
+                </div>
+              )}
+
               <div className="md:hidden absolute bottom-4 right-4 bg-black/30 text-white text-[10px] px-3 py-1 rounded-full backdrop-blur-sm">
                 {activeImg + 1} / {productImages.length}
               </div>
+
               {product.is_po && (
-                <div className="absolute top-4 left-0 bg-orange-500 text-white px-3 py-1 rounded-r-full text-[11px] font-bold shadow-lg">
+                <div className="absolute top-4 left-0 bg-orange-500 text-white px-3 py-1 rounded-r-full text-[11px] font-bold shadow-lg z-20">
+                  <Timer size={12} className="inline mr-1 mb-0.5" />
                   PO {product.po_days} Hari
                 </div>
               )}
@@ -186,9 +220,21 @@ export const ProductDetail = () => {
           {/* AREA INFO PRODUK */}
           <div className="flex-1 p-4 md:p-8 md:pl-4 space-y-6">
             <div>
-              <h1 className="text-xl md:text-2xl text-slate-800 leading-snug font-medium line-clamp-2 md:line-clamp-none uppercase tracking-tight italic">
-                {product.name}
-              </h1>
+              <div className="flex justify-between items-start gap-4">
+                <h1 className="text-xl md:text-2xl text-slate-800 leading-snug font-medium line-clamp-2 md:line-clamp-none uppercase tracking-tight italic flex-1">
+                  {product.name}
+                </h1>
+
+                {/* ✅ INDIKATOR STOK DI SEBELAH JUDUL */}
+                <div
+                  className={`flex flex-col items-end shrink-0 ${product.stock < 5 ? "text-red-500" : "text-teal-600"}`}
+                >
+                  <Package size={24} />
+                  <span className="text-[10px] font-black uppercase mt-1 tracking-wider">
+                    {isOutOfStock ? "Habis" : `Sisa ${product.stock}`}
+                  </span>
+                </div>
+              </div>
 
               <div className="flex items-center gap-3 mt-4">
                 <div className="flex items-center gap-1 text-teal-600 border-r border-slate-200 pr-3">
@@ -207,7 +253,7 @@ export const ProductDetail = () => {
             </div>
 
             {/* PRICE SECTION */}
-            <div className="bg-slate-50 p-4 md:p-6 rounded-sm flex items-center gap-3">
+            <div className="bg-slate-50 p-4 md:p-6 rounded-sm flex items-center gap-3 border border-slate-100">
               <span className="text-teal-600 text-sm font-bold">Rp</span>
               <span className="text-teal-600 text-3xl md:text-4xl font-black tracking-tighter">
                 {product.price.toLocaleString()}
@@ -219,47 +265,64 @@ export const ProductDetail = () => {
 
             {/* ACTIONS SECTION (Desktop Only) */}
             <div className="hidden md:flex flex-col gap-8 pt-4">
-              <div className="flex items-center gap-8">
-                <span className="text-xs text-slate-500 w-20 uppercase font-bold tracking-widest">
-                  Kuantitas
-                </span>
-                <div className="flex items-center border border-slate-200 rounded-sm overflow-hidden">
-                  <button
-                    onClick={() => setQty(Math.max(1, qty - 1))}
-                    className="px-4 py-1.5 hover:bg-slate-50 border-r transition-colors"
-                  >
-                    {" "}
-                    -{" "}
-                  </button>
-                  <span className="px-8 font-black text-sm">{qty}</span>
-                  <button
-                    onClick={() => setQty(qty + 1)}
-                    className="px-4 py-1.5 hover:bg-slate-50 border-l transition-colors"
-                  >
-                    {" "}
-                    +{" "}
-                  </button>
+              {!isOutOfStock && (
+                <div className="flex items-center gap-8">
+                  <span className="text-xs text-slate-500 w-20 uppercase font-bold tracking-widest">
+                    Kuantitas
+                  </span>
+                  <div className="flex items-center border border-slate-200 rounded-sm overflow-hidden">
+                    <button
+                      onClick={() => handleQuantity("dec")}
+                      disabled={qty <= 1}
+                      className="px-4 py-1.5 hover:bg-slate-50 border-r transition-colors disabled:opacity-50"
+                    >
+                      <Minus size={14} />
+                    </button>
+                    <span className="px-8 font-black text-sm w-12 text-center">
+                      {qty}
+                    </span>
+                    <button
+                      onClick={() => handleQuantity("inc")}
+                      disabled={qty >= product.stock}
+                      className="px-4 py-1.5 hover:bg-slate-50 border-l transition-colors disabled:opacity-50"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase italic">
+                    Stok tersedia:{" "}
+                    <span className="text-slate-800">{product.stock}</span>
+                  </span>
                 </div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase italic">
-                  Stok tersedia
-                </span>
-              </div>
+              )}
 
               <div className="flex gap-4">
                 <button
                   onClick={handleAddToCart}
-                  className="px-8 py-4 border border-teal-600 bg-teal-50 text-teal-600 font-black uppercase text-[10px] tracking-widest hover:bg-teal-100 transition-all flex items-center gap-3"
+                  disabled={isOutOfStock}
+                  className={`px-8 py-4 border font-black uppercase text-[10px] tracking-widest flex items-center gap-3 transition-all ${
+                    isOutOfStock
+                      ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                      : "border-teal-600 bg-teal-50 text-teal-600 hover:bg-teal-100"
+                  }`}
                 >
                   <ShoppingCart size={18} /> Masukkan Keranjang
                 </button>
                 <button
+                  disabled={isOutOfStock}
                   onClick={() => {
-                    handleAddToCart();
-                    navigate("/checkout");
+                    if (!isOutOfStock) {
+                      handleAddToCart();
+                      navigate("/checkout");
+                    }
                   }}
-                  className="px-12 py-4 bg-teal-600 text-white font-black uppercase text-[10px] tracking-widest hover:bg-teal-700 shadow-xl shadow-teal-600/20 active:scale-95 transition-all"
+                  className={`px-12 py-4 font-black uppercase text-[10px] tracking-widest shadow-xl transition-all ${
+                    isOutOfStock
+                      ? "bg-slate-300 text-white cursor-not-allowed shadow-none"
+                      : "bg-teal-600 text-white hover:bg-teal-700 shadow-teal-600/20 active:scale-95"
+                  }`}
                 >
-                  Beli Sekarang
+                  {isOutOfStock ? "Stok Habis" : "Beli Sekarang"}
                 </button>
               </div>
             </div>
@@ -327,6 +390,16 @@ export const ProductDetail = () => {
                 {product.merchants?.city || "Lokal"}
               </span>
             </div>
+            <div className="flex text-xs">
+              <span className="w-28 text-slate-400 font-bold uppercase tracking-tighter">
+                Stok
+              </span>
+              <span
+                className={`font-black uppercase ${isOutOfStock ? "text-red-500" : "text-slate-800"}`}
+              >
+                {product.stock} Unit
+              </span>
+            </div>
           </div>
           <div className="border-t border-slate-50 pt-8">
             <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line text-justify italic">
@@ -343,23 +416,35 @@ export const ProductDetail = () => {
           <MessageCircle size={20} />
           <span className="text-[8px] mt-0.5 font-bold uppercase">Chat</span>
         </button>
+
+        {/* Tombol Keranjang */}
         <button
+          disabled={isOutOfStock}
           onClick={handleAddToCart}
-          className="flex-1 flex flex-col items-center justify-center text-teal-600 bg-teal-50/30 h-full border-r border-slate-50"
+          className={`flex-1 flex flex-col items-center justify-center h-full border-r border-slate-50 ${isOutOfStock ? "text-slate-300 bg-slate-50" : "text-teal-600 bg-teal-50/30"}`}
         >
           <ShoppingCart size={20} />
           <span className="text-[8px] mt-0.5 font-bold uppercase">
             Keranjang
           </span>
         </button>
+
+        {/* Tombol Beli */}
         <button
+          disabled={isOutOfStock}
           onClick={() => {
-            handleAddToCart();
-            navigate("/checkout");
+            if (!isOutOfStock) {
+              handleAddToCart();
+              navigate("/checkout");
+            }
           }}
-          className="flex-[2.5] bg-teal-600 text-white h-full font-black uppercase text-[11px] tracking-widest active:bg-teal-700"
+          className={`flex-[2.5] h-full font-black uppercase text-[11px] tracking-widest active:bg-teal-700 transition-colors ${
+            isOutOfStock
+              ? "bg-slate-400 text-white cursor-not-allowed"
+              : "bg-teal-600 text-white"
+          }`}
         >
-          Beli Sekarang
+          {isOutOfStock ? "STOK HABIS" : "BELI SEKARANG"}
         </button>
       </div>
     </div>

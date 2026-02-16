@@ -16,7 +16,6 @@ import {
   MapPin,
   Loader2,
   ArrowRight,
-  ShieldCheck,
   AlertTriangle,
   Navigation,
   ReceiptText,
@@ -134,10 +133,14 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
   );
   const totalTagihanValue = subtotal + (shippingDetails?.total_to_buyer || 0);
 
+  // 🔥 FUNGSI BAYAR & POTONG STOK (SOLUSI CERDAS) 🔥
   const handlePayment = async () => {
     if (isOutOfRange) return showToast("Jarak terlalu jauh!", "error");
+    if (cart.length === 0) return;
+
     setLoading(true);
     try {
+      // 1. BUAT ORDER UTAMA
       const { data: newOrder, error: orderErr } = await supabase
         .from("orders")
         .insert({
@@ -157,26 +160,62 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
 
       if (orderErr) throw orderErr;
 
-      await supabase.from("order_items").insert(
-        cart.map((i) => ({
-          order_id: newOrder.id,
-          product_id: i.id,
-          quantity: i.quantity,
-          price_at_purchase: i.price,
-          merchant_id: i.merchant_id,
-        })),
-      );
+      // 2. MASUKKAN ITEM KE KERANJANG ORDER
+      const orderItemsData = cart.map((i) => ({
+        order_id: newOrder.id,
+        product_id: i.id,
+        quantity: i.quantity,
+        price_at_purchase: i.price,
+        merchant_id: i.merchant_id,
+      }));
 
+      const { error: itemsErr } = await supabase
+        .from("order_items")
+        .insert(orderItemsData);
+
+      if (itemsErr) throw itemsErr;
+
+      // 3. 🔥 PENGURANGAN STOK OTOMATIS 🔥
+      // Kita loop setiap barang di keranjang dan kurangi stoknya di tabel products
+      for (const item of cart) {
+        // Menggunakan RPC (Remote Procedure Call) lebih aman jika ada,
+        // tapi untuk sekarang kita pakai decrement manual yang simpel.
+        const { error: stockErr } = await supabase.rpc("decrement_stock", {
+          p_id: item.id,
+          qty: item.quantity,
+        });
+
+        // Fallback jika RPC belum dibuat: Update manual (kurang aman utk high traffic tapi oke utk awal)
+        if (stockErr) {
+          // Ambil stok lama
+          const { data: prod } = await supabase
+            .from("products")
+            .select("stock")
+            .eq("id", item.id)
+            .single();
+          if (prod) {
+            const newStock = Math.max(0, prod.stock - item.quantity);
+            await supabase
+              .from("products")
+              .update({ stock: newStock })
+              .eq("id", item.id);
+          }
+        }
+      }
+
+      // 4. CARI KURIR & BERSIHKAN CART
       await findNearestCourier(
         selectedMarket.latitude,
         selectedMarket.longitude,
       );
+
       showToast("Pesanan Berhasil Dibayar!", "success");
       clearCart();
       onClose();
       navigate(`/track-order/${newOrder.id}`);
     } catch (err: any) {
-      showToast(err.message, "error");
+      console.error(err);
+      showToast("Gagal memproses pembayaran: " + err.message, "error");
     } finally {
       setLoading(false);
     }
@@ -290,7 +329,6 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                       Total Tagihan
                     </span>
-                    {/* ✅ NILAI TAGIHAN BERWARNA ORANGE-600 */}
                     <h3
                       className={`text-2xl font-black tracking-tighter leading-none mt-1 ${isOutOfRange ? "text-red-500" : "text-orange-600"}`}
                     >
