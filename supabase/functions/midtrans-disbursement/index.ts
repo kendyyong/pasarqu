@@ -9,37 +9,47 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const { orderId, amount, customerName } = await req.json()
+    // 1. Data dari Dashboard Admin saat menyetujui penarikan
+    const { payoutDetails } = await req.json()
 
-    // Ganti dengan Server Key Sandbox Juragan
-    const serverKey = 'SB-Mid-server-xxxxxxxxxxxxxx' 
-    const authString = btoa(`${serverKey}:`)
+    // 🛡️ AMAN: Mengambil kunci dari Brankas Supabase Secrets (Lolos Vercel!)
+    const MIDTRANS_SERVER_KEY = Deno.env.get("MIDTRANS_SERVER_KEY") || "";
+    const authString = btoa(`${MIDTRANS_SERVER_KEY}:`)
 
-    const response = await fetch('https://app.sandbox.midtrans.com/snap/v1/transactions', {
+    // 2. URL Payouts (Iris Midtrans)
+    // Sandbox: https://app.sandbox.midtrans.com/iris/api/v1/payouts
+    const IRIS_URL = 'https://app.sandbox.midtrans.com/iris/api/v1/payouts'
+
+    const response = await fetch(IRIS_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': `Basic ${authString}`
+        'Authorization': `Basic ${authString}`,
+        'X-Idempotency-Key': `payout-${Date.now()}` // Mencegah double transfer
       },
       body: JSON.stringify({
-        transaction_details: {
-          order_id: orderId,
-          gross_amount: amount,
-        },
-        customer_details: {
-          first_name: customerName,
-        }
+        payouts: [
+          {
+            beneficiary_name: payoutDetails.holder_name,
+            beneficiary_account: payoutDetails.account_number,
+            beneficiary_bank: payoutDetails.bank_code,
+            amount: payoutDetails.amount.toString(),
+            notes: `Cair Gaji Pasarqu - ${payoutDetails.orderId}`
+          }
+        ]
       })
     })
 
     const data = await response.json()
+
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
 
   } catch (error) {
+    console.error("Disbursement Error:", error.message)
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,

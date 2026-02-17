@@ -6,17 +6,14 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Handle CORS untuk Browser
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const { orderId, amount, customerName } = await req.json()
+    const { orderId, amount, customerName, customerEmail } = await req.json()
 
-    // --- WAJIB GANTI: Masukkan SERVER KEY Sandbox Juragan di sini ---
-    const MIDTRANS_SERVER_KEY = Deno.env.get("MIDTRANS_SERVER_KEY");
-    const authString = btoa(`${serverKey}:`)
+    // 🛡️ AMAN: Mengambil kunci dari sistem, bukan menulisnya di sini
+    const MIDTRANS_SERVER_KEY = Deno.env.get("MIDTRANS_SERVER_KEY") || "";
+    const authString = btoa(`${MIDTRANS_SERVER_KEY}:`)
 
     const response = await fetch('https://app.sandbox.midtrans.com/snap/v1/transactions', {
       method: 'POST',
@@ -32,12 +29,13 @@ serve(async (req) => {
         },
         customer_details: {
           first_name: customerName,
-        }
+          email: customerEmail || "",
+        },
+        enabled_payments: ["credit_card", "gopay", "shopeepay", "permata_va", "bca_va", "bni_va", "bri_va", "other_va"]
       })
     })
 
     const data = await response.json()
-
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
