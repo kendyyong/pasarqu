@@ -9,7 +9,7 @@ import {
   ChevronRight,
   Store,
 } from "lucide-react";
-import { OrderChatRoom } from "../../../components/Chat/OrderChatRoom";
+import { OrderChatRoom } from "../../../features/chat/OrderChatRoom";
 
 export const CourierMessages = () => {
   const { user } = useAuth();

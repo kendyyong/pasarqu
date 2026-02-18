@@ -18,7 +18,7 @@ import {
   Heart,
   ChevronRight,
 } from "lucide-react";
-import { OrderChatRoom } from "../../components/Chat/OrderChatRoom";
+import { OrderChatRoom } from "../../features/chat/OrderChatRoom";
 import { useToast } from "../../contexts/ToastContext";
 
 const mapContainerStyle = {

@@ -10,7 +10,7 @@ import {
   Bike,
   ArrowLeft,
 } from "lucide-react";
-import { OrderChatRoom } from "../../../components/Chat/OrderChatRoom";
+import { OrderChatRoom } from "../../../features/chat/OrderChatRoom";
 import { useToast } from "../../../contexts/ToastContext";
 
 export const MerchantMessages = () => {

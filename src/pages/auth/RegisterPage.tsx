@@ -3,7 +3,7 @@ import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { GoogleMap, useJsApiLoader, MarkerF } from "@react-google-maps/api";
 import { supabase } from "../../lib/supabaseClient";
 import { useToast } from "../../contexts/ToastContext";
-import { GoogleLoginButton } from "../../components/GoogleLoginButton";
+import { GoogleLoginButton } from "../../components/ui/GoogleLoginButton";
 import {
   Eye,
   EyeOff,

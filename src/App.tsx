@@ -22,13 +22,13 @@ import { supabase } from "./lib/supabaseClient";
 import { useMarketCheck } from "./hooks/useMarketCheck";
 
 // --- COMPONENTS ---
-import { MobileLayout } from "./components/MobileLayout";
-import { HeroOnboarding } from "./components/HeroOnboarding";
-import { GhostBar } from "./components/GhostBar";
-import { CartDrawer } from "./components/CartDrawer";
-import { ProtectedRoute } from "./components/ProtectedRoute";
-import { AppHeader } from "./components/AppHeader";
-import { HomeMenuGrid } from "./components/HomeMenuGrid";
+import { MobileLayout } from "./components/layout/MobileLayout";
+import { HeroOnboarding } from "./pages/home/components/HeroOnboarding";
+import { GhostBar } from "./pages/home/components/GhostBar";
+import { CartDrawer } from "./components/shared/CartDrawer";
+import { ProtectedRoute } from "./components/layout/ProtectedRoute";
+import { AppHeader } from "./components/layout/AppHeader";
+import { HomeMenuGrid } from "./pages/home/components/HomeMenuGrid";
 
 // --- PAGES ---
 import { Home } from "./pages/Home";
@@ -42,22 +42,22 @@ import { PortalLoginPage } from "./pages/auth/PortalLoginPage";
 import { ShopDetail } from "./pages/customer/ShopDetail";
 import { ProductDetail } from "./pages/customer/ProductDetail";
 import { OrderTrackingPage } from "./pages/customer/OrderTrackingPage";
-import { MarketSelectionPage } from "./pages/MarketSelection/MarketSelectionPage";
+import { MarketSelectionPage } from "./pages/market-selection/MarketSelectionPage";
 import { CheckoutPaymentPage } from "./pages/checkout/CheckoutPaymentPage";
 
 // --- PROMO PAGES ---
-import { MerchantPromoPage } from "./pages/merchant/MerchantPromoPage";
-import { CourierPromoPage } from "./pages/courier/CourierPromoPage";
+import { MerchantPromoPage } from "./pages/merchant/components/MerchantPromoPage";
+import { CourierPromoPage } from "./pages/courier/components/CourierPromoPage";
 
 // --- DASHBOARDS ---
-import { LocalAdminDashboard } from "./pages/admin/LocalAdminDashboard";
-import { SuperAdminDashboard } from "./pages/admin/SuperAdminDashboard";
+import { LocalAdminDashboard } from "./pages/admin/local-admin/LocalAdminDashboard";
+import { SuperAdminDashboard } from "./pages/admin/super-admin/SuperAdminDashboard";
 import { MerchantDashboard } from "./pages/merchant/MerchantDashboard";
 import { CourierDashboard } from "./pages/courier/CourierDashboard";
 import { CustomerDashboard } from "./pages/customer/CustomerDashboard";
 
 // --- SUPER FEATURES ---
-import { ShippingConfig } from "./pages/admin/super-features/ShippingConfig";
+import { ShippingConfig } from "./pages/admin/super-admin/components/ShippingConfig";
 
 // --- LOGIN KHUSUS ---
 import {

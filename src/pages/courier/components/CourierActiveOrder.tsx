@@ -16,7 +16,7 @@ import {
   Store,
 } from "lucide-react";
 
-import { OrderChatRoom } from "../../../components/Chat/OrderChatRoom";
+import { OrderChatRoom } from "../../../features/chat/OrderChatRoom";
 
 interface Props {
   order: any;

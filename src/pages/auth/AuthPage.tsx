@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   ArrowRight,
 } from "lucide-react";
-import { GoogleLoginButton } from "../../components/GoogleLoginButton";
+import { GoogleLoginButton } from "../../components/ui/GoogleLoginButton";
 
 export const AuthPage = () => {
   const navigate = useNavigate();

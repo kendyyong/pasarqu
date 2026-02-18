@@ -1,47 +1,53 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useToast } from "../contexts/ToastContext";
 
-export const useRegionalFinance = (kecamatanName: string | undefined) => {
-  const [regionalSettings, setRegionalSettings] = useState<{
-    buyer_service_fee: number;
-    courier_app_fee: number;
-  } | null>(null);
+export const useRegionalFinance = () => {
+  const { showToast } = useToast();
+  const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const TABLE_NAME = "regional_finance_settings";
 
-  useEffect(() => {
-    const fetchRegionalSettings = async () => {
-      if (!kecamatanName) {
-        setLoading(false);
-        return;
-      }
+  const fetchSettings = async () => {
+    setLoading(true);
+    try {
+      const { data: res, error } = await supabase
+        .from(TABLE_NAME)
+        .select("*")
+        .order("kecamatan", { ascending: true });
+      if (error) throw error;
+      if (res) setData(res);
+    } catch (err: any) {
+      console.error("Error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      try {
-        const { data, error } = await supabase
-          .from("kecamatan_finance_settings")
-          .select("buyer_service_fee, courier_app_fee")
-          .eq("kecamatan_name", kecamatanName)
-          .eq("is_active", true)
-          .single();
+  const handleUpdate = async (id: string, field: string, value: any) => {
+    const cleanValue = isNaN(value) ? 0 : value;
+    const oldData = [...data];
+    setData(data.map((item) => item.id === id ? { ...item, [field]: cleanValue } : item));
 
-        if (error) throw error;
+    const { error } = await supabase.from(TABLE_NAME).update({ [field]: cleanValue }).eq("id", id);
+    if (error) {
+      showToast("Gagal update: " + error.message, "error");
+      setData(oldData);
+    } else {
+      showToast("Data tersimpan", "success");
+    }
+  };
 
-        if (data) {
-          setRegionalSettings(data);
-        }
-      } catch (err) {
-        console.error("Regional settings not found, using global default.");
-        // Jika kecamatan tidak terdaftar, kita beri harga default agar sistem tidak macet
-        setRegionalSettings({
-          buyer_service_fee: 2000,
-          courier_app_fee: 1000,
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
+  const handleDelete = async (id: string) => {
+    if (!confirm("Yakin hapus?")) return;
+    const { error } = await supabase.from(TABLE_NAME).delete().eq("id", id);
+    if (!error) {
+      setData(data.filter((item) => item.id !== id));
+      showToast("Terhapus", "success");
+    }
+  };
 
-    fetchRegionalSettings();
-  }, [kecamatanName]);
+  useEffect(() => { fetchSettings(); }, []);
 
-  return { regionalSettings, loading };
+  return { data, loading, fetchSettings, handleUpdate, handleDelete, TABLE_NAME };
 };
