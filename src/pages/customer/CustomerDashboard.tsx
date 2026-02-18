@@ -1,9 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
-// --- PERBAIKAN: Import Path diarahkan ke folder 'src/hooks' ---
+// --- HOOKS ---
 import { useCustomerDashboard } from "../../hooks/useCustomerDashboard";
 
 // IMPORT UI COMPONENTS
@@ -13,18 +13,31 @@ import { CustomerSupportButton } from "./components/CustomerSupportButton";
 import { CustomerMenuGrid } from "./components/CustomerMenuGrid";
 import { CustomerActionButtons } from "./components/CustomerActionButtons";
 
+// IMPORT MODAL BARU
+import { ReviewModal } from "./components/ReviewModal";
+
 export const CustomerDashboard = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
   // PANGGIL HOOK (Data Stats sekarang Realtime dari Database!)
-  const { stats, profile, loading } = useCustomerDashboard();
+  const { stats, profile, loading, refreshData } = useCustomerDashboard();
+
+  // STATE UNTUK KONTROL MODAL ULASAN
+  const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
 
   const handleLogout = async () => {
     if (window.confirm("Keluar dari aplikasi?")) {
       await logout();
       navigate("/");
     }
+  };
+
+  // Fungsi helper jika Juragan ingin mengetes modal ulasan
+  const triggerReview = (productData: any) => {
+    setSelectedProduct(productData);
+    setIsReviewOpen(true);
   };
 
   if (loading) {
@@ -57,6 +70,17 @@ export const CustomerDashboard = () => {
           </p>
         </div>
       </div>
+
+      {/* ✅ MODAL ULASAN TERINTEGRASI */}
+      <ReviewModal
+        isOpen={isReviewOpen}
+        onClose={() => setIsReviewOpen(false)}
+        product={selectedProduct}
+        onSuccess={() => {
+          refreshData(); // Refresh angka dashboard jika diperlukan
+          // Bisa tambahkan toast sukses di sini jika belum ada di dalam modal
+        }}
+      />
     </div>
   );
 };

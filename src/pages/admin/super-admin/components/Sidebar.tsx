@@ -27,7 +27,7 @@ import {
   Terminal,
   Truck, // Pastikan ikon Truck sudah diimport
 } from "lucide-react";
-import { SidebarItem } from "./SharedUI";
+import { SidebarItem } from "../../../../components/ui/SharedUI";
 import { useNavigate } from "react-router-dom";
 
 interface SidebarProps {

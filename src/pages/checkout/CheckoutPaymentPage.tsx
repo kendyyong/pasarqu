@@ -21,6 +21,7 @@ import {
   ReceiptText,
   ShoppingBag,
   Heart,
+  MessageSquare, // Icon tambahan untuk alamat
 } from "lucide-react";
 
 const mapContainerStyle = {
@@ -45,6 +46,10 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
   const [shippingDetails, setShippingDetails] = useState<any>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [isOutOfRange, setIsOutOfRange] = useState(false);
+
+  // --- FITUR TAMBAHAN YANG DIMINTA ---
+  const [manualAddress, setManualAddress] = useState("");
+  const [orderNotes, setOrderNotes] = useState("");
 
   const [deliveryCoords, setDeliveryCoords] = useState({
     lat: Number(profile?.latitude) || Number(selectedMarket?.latitude) || -6.2,
@@ -122,6 +127,8 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
         106.8;
       setDeliveryCoords({ lat, lng });
       updateLogistics(lat, lng);
+      // Sinkronkan alamat awal dari profil
+      setManualAddress(profile?.address || "");
     }
   }, [isOpen, profile, selectedMarket, updateLogistics]);
 
@@ -133,14 +140,14 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
   );
   const totalTagihanValue = subtotal + (shippingDetails?.total_to_buyer || 0);
 
-  // 🔥 FUNGSI BAYAR & POTONG STOK (SOLUSI CERDAS) 🔥
   const handlePayment = async () => {
     if (isOutOfRange) return showToast("Jarak terlalu jauh!", "error");
+    if (!manualAddress.trim())
+      return showToast("Alamat lengkap wajib diisi!", "error");
     if (cart.length === 0) return;
 
     setLoading(true);
     try {
-      // 1. BUAT ORDER UTAMA
       const { data: newOrder, error: orderErr } = await supabase
         .from("orders")
         .insert({
@@ -153,14 +160,14 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
           delivery_lng: deliveryCoords.lng,
           status: "PAID",
           shipping_status: "SEARCHING_COURIER",
-          address: profile?.address || "Alamat belum ditentukan",
+          address: manualAddress.trim(), // Mengirim alamat yang diketik manual
+          notes: orderNotes.trim(),
         })
         .select()
         .single();
 
       if (orderErr) throw orderErr;
 
-      // 2. MASUKKAN ITEM KE KERANJANG ORDER
       const orderItemsData = cart.map((i) => ({
         order_id: newOrder.id,
         product_id: i.id,
@@ -175,35 +182,13 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
 
       if (itemsErr) throw itemsErr;
 
-      // 3. 🔥 PENGURANGAN STOK OTOMATIS 🔥
-      // Kita loop setiap barang di keranjang dan kurangi stoknya di tabel products
       for (const item of cart) {
-        // Menggunakan RPC (Remote Procedure Call) lebih aman jika ada,
-        // tapi untuk sekarang kita pakai decrement manual yang simpel.
-        const { error: stockErr } = await supabase.rpc("decrement_stock", {
+        await supabase.rpc("decrement_stock", {
           p_id: item.id,
           qty: item.quantity,
         });
-
-        // Fallback jika RPC belum dibuat: Update manual (kurang aman utk high traffic tapi oke utk awal)
-        if (stockErr) {
-          // Ambil stok lama
-          const { data: prod } = await supabase
-            .from("products")
-            .select("stock")
-            .eq("id", item.id)
-            .single();
-          if (prod) {
-            const newStock = Math.max(0, prod.stock - item.quantity);
-            await supabase
-              .from("products")
-              .update({ stock: newStock })
-              .eq("id", item.id);
-          }
-        }
       }
 
-      // 4. CARI KURIR & BERSIHKAN CART
       await findNearestCourier(
         selectedMarket.latitude,
         selectedMarket.longitude,
@@ -224,7 +209,7 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
   return (
     <div className="fixed inset-0 z-[999] bg-white md:bg-slate-900/60 md:backdrop-blur-md flex flex-col items-center justify-center overflow-hidden">
       <div className="w-full h-full md:h-[85vh] md:mt-16 md:max-w-[1100px] bg-slate-50 md:rounded-[2.5rem] shadow-2xl flex flex-col md:flex-row overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300">
-        {/* KOLOM KIRI (Desktop Only) */}
+        {/* KOLOM KIRI */}
         <div className="hidden md:flex md:w-5/12 bg-teal-600 p-10 flex-col justify-between text-white relative overflow-hidden text-left">
           <div className="absolute -top-10 -right-10 opacity-10">
             <ShoppingBag size={300} />
@@ -263,7 +248,7 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
           </div>
 
           <div className="p-2 md:p-8 space-y-4 pb-40">
-            {/* 1. SATU KOLOM: RINCIAN BELANJA & TAGIHAN */}
+            {/* RINCIAN BELANJA */}
             <div className="bg-slate-50 rounded-[2rem] border-2 border-slate-100 overflow-hidden shadow-sm">
               <div className="p-5 border-b border-slate-200 space-y-4 text-left">
                 <div className="flex items-center gap-2">
@@ -323,7 +308,6 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
                     {shippingDetails?.buyer_service_fee?.toLocaleString() || 0}
                   </span>
                 </div>
-
                 <div className="pt-3 border-t-2 border-dashed border-slate-100 flex justify-between items-end">
                   <div>
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -339,7 +323,7 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
               </div>
             </div>
 
-            {/* 2. Maps Area */}
+            {/* MAPS & INPUT ALAMAT TAMBAHAN */}
             <div className="bg-slate-50 p-4 rounded-[2rem] border-2 border-slate-100 space-y-4">
               <div className="flex justify-between items-center px-1">
                 <div className="flex items-center gap-2">
@@ -381,12 +365,22 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
                   <div className="h-[220px] bg-slate-200 animate-pulse" />
                 )}
               </div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase leading-tight px-1 text-left">
-                {profile?.address || "Alamat tidak terbaca"}
-              </p>
+
+              {/* ✅ KOLOM PENGETIKAN ALAMAT LENGKAP (FITUR BARU) */}
+              <div className="space-y-2 text-left px-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <MessageSquare size={12} /> Alamat Lengkap & Patokan
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Ketik alamat detail (Contoh: Jl. Mawar No. 12, Pagar Hitam, Samping Toko Sinar)"
+                  className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl text-sm font-bold focus:border-teal-600 outline-none resize-none transition-all placeholder:text-slate-300"
+                  value={manualAddress}
+                  onChange={(e) => setManualAddress(e.target.value)}
+                />
+              </div>
             </div>
 
-            {/* 3. Tombol Bayar */}
             <div className="pt-4">
               <button
                 disabled={
@@ -396,7 +390,7 @@ export const CheckoutPaymentPage: React.FC<Props> = ({ isOpen, onClose }) => {
                 className={`w-full py-5 rounded-[2rem] font-black uppercase text-sm tracking-[0.3em] shadow-2xl flex items-center justify-center gap-3 transition-all active:scale-95 ${
                   isOutOfRange
                     ? "bg-slate-300 text-slate-500 cursor-not-allowed"
-                    : "bg-slate-900 text-white hover:bg-teal-600 shadow-orange-500/10"
+                    : "bg-slate-900 text-white hover:bg-teal-600"
                 }`}
               >
                 {loading ? (

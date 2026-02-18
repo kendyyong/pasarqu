@@ -6,7 +6,6 @@ import {
   ArrowRight,
   Flame,
   Star,
-  Loader2,
   Timer,
   Package,
   Store,
@@ -15,12 +14,12 @@ import {
 import { supabase } from "../lib/supabaseClient";
 import { useMarket } from "../contexts/MarketContext";
 import { useToast } from "../contexts/ToastContext";
-import { useAuth } from "../contexts/AuthContext";
 
 interface HomeProps {
   searchQuery: string;
 }
 
+// --- SKELETON LOADER (Fitur Asli) ---
 const SkeletonCard = () => (
   <div className="flex flex-col h-full bg-white border border-slate-100 rounded-none overflow-hidden animate-pulse">
     <div className="aspect-square w-full bg-slate-200" />
@@ -38,7 +37,6 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   const navigate = useNavigate();
   const { selectedMarket, addToCart } = useMarket();
   const { showToast } = useToast();
-  const { user } = useAuth();
 
   const [products, setProducts] = useState<any[]>([]);
   const [quickActions, setQuickActions] = useState<any[]>([]);
@@ -46,6 +44,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeSlide, setActiveSlide] = useState(0);
 
+  // --- FETCH DATA LOGIC ---
   const fetchAds = async () => {
     try {
       const { data, error } = await supabase
@@ -67,7 +66,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
         .from("products")
         .select("*, merchants:merchant_id(shop_name)")
         .eq("status", "APPROVED")
-        .order("stock", { ascending: false }) // Stok ada tampil duluan
+        .order("stock", { ascending: false })
         .order("created_at", { ascending: false });
 
       if (selectedMarket?.id) {
@@ -104,6 +103,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
     fetchQuickActions();
   }, [selectedMarket, searchQuery]);
 
+  // --- ADS SLIDER LOGIC ---
   useEffect(() => {
     if (ads.length > 1) {
       const interval = setInterval(() => {
@@ -132,11 +132,11 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
 
   return (
     <div className="w-full font-sans text-left bg-white min-h-screen pb-16 pt-[10px] overflow-x-hidden">
-      <div className="max-w-[1200px] mx-auto px-0 md:px-0">
-        {/* 1. IKLAN SLIDE */}
+      <div className="max-w-[1200px] mx-auto">
+        {/* 1. IKLAN SLIDE (Fitur Asli) */}
         {!searchQuery && ads.length > 0 && (
           <div className="mt-0">
-            <div className="relative h-44 md:h-72 w-full overflow-hidden rounded-none md:rounded-xl group border-none text-left">
+            <div className="relative h-44 md:h-72 w-full overflow-hidden rounded-none md:rounded-xl group border-none text-left shadow-md">
               {ads.map((ad, index) => (
                 <div
                   key={ad.id}
@@ -148,7 +148,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                     className="w-full h-full object-cover"
                     alt={ad.title}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-6">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent flex flex-col justify-end p-6">
                     <h2 className="text-white text-xl md:text-4xl font-black uppercase tracking-tighter leading-none">
                       {ad.title}
                     </h2>
@@ -159,7 +159,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
           </div>
         )}
 
-        {/* 2. QUICK ACTIONS */}
+        {/* 2. QUICK ACTIONS (Fitur Asli) */}
         {!searchQuery && quickActions.length > 0 && (
           <div className="mt-5 px-4 md:px-0">
             <div className="bg-white p-5 overflow-x-auto no-scrollbar flex gap-6 rounded-xl border border-slate-100 shadow-sm">
@@ -183,7 +183,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
           </div>
         )}
 
-        {/* 3. PRODUK GRID */}
+        {/* 3. PRODUK GRID (Fitur Asli) */}
         <div className="mt-8 mb-8">
           <div className="flex items-center justify-between mb-4 px-5 md:px-1">
             <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
@@ -195,12 +195,12 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-[1px] bg-slate-100 md:bg-transparent md:gap-4 border-y border-slate-100 md:border-none">
             {isLoading ? (
               <>
-                {[...Array(6)].map((_, i) => (
+                {[...Array(10)].map((_, i) => (
                   <SkeletonCard key={i} />
                 ))}
               </>
             ) : (
-              filteredProducts.map((product) => {
+              filteredProducts.map((product, index) => {
                 const isHabis = product.stock <= 0;
                 const isLowStock = product.stock > 0 && product.stock < 5;
 
@@ -210,7 +210,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                     onClick={() => navigate(`/product/${product.id}`)}
                     className={`flex flex-col h-full bg-white rounded-none md:rounded-xl md:border md:border-slate-100 md:shadow-sm overflow-hidden group transition-all ${isHabis ? "opacity-90" : ""}`}
                   >
-                    {/* AREA GAMBAR (BERSIH DARI STOCK BADGE) */}
+                    {/* AREA GAMBAR */}
                     <div className="aspect-square w-full overflow-hidden bg-slate-50 cursor-pointer relative">
                       <img
                         src={
@@ -220,7 +220,6 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                         className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${isHabis ? "grayscale contrast-125" : ""}`}
                         alt={product.name}
                       />
-
                       {product.is_po && (
                         <div className="absolute bottom-2 left-2 bg-orange-600 text-white text-[8px] font-black px-2 py-1 rounded shadow-lg flex items-center gap-1 uppercase">
                           <Timer size={10} /> PO {product.po_days} HARI
@@ -242,20 +241,14 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                         {product.name}
                       </h4>
 
-                      {/* ✅ AREA HARGA & STOK (POSISI BAWAH) */}
                       <div className="mt-auto mb-3 flex items-center justify-between">
                         <span className="text-[15px] font-black text-[#FF6600] tracking-tighter">
                           Rp {product.price.toLocaleString()}
                         </span>
 
-                        {/* LABEL STOK DI SINI (SEBELAH HARGA) */}
                         {!isHabis && (
                           <div
-                            className={`flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded ${
-                              isLowStock
-                                ? "bg-red-50 text-red-600 border border-red-100"
-                                : "bg-teal-50 text-teal-600 border border-teal-100"
-                            }`}
+                            className={`flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded ${isLowStock ? "bg-red-50 text-red-600 border border-red-100" : "bg-teal-50 text-teal-600 border border-teal-100"}`}
                           >
                             <Package size={10} />
                             <span className="uppercase tracking-wide">
@@ -265,10 +258,8 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                             </span>
                           </div>
                         )}
-                        {/* Jika habis, tidak perlu label di sini karena tombol sudah bilang 'STOK HABIS' */}
                       </div>
 
-                      {/* TOMBOL PINTAR */}
                       <button
                         disabled={isHabis}
                         onClick={(e) => {
@@ -278,11 +269,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                             showToast("Berhasil masuk keranjang", "success");
                           }
                         }}
-                        className={`w-full py-2.5 rounded-lg flex items-center justify-center gap-2 active:scale-95 transition-all ${
-                          isHabis
-                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                            : "bg-teal-600 hover:bg-teal-700 text-white"
-                        }`}
+                        className={`w-full py-2.5 rounded-lg flex items-center justify-center gap-2 active:scale-95 transition-all ${isHabis ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-teal-600 hover:bg-teal-700 text-white"}`}
                       >
                         {isHabis ? (
                           <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-1">
@@ -305,8 +292,8 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
           </div>
         </div>
 
-        {/* 4. PORTAL MITRA */}
-        <div className="mt-8 mb-10 px-4 md:px-0">
+        {/* 4. PORTAL MITRA (Fitur Asli) */}
+        <div className="mt-8 mb-10 px-4 md:px-0 pb-20">
           <div className="bg-slate-900 p-6 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden rounded-2xl shadow-2xl">
             <div className="relative z-10 flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
               <div className="bg-white/10 p-2 rounded-lg text-orange-400">
@@ -333,5 +320,3 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
     </div>
   );
 };
-
-export default Home;

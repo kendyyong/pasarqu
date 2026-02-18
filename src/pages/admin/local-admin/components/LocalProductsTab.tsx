@@ -10,19 +10,18 @@ import {
   Package,
   Tag,
   Info,
-  Edit3, // Ikon baru untuk edit
+  Edit3,
+  Percent, // Ikon untuk indikator diskon
 } from "lucide-react";
 
 interface Props {
   products: any[];
-  onAction: () => void; // Fungsi untuk refresh data di dashboard utama
+  onAction: () => void;
 }
 
 export const LocalProductsTab: React.FC<Props> = ({ products, onAction }) => {
   const { showToast } = useToast();
   const [processingId, setProcessingId] = useState<string | null>(null);
-
-  // State untuk Modal Quick Edit
   const [editingProduct, setEditingProduct] = useState<any>(null);
 
   // --- FUNGSI EKSEKUSI VERIFIKASI (APPROVE/REJECT) ---
@@ -59,12 +58,19 @@ export const LocalProductsTab: React.FC<Props> = ({ products, onAction }) => {
     if (!editingProduct) return;
     setProcessingId(editingProduct.id);
     try {
+      // Pastikan final_price juga ikut terupdate jika harga normal diubah
+      const newFinalPrice =
+        editingProduct.discount_type === "none"
+          ? editingProduct.price
+          : editingProduct.final_price;
+
       const { error } = await supabase
         .from("products")
         .update({
           name: editingProduct.name,
           price: editingProduct.price,
-          status: "APPROVED", // Otomatis setujui setelah diedit
+          final_price: newFinalPrice,
+          status: "APPROVED",
         })
         .eq("id", editingProduct.id);
 
@@ -98,7 +104,7 @@ export const LocalProductsTab: React.FC<Props> = ({ products, onAction }) => {
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-500 pb-20">
-      <div className="flex items-center gap-3 mb-6 ml-2">
+      <div className="flex items-center gap-3 mb-6 ml-2 text-left">
         <Info size={16} className="text-orange-500" />
         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
           Ditemukan{" "}
@@ -107,86 +113,110 @@ export const LocalProductsTab: React.FC<Props> = ({ products, onAction }) => {
         </p>
       </div>
 
-      {products.map((product) => (
-        <div
-          key={product.id}
-          className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-sm flex flex-col md:flex-row gap-8 items-center hover:shadow-xl hover:border-teal-100 transition-all group"
-        >
-          {/* FOTO PRODUK */}
-          <div className="relative shrink-0">
-            <img
-              src={product.image_url || "https://via.placeholder.com/200"}
-              className="w-32 h-32 rounded-[2rem] object-cover bg-slate-50 shadow-inner border border-slate-50 group-hover:scale-105 transition-transform"
-              alt="Product"
-            />
-            <div className="absolute -bottom-2 -right-2 bg-white shadow-lg p-2 rounded-xl border border-slate-50">
-              <Tag size={14} className="text-teal-600" />
-            </div>
-          </div>
+      {products.map((product) => {
+        // Logika tampilan harga untuk Admin
+        const hasDiscount =
+          product.discount_type && product.discount_type !== "none";
+        const hasPromo =
+          product.promo_price && product.promo_price < product.price;
+        const isSale = hasDiscount || hasPromo;
+        const finalPriceDisplay = hasDiscount
+          ? product.final_price
+          : hasPromo
+            ? product.promo_price
+            : product.price;
 
-          {/* DETAIL PRODUK */}
-          <div className="flex-1 text-left w-full">
-            <div className="flex items-center gap-2 mb-2">
-              <Store size={14} className="text-teal-600" />
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                {product.merchants?.shop_name || "Merchant Pasarqu"}
-              </span>
-            </div>
-
-            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter leading-none mb-2">
-              {product.name}
-            </h3>
-
-            <div className="flex items-baseline gap-2 mb-4">
-              <span className="text-2xl font-black text-teal-600 tracking-tighter">
-                Rp {product.price.toLocaleString()}
-              </span>
-              <span className="text-[10px] font-bold text-slate-400 uppercase">
-                / {product.unit || "Pcs"}
-              </span>
-            </div>
-
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
-              <p className="text-[10px] font-bold text-slate-500 leading-relaxed italic">
-                "{product.description || "Tidak ada deskripsi produk..."}"
-              </p>
-            </div>
-          </div>
-
-          {/* TOMBOL AKSI */}
-          <div className="flex md:flex-col gap-3 w-full md:w-48 shrink-0">
-            <button
-              disabled={processingId === product.id}
-              onClick={() => handleVerify(product.id, "APPROVED")}
-              className="flex-1 px-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-teal-600 transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 disabled:bg-slate-300"
-            >
-              {processingId === product.id ? (
-                <Loader2 className="animate-spin" size={16} />
-              ) : (
-                <>
-                  <CheckCircle size={18} /> Setujui
-                </>
+        return (
+          <div
+            key={product.id}
+            className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-sm flex flex-col md:flex-row gap-8 items-center hover:shadow-xl hover:border-teal-100 transition-all group relative overflow-hidden"
+          >
+            {/* FOTO PRODUK */}
+            <div className="relative shrink-0">
+              <img
+                src={product.image_url || "https://via.placeholder.com/200"}
+                className="w-32 h-32 rounded-[2rem] object-cover bg-slate-50 shadow-inner border border-slate-50 group-hover:scale-105 transition-transform"
+                alt="Product"
+              />
+              {isSale && (
+                <div className="absolute -top-2 -left-2 bg-red-600 text-white p-2 rounded-xl shadow-lg animate-pulse">
+                  <Percent size={12} strokeWidth={4} />
+                </div>
               )}
-            </button>
+            </div>
 
-            {/* TOMBOL QUICK EDIT (PENSIL) */}
-            <button
-              onClick={() => setEditingProduct(product)}
-              className="flex-1 px-6 py-4 bg-teal-50 text-teal-600 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-teal-100 transition-all flex items-center justify-center gap-3 active:scale-95 border border-teal-100"
-            >
-              <Edit3 size={18} /> Cepat Edit
-            </button>
+            {/* DETAIL PRODUK */}
+            <div className="flex-1 text-left w-full">
+              <div className="flex items-center gap-2 mb-2">
+                <Store size={14} className="text-teal-600" />
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                  {product.merchants?.shop_name || "Merchant Pasarqu"}
+                </span>
+              </div>
 
-            <button
-              disabled={processingId === product.id}
-              onClick={() => handleVerify(product.id, "REJECTED")}
-              className="flex-1 px-6 py-4 bg-white text-red-500 border-2 border-red-50 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-red-50 hover:border-red-100 transition-all flex items-center justify-center gap-3 active:scale-95"
-            >
-              <XCircle size={18} /> Tolak
-            </button>
+              <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter leading-none mb-2">
+                {product.name}
+              </h3>
+
+              <div className="flex flex-col mb-4">
+                {isSale && (
+                  <span className="text-[10px] font-bold text-slate-400 line-through mb-[-4px]">
+                    Rp {product.price.toLocaleString()}
+                  </span>
+                )}
+                <div className="flex items-baseline gap-2">
+                  <span
+                    className={`text-2xl font-black tracking-tighter ${isSale ? "text-red-600" : "text-teal-600"}`}
+                  >
+                    Rp {finalPriceDisplay?.toLocaleString()}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">
+                    / {product.unit || "Pcs"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
+                <p className="text-[10px] font-bold text-slate-500 leading-relaxed italic">
+                  "{product.description || "Tidak ada deskripsi produk..."}"
+                </p>
+              </div>
+            </div>
+
+            {/* TOMBOL AKSI */}
+            <div className="flex md:flex-col gap-3 w-full md:w-48 shrink-0">
+              <button
+                disabled={processingId === product.id}
+                onClick={() => handleVerify(product.id, "APPROVED")}
+                className="flex-1 px-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-teal-600 transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 disabled:bg-slate-300"
+              >
+                {processingId === product.id ? (
+                  <Loader2 className="animate-spin" size={16} />
+                ) : (
+                  <>
+                    <CheckCircle size={18} /> Setujui
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => setEditingProduct(product)}
+                className="flex-1 px-6 py-4 bg-teal-50 text-teal-600 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-teal-100 transition-all flex items-center justify-center gap-3 active:scale-95 border border-teal-100"
+              >
+                <Edit3 size={18} /> Koreksi
+              </button>
+
+              <button
+                disabled={processingId === product.id}
+                onClick={() => handleVerify(product.id, "REJECTED")}
+                className="flex-1 px-6 py-4 bg-white text-red-500 border-2 border-red-50 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-red-50 hover:border-red-100 transition-all flex items-center justify-center gap-3 active:scale-95"
+              >
+                <XCircle size={18} /> Tolak
+              </button>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {/* MODAL QUICK EDIT */}
       {editingProduct && (
@@ -195,12 +225,12 @@ export const LocalProductsTab: React.FC<Props> = ({ products, onAction }) => {
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
             onClick={() => setEditingProduct(null)}
           ></div>
-          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 relative z-10 shadow-2xl border border-white/20">
+          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 relative z-10 shadow-2xl border border-white/20 text-left">
             <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tighter mb-8 italic">
-              Quick <span className="text-teal-600">Adjustment</span>
+              Koreksi <span className="text-teal-600">Admin</span>
             </h3>
 
-            <div className="space-y-5 text-left">
+            <div className="space-y-5">
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">
                   Nama Produk
@@ -219,7 +249,7 @@ export const LocalProductsTab: React.FC<Props> = ({ products, onAction }) => {
               </div>
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">
-                  Harga Jual (Rp)
+                  Harga Pokok (Rp)
                 </label>
                 <input
                   type="number"
@@ -244,12 +274,12 @@ export const LocalProductsTab: React.FC<Props> = ({ products, onAction }) => {
                 <button
                   disabled={processingId === editingProduct.id}
                   onClick={handleQuickUpdate}
-                  className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-teal-600 transition-all shadow-xl shadow-slate-200 flex items-center justify-center gap-2"
+                  className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-teal-600 transition-all shadow-xl flex items-center justify-center gap-2"
                 >
                   {processingId === editingProduct.id ? (
                     <Loader2 className="animate-spin" size={16} />
                   ) : (
-                    "Simpan & Setujui"
+                    "Simpan & Approve"
                   )}
                 </button>
               </div>

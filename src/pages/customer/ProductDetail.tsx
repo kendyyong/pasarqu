@@ -3,115 +3,139 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   ShoppingBag,
-  Star,
-  Store,
-  ShoppingCart,
-  Timer,
-  Package,
   Loader2,
-  ShieldCheck,
-  MessageCircle,
   MoreVertical,
-  MapPin,
-  Minus,
-  Plus,
+  Home,
 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { useMarket } from "../../contexts/MarketContext";
 import { useToast } from "../../contexts/ToastContext";
+import { useAuth } from "../../contexts/AuthContext";
+
+// Sub-Komponen
+import { ProductGallery } from "./components/ProductGallery";
+import { ProductInfo } from "./components/ProductInfo";
+import { MerchantCard } from "./components/MerchantCard";
+import { ProductDescription } from "./components/ProductDescription";
+import { ProductActionBar } from "./components/ProductActionBar";
+import { ProductReviews } from "./components/ProductReviews";
 
 export const ProductDetail = () => {
   const { productId } = useParams();
   const navigate = useNavigate();
   const { addToCart, cart } = useMarket();
   const { showToast } = useToast();
+  const { user } = useAuth();
 
-  // --- STATE UTAMA ---
   const [product, setProduct] = useState<any>(null);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [soldCount, setSoldCount] = useState(0);
+  const [averageRating, setAverageRating] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
+  const [chatLoading, setChatLoading] = useState(false);
 
-  const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const totalCartItems = cart.reduce(
+    (sum: number, item: any) => sum + (item.quantity || 0),
+    0,
+  );
 
-  // --- FUNGSI NAVIGASI ---
-  const goToShop = () => {
-    if (product?.merchant_id) {
-      navigate(`/shop/${product.merchant_id}`);
+  const handleContactSeller = async () => {
+    if (!user) return navigate("/login");
+    setChatLoading(true);
+    try {
+      const cleanId = product.merchant_id.trim();
+      const { data: room } = await supabase
+        .from("chat_rooms")
+        .select("id")
+        .or(
+          `and(participant_1_id.eq.${user.id},participant_2_id.eq.${cleanId}),and(participant_1_id.eq.${cleanId},participant_2_id.eq.${user.id})`,
+        )
+        .maybeSingle();
+      if (room) navigate(`/chat/${room.id}`);
+      else {
+        const { data: nr } = await supabase
+          .from("chat_rooms")
+          .insert([
+            {
+              participant_1_id: user.id,
+              participant_2_id: cleanId,
+              updated_at: new Date(),
+            },
+          ])
+          .select()
+          .single();
+        navigate(`/chat/${nr.id}`);
+      }
+    } catch (err) {
+      showToast("Gagal chat", "error");
+    } finally {
+      setChatLoading(false);
     }
   };
 
   useEffect(() => {
-    const fetchProduct = async () => {
+    const fetchFullData = async () => {
       if (!productId) return;
       setLoading(true);
       try {
-        const { data: pureProduct, error: pError } = await supabase
+        const id = productId.trim();
+
+        const { data: p } = await supabase
           .from("products")
           .select("*")
-          .eq("id", productId)
+          .eq("id", id)
           .maybeSingle();
 
-        if (pError) throw pError;
-
-        if (pureProduct) {
-          const [merchantRes, categoryRes] = await Promise.all([
+        if (p) {
+          const [m, c, r, s] = await Promise.all([
             supabase
               .from("profiles")
-              .select("id, full_name, shop_name, city, is_verified, avatar_url")
-              .eq("id", pureProduct.merchant_id)
+              .select("*")
+              .eq("id", p.merchant_id)
               .maybeSingle(),
             supabase
               .from("categories")
-              .select("name")
-              .eq("id", pureProduct.category_id)
+              .select("*")
+              .eq("id", p.category_id)
               .maybeSingle(),
+            supabase
+              .from("product_reviews")
+              .select("*, profiles(*)")
+              .eq("product_id", id)
+              .order("created_at", { ascending: false }),
+            supabase
+              .from("order_items")
+              .select("quantity, orders!inner(status)")
+              .eq("product_id", id)
+              .in("orders.status", ["PAID", "COMPLETED", "SHIPPING"]),
           ]);
 
-          setProduct({
-            ...pureProduct,
-            merchants: merchantRes.data,
-            categories: categoryRes.data,
-          });
+          const reviewData = r.data || [];
+          const avg =
+            reviewData.length > 0
+              ? reviewData.reduce((acc, item) => acc + item.rating, 0) /
+                reviewData.length
+              : 0;
+
+          const totalSold =
+            s.data?.reduce((acc, item) => acc + (item.quantity || 0), 0) || 0;
+
+          setProduct({ ...p, merchants: m.data, categories: c.data });
+          setReviews(reviewData);
+          setAverageRating(Number(avg.toFixed(1)));
+          setSoldCount(totalSold);
         }
-      } catch (err: any) {
-        console.error("Gagal memuat produk:", err.message);
+      } catch (err) {
+        console.error("Fetch Error:", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchProduct();
+    fetchFullData();
     window.scrollTo(0, 0);
   }, [productId]);
-
-  // ✅ LOGIKA CERDAS: HANDLE QUANTITY
-  const handleQuantity = (type: "inc" | "dec") => {
-    if (!product) return;
-
-    if (type === "dec" && qty > 1) {
-      setQty(qty - 1);
-    }
-    if (type === "inc") {
-      // Cek apakah kuantitas melebihi stok yang tersedia
-      if (qty < product.stock) {
-        setQty(qty + 1);
-      } else {
-        showToast(`Stok mentok! Hanya tersisa ${product.stock} unit.`, "error");
-      }
-    }
-  };
-
-  const handleAddToCart = () => {
-    if (!product) return;
-
-    // Cek Stok Sebelum Masuk Keranjang
-    if (product.stock <= 0) {
-      return showToast("Maaf, stok barang ini sedang habis.", "error");
-    }
-
-    addToCart(product, qty);
-    showToast(`Berhasil masuk keranjang`, "success");
-  };
 
   if (loading)
     return (
@@ -122,34 +146,24 @@ export const ProductDetail = () => {
 
   if (!product)
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-10 text-center">
-        <Package size={48} className="text-slate-200 mb-4" />
-        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-widest">
-          Produk Tidak Ditemukan
-        </h2>
-        <button
-          onClick={() => navigate("/")}
-          className="mt-4 text-xs font-bold text-teal-600 underline uppercase"
-        >
-          Kembali Beranda
-        </button>
+      <div className="p-10 text-center font-bold uppercase tracking-widest text-slate-400">
+        Produk Tidak Ditemukan
       </div>
     );
 
-  const productImages =
-    product.image_urls && product.image_urls.length > 0
+  const images =
+    Array.isArray(product.image_urls) && product.image_urls.length > 0
       ? product.image_urls
-      : [product.image_url];
-
-  const isOutOfStock = product.stock <= 0;
+      : product.image_url
+        ? [product.image_url]
+        : ["https://placehold.co/600x600/e2e8f0/64748b?text=Foto+Produk"];
 
   return (
-    <div className="bg-[#F5F5F5] min-h-screen font-sans antialiased text-left pb-24 md:pb-10">
-      {/* 1. HEADER MOBILE (Hidden on Desktop) */}
-      <header className="md:hidden fixed top-0 z-50 w-full flex items-center justify-between px-4 py-3 bg-white/80 backdrop-blur-md shadow-sm">
+    <div className="bg-white min-h-screen text-left pb-24 md:pb-10 font-sans">
+      <header className="md:hidden fixed top-0 z-50 w-full flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100">
         <button
           onClick={() => navigate(-1)}
-          className="p-2 text-slate-600 active:scale-90 transition-all"
+          className="p-2 text-slate-600 active:scale-90"
         >
           <ArrowLeft size={22} />
         </button>
@@ -160,7 +174,7 @@ export const ProductDetail = () => {
           >
             <ShoppingBag size={22} />
             {totalCartItems > 0 && (
-              <div className="absolute -top-1 -right-1 bg-teal-600 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full">
+              <div className="absolute -top-1 -right-1 bg-teal-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full">
                 {totalCartItems}
               </div>
             )}
@@ -169,284 +183,94 @@ export const ProductDetail = () => {
         </div>
       </header>
 
-      {/* --- WRAPPER UTAMA RESPONSIVE --- */}
       <main className="w-full max-w-[1200px] mx-auto md:pt-6 px-0 md:px-4">
-        {/* DESKTOP BOX LAYOUT */}
-        <div className="bg-white md:rounded-sm md:shadow-sm flex flex-col md:flex-row overflow-hidden">
-          {/* AREA GAMBAR */}
-          <div className="w-full md:w-[450px] p-0 md:p-4 shrink-0">
-            <div className="relative aspect-square overflow-hidden bg-white group">
-              <img
-                src={productImages[activeImg]}
-                alt={product.name}
-                className={`w-full h-full object-cover transition-all duration-500 ${isOutOfStock ? "grayscale opacity-50" : ""}`}
-              />
-
-              {/* ✅ OVERLAY STOK HABIS */}
-              {isOutOfStock && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px] z-10">
-                  <div className="bg-red-600 text-white px-6 py-2 rounded-xl border-2 border-white shadow-2xl transform -rotate-12 font-black uppercase tracking-[0.2em] text-sm">
-                    STOK HABIS
-                  </div>
-                </div>
-              )}
-
-              <div className="md:hidden absolute bottom-4 right-4 bg-black/30 text-white text-[10px] px-3 py-1 rounded-full backdrop-blur-sm">
-                {activeImg + 1} / {productImages.length}
-              </div>
-
-              {product.is_po && (
-                <div className="absolute top-4 left-0 bg-orange-500 text-white px-3 py-1 rounded-r-full text-[11px] font-bold shadow-lg z-20">
-                  <Timer size={12} className="inline mr-1 mb-0.5" />
-                  PO {product.po_days} Hari
-                </div>
-              )}
-            </div>
-
-            {/* Thumbnail Gallery (Desktop) */}
-            <div className="hidden md:flex gap-2 mt-3 overflow-x-auto no-scrollbar">
-              {productImages.map((img: string, i: number) => (
-                <div
-                  key={i}
-                  onMouseEnter={() => setActiveImg(i)}
-                  className={`w-16 h-16 border-2 cursor-pointer transition-all ${activeImg === i ? "border-teal-600" : "border-transparent hover:border-teal-200"}`}
-                >
-                  <img src={img} className="w-full h-full object-cover" />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* AREA INFO PRODUK */}
-          <div className="flex-1 p-4 md:p-8 md:pl-4 space-y-6">
-            <div>
-              <div className="flex justify-between items-start gap-4">
-                <h1 className="text-xl md:text-2xl text-slate-800 leading-snug font-medium line-clamp-2 md:line-clamp-none uppercase tracking-tight italic flex-1">
-                  {product.name}
-                </h1>
-
-                {/* ✅ INDIKATOR STOK DI SEBELAH JUDUL */}
-                <div
-                  className={`flex flex-col items-end shrink-0 ${product.stock < 5 ? "text-red-500" : "text-teal-600"}`}
-                >
-                  <Package size={24} />
-                  <span className="text-[10px] font-black uppercase mt-1 tracking-wider">
-                    {isOutOfStock ? "Habis" : `Sisa ${product.stock}`}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 mt-4">
-                <div className="flex items-center gap-1 text-teal-600 border-r border-slate-200 pr-3">
-                  <span className="text-sm font-bold underline">4.9</span>
-                  <div className="flex">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} size={12} fill="currentColor" />
-                    ))}
-                  </div>
-                </div>
-                <div className="text-sm text-slate-500 border-r border-slate-200 pr-3">
-                  820 Penilaian
-                </div>
-                <div className="text-sm text-slate-500">1,5rb Terjual</div>
-              </div>
-            </div>
-
-            {/* PRICE SECTION */}
-            <div className="bg-slate-50 p-4 md:p-6 rounded-sm flex items-center gap-3 border border-slate-100">
-              <span className="text-teal-600 text-sm font-bold">Rp</span>
-              <span className="text-teal-600 text-3xl md:text-4xl font-black tracking-tighter">
-                {product.price.toLocaleString()}
-              </span>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-2 italic">
-                per {product.unit || "Unit"}
-              </span>
-            </div>
-
-            {/* ACTIONS SECTION (Desktop Only) */}
-            <div className="hidden md:flex flex-col gap-8 pt-4">
-              {!isOutOfStock && (
-                <div className="flex items-center gap-8">
-                  <span className="text-xs text-slate-500 w-20 uppercase font-bold tracking-widest">
-                    Kuantitas
-                  </span>
-                  <div className="flex items-center border border-slate-200 rounded-sm overflow-hidden">
-                    <button
-                      onClick={() => handleQuantity("dec")}
-                      disabled={qty <= 1}
-                      className="px-4 py-1.5 hover:bg-slate-50 border-r transition-colors disabled:opacity-50"
-                    >
-                      <Minus size={14} />
-                    </button>
-                    <span className="px-8 font-black text-sm w-12 text-center">
-                      {qty}
-                    </span>
-                    <button
-                      onClick={() => handleQuantity("inc")}
-                      disabled={qty >= product.stock}
-                      className="px-4 py-1.5 hover:bg-slate-50 border-l transition-colors disabled:opacity-50"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase italic">
-                    Stok tersedia:{" "}
-                    <span className="text-slate-800">{product.stock}</span>
-                  </span>
-                </div>
-              )}
-
-              <div className="flex gap-4">
-                <button
-                  onClick={handleAddToCart}
-                  disabled={isOutOfStock}
-                  className={`px-8 py-4 border font-black uppercase text-[10px] tracking-widest flex items-center gap-3 transition-all ${
-                    isOutOfStock
-                      ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                      : "border-teal-600 bg-teal-50 text-teal-600 hover:bg-teal-100"
-                  }`}
-                >
-                  <ShoppingCart size={18} /> Masukkan Keranjang
-                </button>
-                <button
-                  disabled={isOutOfStock}
-                  onClick={() => {
-                    if (!isOutOfStock) {
-                      handleAddToCart();
-                      navigate("/checkout");
-                    }
-                  }}
-                  className={`px-12 py-4 font-black uppercase text-[10px] tracking-widest shadow-xl transition-all ${
-                    isOutOfStock
-                      ? "bg-slate-300 text-white cursor-not-allowed shadow-none"
-                      : "bg-teal-600 text-white hover:bg-teal-700 shadow-teal-600/20 active:scale-95"
-                  }`}
-                >
-                  {isOutOfStock ? "Stok Habis" : "Beli Sekarang"}
-                </button>
-              </div>
-            </div>
-          </div>
+        <div className="hidden md:flex items-center gap-2 mb-4 px-2">
+          <button
+            onClick={() => navigate("/")}
+            className="text-[10px] font-black text-teal-600 uppercase tracking-widest flex items-center gap-1"
+          >
+            <Home size={12} /> Beranda
+          </button>
+          <span className="text-slate-300">/</span>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate max-w-[200px]">
+            {product.name}
+          </span>
         </div>
 
-        {/* MERCHANT SECTION */}
-        <div className="mt-4 bg-white p-4 md:p-6 md:shadow-sm md:rounded-sm flex items-center gap-5">
-          <div className="relative shrink-0">
-            <img
-              src={
-                product.merchants?.avatar_url ||
-                "https://via.placeholder.com/100"
-              }
-              className="w-16 h-16 rounded-full border border-slate-100 object-cover"
-              alt=""
+        <div className="bg-white flex flex-col md:flex-row overflow-hidden border-b border-slate-50 md:border-none">
+          <ProductGallery
+            images={images}
+            activeIndex={activeImg}
+            onIndexChange={setActiveImg}
+            isOutOfStock={product.stock <= 0}
+            isPo={product.is_po}
+            poDays={product.po_days}
+            productName={product.name}
+          />
+          <div className="flex-1 p-4 md:p-8 md:pl-4 space-y-6">
+            <ProductInfo
+              name={product.name}
+              price={product.price}
+              unit={product.unit}
+              stock={product.stock}
+              isOutOfStock={product.stock <= 0}
+              soldCount={soldCount}
+              rating={averageRating}
             />
-            {product.merchants?.is_verified && (
-              <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5">
-                <ShieldCheck size={18} className="text-teal-600 fill-white" />
+            {product.stock > 0 && (
+              <div className="hidden md:block pt-4 text-left">
+                <button
+                  onClick={() => {
+                    addToCart(product, qty);
+                    showToast("Masuk Keranjang", "success");
+                  }}
+                  className="px-8 py-4 bg-teal-600 text-white font-black uppercase text-[10px] tracking-widest hover:bg-teal-700 transition-all shadow-lg shadow-teal-600/10"
+                >
+                  Tambah Keranjang
+                </button>
               </div>
             )}
           </div>
-          <div className="flex-1 min-w-0">
-            <h4 className="text-sm md:text-base font-black text-slate-800 uppercase tracking-tight italic">
-              {product.merchants?.shop_name || "Toko Pasarqu"}
-            </h4>
-            <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-              <MapPin size={10} /> {product.merchants?.city || "Area Pasar"} |
-              Aktif baru saja
-            </p>
-            <div className="flex gap-2 mt-3">
-              <button
-                onClick={goToShop}
-                className="px-4 py-1.5 border border-teal-600 text-teal-600 text-[10px] font-black uppercase tracking-tighter hover:bg-teal-50 transition-all"
-              >
-                Lihat Toko
-              </button>
-              <button className="px-4 py-1.5 border border-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-tighter hover:bg-slate-50 transition-all">
-                Chat Admin
-              </button>
-            </div>
-          </div>
         </div>
 
-        {/* DESCRIPTION SECTION */}
-        <div className="mt-4 bg-white p-4 md:p-8 md:shadow-sm md:rounded-sm">
-          <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-6 border-l-4 border-teal-600 pl-3">
-            Rincian & Spesifikasi
-          </h3>
-          <div className="grid md:grid-cols-2 gap-y-4 mb-10">
-            <div className="flex text-xs">
-              <span className="w-28 text-slate-400 font-bold uppercase tracking-tighter">
-                Kategori
-              </span>
-              <span className="text-teal-600 font-black uppercase italic">
-                {product.categories?.name || "Pasar Lokal"}
-              </span>
-            </div>
-            <div className="flex text-xs">
-              <span className="w-28 text-slate-400 font-bold uppercase tracking-tighter">
-                Wilayah
-              </span>
-              <span className="text-slate-800 font-bold uppercase">
-                {product.merchants?.city || "Lokal"}
-              </span>
-            </div>
-            <div className="flex text-xs">
-              <span className="w-28 text-slate-400 font-bold uppercase tracking-tighter">
-                Stok
-              </span>
-              <span
-                className={`font-black uppercase ${isOutOfStock ? "text-red-500" : "text-slate-800"}`}
-              >
-                {product.stock} Unit
-              </span>
-            </div>
-          </div>
-          <div className="border-t border-slate-50 pt-8">
-            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line text-justify italic">
-              {product.description ||
-                "Penjual belum melengkapi deskripsi produk ini."}
-            </p>
-          </div>
-        </div>
+        <MerchantCard
+          merchant={product.merchants}
+          onGoToShop={() => navigate(`/shop/${product.merchant_id}`)}
+          onContactSeller={handleContactSeller}
+          chatLoading={chatLoading}
+        />
+
+        {/* ✅ WILAYAH SEKARANG DINAMIS BERDASARKAN MERCHANT */}
+        <ProductDescription
+          category={product.categories?.name}
+          city={
+            product.merchants?.city ||
+            product.merchants?.shop_name ||
+            "Pasar Lokal"
+          }
+          stock={product.stock}
+          description={product.description}
+        />
+
+        <ProductReviews reviews={reviews} soldCount={soldCount} />
       </main>
 
-      {/* 6. MOBILE BOTTOM BAR (Visible on Mobile Only) */}
-      <div className="md:hidden fixed bottom-0 z-[60] w-full bg-white border-t border-slate-100 flex items-center shadow-[0_-5px_20px_rgba(0,0,0,0.05)] h-16">
-        <button className="flex-1 flex flex-col items-center justify-center text-slate-500 h-full border-r border-slate-50">
-          <MessageCircle size={20} />
-          <span className="text-[8px] mt-0.5 font-bold uppercase">Chat</span>
-        </button>
-
-        {/* Tombol Keranjang */}
-        <button
-          disabled={isOutOfStock}
-          onClick={handleAddToCart}
-          className={`flex-1 flex flex-col items-center justify-center h-full border-r border-slate-50 ${isOutOfStock ? "text-slate-300 bg-slate-50" : "text-teal-600 bg-teal-50/30"}`}
-        >
-          <ShoppingCart size={20} />
-          <span className="text-[8px] mt-0.5 font-bold uppercase">
-            Keranjang
-          </span>
-        </button>
-
-        {/* Tombol Beli */}
-        <button
-          disabled={isOutOfStock}
-          onClick={() => {
-            if (!isOutOfStock) {
-              handleAddToCart();
-              navigate("/checkout");
-            }
-          }}
-          className={`flex-[2.5] h-full font-black uppercase text-[11px] tracking-widest active:bg-teal-700 transition-colors ${
-            isOutOfStock
-              ? "bg-slate-400 text-white cursor-not-allowed"
-              : "bg-teal-600 text-white"
-          }`}
-        >
-          {isOutOfStock ? "STOK HABIS" : "BELI SEKARANG"}
-        </button>
-      </div>
+      <ProductActionBar
+        isOutOfStock={product.stock <= 0}
+        qty={qty}
+        stock={product.stock}
+        onQtyChange={setQty}
+        onAddToCart={() => {
+          addToCart(product, qty);
+          showToast("Masuk Keranjang", "success");
+        }}
+        onContactSeller={handleContactSeller}
+        chatLoading={chatLoading}
+        onBuyNow={() => {
+          addToCart(product, qty);
+          navigate("/checkout");
+        }}
+      />
     </div>
   );
 };

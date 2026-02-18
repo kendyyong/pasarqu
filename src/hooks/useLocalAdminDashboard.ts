@@ -1,19 +1,20 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useJsApiLoader } from "@react-google-maps/api";
 
-const libraries: "places"[] = ["places"];
+// PINDAHKAN KE LUAR COMPONENT agar tidak menyebabkan Performance Warning
+const LIBRARIES: "places"[] = ["places"];
 
 export const useLocalAdminDashboard = () => {
   const { profile, logout } = useAuth();
-  const { showToast } = useToast(); // Fungsi ini sudah ada di sini...
+  const { showToast } = useToast();
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries,
+    libraries: LIBRARIES, // Menggunakan konstanta statis
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -33,32 +34,61 @@ export const useLocalAdminDashboard = () => {
       setIsLoading(false);
       return;
     }
+    
     try {
       const targetMarketId = profile.managed_market_id;
       const today = new Date().toISOString().split("T")[0];
 
-      const [marketRes, usersRes, prodRes, financeRes] = await Promise.all([
+      // 1. Fetch Market, Users, & Finance
+      const [marketRes, usersRes, financeRes] = await Promise.all([
         supabase.from("markets").select("*").eq("id", targetMarketId).single(),
         supabase.from("profiles").select("*").eq("managed_market_id", targetMarketId),
-        supabase.from("products").select("*, merchants(shop_name, name)").eq("market_id", targetMarketId).eq("status", "PENDING"),
         supabase.from("orders").select("total_price, service_fee").eq("market_id", targetMarketId).gte("created_at", today),
       ]);
 
+      // 2. FETCH PRODUK (Hanya ambil shop_name, karena owner_name tidak ada di tabel merchants)
+      const { data: prodData, error: prodError } = await supabase
+        .from("products")
+        .select(`
+          *,
+          merchants (
+            shop_name
+          ),
+          categories (
+            name
+          )
+        `)
+        .eq("market_id", targetMarketId)
+        .eq("status", "PENDING");
+
+      if (prodError) {
+        console.error("Error Fetch Products:", prodError.message);
+        // Fallback jika relasi masih bermasalah
+        const { data: fallback } = await supabase
+          .from("products")
+          .select("*")
+          .eq("market_id", targetMarketId)
+          .eq("status", "PENDING");
+        setPendingProducts(fallback || []);
+      } else {
+        setPendingProducts(prodData || []);
+      }
+
+      // 3. Set Data Lainnya
       if (marketRes.data) setMyMarket(marketRes.data);
       if (usersRes.data) {
         setMyMerchants(usersRes.data.filter((p: any) => p.role === "MERCHANT"));
         setMyCouriers(usersRes.data.filter((p: any) => p.role === "COURIER"));
         setMyCustomers(usersRes.data.filter((p: any) => p.role === "CUSTOMER"));
       }
-      setPendingProducts(prodRes.data || []);
       
       if (financeRes.data) {
-        const total = financeRes.data.reduce((acc, curr) => acc + Number(curr.total_price), 0);
-        const fees = financeRes.data.reduce((acc, curr) => acc + Number(curr.service_fee), 0);
+        const total = financeRes.data.reduce((acc, curr) => acc + Number(curr.total_price || 0), 0);
+        const fees = financeRes.data.reduce((acc, curr) => acc + Number(curr.service_fee || 0), 0);
         setMarketFinance({ revenue: total, serviceFees: fees });
       }
     } catch (error) {
-      console.error("Fetch Error:", error);
+      console.error("Global Fetch Error:", error);
     } finally {
       setIsLoading(false);
     }
@@ -85,15 +115,17 @@ export const useLocalAdminDashboard = () => {
     alarmAudio.current = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
     if (!profile?.managed_market_id) return;
 
+    const mid = profile.managed_market_id;
+
     const productSub = supabase.channel("engine_produk")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "products", filter: `market_id=eq.${profile.managed_market_id}` }, () => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "products", filter: `market_id=eq.${mid}` }, () => {
         fetchData();
         triggerAlarm();
         showToast("🚨 PRODUK BARU MENUNGGU VALIDASI!", "error");
       }).subscribe();
 
     const profileSub = supabase.channel("engine_mitra")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "profiles", filter: `managed_market_id=eq.${profile.managed_market_id}` }, (payload: any) => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "profiles", filter: `managed_market_id=eq.${mid}` }, (payload: any) => {
         fetchData();
         triggerAlarm();
         const role = payload.new.role === "MERCHANT" ? "TOKO" : "KURIR";
@@ -107,9 +139,10 @@ export const useLocalAdminDashboard = () => {
     };
   }, [profile?.managed_market_id, isMuted]);
 
-  useEffect(() => { if (profile) fetchData(); }, [profile]);
+  useEffect(() => { 
+    if (profile) fetchData(); 
+  }, [profile]);
 
-  // ✅ PERBAIKAN: showToast dimasukkan ke daftar return
   return {
     profile, isLoaded, isLoading, isMuted, setIsMuted, isAlarmActive,
     myMarket, myMerchants, myCouriers, myCustomers, pendingProducts, marketFinance,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ShoppingBag, MessageCircle, User } from "lucide-react";
+import { Search, ShoppingBag, MessageCircle, User, MapPin } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 
 interface AppHeaderProps {
@@ -26,7 +26,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const { user } = useAuth();
   const [isBump, setIsBump] = useState(false);
 
-  // Logika Menentukan Nama (Jika login pakai nama asli, jika tidak pakai Tamu)
+  // Logika Menentukan Nama (Dibuat tegak tanpa italic sesuai request sebelumnya)
   const finalDisplayName = user ? userName || "Pengguna" : "Tamu";
 
   // Animasi angka keranjang saat bertambah
@@ -38,15 +38,28 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     }
   }, [cartCount]);
 
+  // ✅ FUNGSI NAVIGASI CHAT YANG DIPERKUAT
+  const handleChatClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation(); // Mencegah bubbling event
+
+    if (user) {
+      navigate("/chat");
+    } else {
+      navigate("/login");
+    }
+  };
+
   return (
     <header className="fixed top-0 left-0 right-0 z-[1000] bg-teal-600/95 backdrop-blur-md border-b border-white/10 shadow-lg transition-all duration-300">
       <div className="max-w-[1200px] mx-auto px-4 h-[70px] md:h-[80px] flex items-center gap-3 md:gap-8">
         {/* LOGO AREA */}
         <div
-          className="flex items-center gap-3 cursor-pointer shrink-0 group"
-          onClick={() => navigate("/")}
+          className="flex items-center gap-3 cursor-pointer shrink-0 group active:scale-95 transition-all duration-200"
+          onClick={() => navigate("/select-market")}
+          title="Ganti Wilayah / Pasar"
         >
-          <div className="relative h-10 w-10 md:h-12 md:w-12 flex items-center justify-center bg-white rounded-xl shadow-xl border border-white/20 transform group-hover:scale-110 transition-all duration-300 p-1">
+          <div className="relative h-10 w-10 md:h-12 md:w-12 flex items-center justify-center bg-white rounded-xl shadow-xl border border-white/20 group-hover:shadow-orange-400/20 transition-all duration-300 p-1">
             <img
               src="/logo-pasarqu.png"
               alt="Logo"
@@ -55,15 +68,22 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 e.currentTarget.src = "https://via.placeholder.com/100?text=P";
               }}
             />
+            <div className="absolute -right-1 -bottom-1 bg-orange-500 text-white rounded-full p-0.5 border border-white shadow-sm md:hidden">
+              <MapPin size={8} />
+            </div>
           </div>
 
           <div className="hidden sm:block text-left">
-            <h1 className="text-white font-black text-xl md:text-2xl tracking-tighter leading-none uppercase">
-              PASAR<span className="text-orange-400">QU</span>
+            <h1 className="text-white font-black text-xl md:text-2xl tracking-tighter leading-none uppercase group-hover:text-orange-400 transition-colors">
+              PASAR{" "}
+              <span className="text-orange-400 group-hover:text-white">QU</span>
             </h1>
-            <p className="text-[10px] text-teal-50 font-black uppercase tracking-[0.2em] mt-1.5 opacity-90 border-l-2 border-orange-400 pl-2 ml-0.5">
-              {regionName || "WILAYAH LOKAL"}
-            </p>
+            <div className="flex items-center gap-1.5 mt-1.5 opacity-90 border-l-2 border-orange-400 pl-2 ml-0.5">
+              <MapPin size={10} className="text-orange-400" />
+              <p className="text-[10px] text-teal-50 font-black uppercase tracking-[0.15em]">
+                {regionName || "PILIH PASAR"}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -82,10 +102,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
         {/* ACTION BUTTONS */}
         <div className="flex items-center gap-1 md:gap-4 shrink-0">
-          {/* Chat */}
+          {/* ✅ TOMBOL CHAT - DIPERBAIKI */}
           <div
-            className="p-2 text-white cursor-pointer hover:bg-white/10 rounded-xl transition-all"
-            onClick={() => (user ? navigate("/chat") : navigate("/login"))}
+            className="p-2 text-white cursor-pointer hover:bg-white/10 rounded-xl transition-all active:scale-90"
+            onClick={handleChatClick}
+            title="Pesan Masuk"
           >
             <MessageCircle size={22} />
           </div>
@@ -120,12 +141,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               </div>
             )}
 
-            {/* TEXT NAMA: Muncul Nama di samping icon */}
             <div className="flex flex-col text-left">
               <span className="hidden md:block text-[8px] font-black text-teal-100 uppercase tracking-widest leading-none opacity-70">
                 Sapaan,
               </span>
-              <span className="text-[11px] font-black text-white uppercase italic leading-tight tracking-tight">
+              <span className="text-[11px] font-black text-white uppercase leading-tight tracking-tight">
                 {finalDisplayName}
               </span>
             </div>

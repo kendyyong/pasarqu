@@ -1,11 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
-import { Loader2 } from "lucide-react";
 
-// --- PERBAIKAN 1: Import Path diarahkan ke folder 'src/hooks' ---
+// --- HOOKS ---
 import { useMerchantDashboard } from "../../hooks/useMerchantDashboard";
 
-// --- IMPORT COMPONENTS ---
+// --- COMPONENTS ---
 import { MerchantSidebar } from "./components/MerchantSidebar";
 import { MerchantHeader } from "./components/MerchantHeader";
 import { MerchantAlarmModal } from "./components/MerchantAlarmModal";
@@ -16,7 +15,6 @@ import { MerchantFinanceDashboard } from "./components/MerchantFinanceDashboard"
 import { MerchantMessages } from "./components/MerchantMessages";
 import { LocationPickerModal } from "./components/LocationPickerModal";
 
-// Definisi tipe tab yang ketat
 type TabType =
   | "overview"
   | "products"
@@ -31,19 +29,37 @@ export const MerchantDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [triggerAddProduct, setTriggerAddProduct] = useState(false);
 
-  // PANGGIL HOOK UTAMA
+  // State untuk melacak tab mana saja yang PERNAH dibuka
+  // Agar tidak memuat semua tab sekaligus di awal (Lazy Load)
+  const [visitedTabs, setVisitedTabs] = useState<Record<string, boolean>>({
+    overview: true,
+  });
+
   const {
     merchantProfile,
     products,
     orders,
-    loading,
     incomingOrder,
     fetchBaseData,
     toggleShopStatus,
     stopAlarm,
   } = useMerchantDashboard();
 
-  // Handlers UI
+  // Update daftar tab yang pernah dikunjungi
+  useEffect(() => {
+    if (!visitedTabs[activeTab]) {
+      setVisitedTabs((prev) => ({ ...prev, [activeTab]: true }));
+    }
+  }, [activeTab, visitedTabs]);
+
+  // Safe Counters
+  const validProductsCount = products
+    ? products.filter((p: any) => p && p.id).length
+    : 0;
+  const validOrdersCount = orders
+    ? orders.filter((o: any) => o && o.id).length
+    : 0;
+
   const handleAddProductShortcut = () => {
     setActiveTab("products");
     setTriggerAddProduct(true);
@@ -53,37 +69,32 @@ export const MerchantDashboard: React.FC = () => {
   const handleProcessOrder = () => {
     stopAlarm();
     setActiveTab("orders");
+    fetchBaseData();
   };
 
-  if (loading)
+  // Tampilan awal saat memuat data profil
+  if (!merchantProfile) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <Loader2 className="animate-spin text-slate-900" size={32} />
+      <div className="min-h-screen flex items-center justify-center bg-white font-black text-slate-300 uppercase tracking-[0.3em] animate-pulse">
+        Menyiapkan Dashboard...
       </div>
     );
-
-  if (!merchantProfile)
-    return (
-      <div className="p-10 text-center">
-        Data Merchant Tidak Ditemukan / Belum Verifikasi
-      </div>
-    );
+  }
 
   return (
     <div className="min-h-screen bg-white flex flex-col md:flex-row font-sans text-left overflow-hidden">
       {/* SIDEBAR */}
-      <aside className="hidden md:flex w-64 h-screen fixed left-0 top-0 z-50 border-r border-slate-200 bg-white">
+      <aside className="hidden md:flex w-64 h-screen fixed left-0 top-0 z-50 border-r border-slate-100 bg-white">
         <MerchantSidebar
           activeTab={activeTab}
-          // PERBAIKAN 2: Casting tipe data 'tab' agar TypeScript tidak error
           setActiveTab={(tab: any) => setActiveTab(tab as TabType)}
           merchantProfile={merchantProfile}
           onLocationClick={() => setActiveTab("location")}
           onLogout={logout}
           onToggleStatus={toggleShopStatus}
           onAddProduct={handleAddProductShortcut}
-          orderCount={orders.length}
-          productCount={products.length}
+          orderCount={validOrdersCount}
+          productCount={validProductsCount}
         />
       </aside>
 
@@ -96,35 +107,89 @@ export const MerchantDashboard: React.FC = () => {
           isOpen={merchantProfile.is_shop_open}
         />
 
-        {/* TAB CONTENT */}
-        <main className="flex-1 overflow-y-auto no-scrollbar pb-24 md:pb-6 bg-slate-50/20">
-          <div className="p-3 md:p-6 w-full">
-            {activeTab === "overview" && (
+        {/* TAB CONTENT AREA */}
+        <main className="flex-1 overflow-y-auto no-scrollbar pb-24 md:pb-6 bg-slate-50/30">
+          <div className="p-3 md:p-6 w-full max-w-[1400px] mx-auto relative">
+            {/* TEKNIK ANTI-KEDIP (KEEP ALIVE):
+                Semua tab dirender tapi disembunyikan (hidden) jika tidak aktif.
+                Ini mencegah "Unmount/Mount" yang menyebabkan layar putih.
+            */}
+
+            {/* 1. OVERVIEW */}
+            <div
+              className={
+                activeTab === "overview"
+                  ? "block animate-in fade-in duration-300"
+                  : "hidden"
+              }
+            >
               <MerchantOverview
                 merchantProfile={merchantProfile}
-                stats={{ orders: orders.length, products: products.length }}
+                stats={{
+                  orders: validOrdersCount,
+                  products: validProductsCount,
+                }}
               />
+            </div>
+
+            {/* 2. PRODUCTS */}
+            {visitedTabs["products"] && (
+              <div
+                className={
+                  activeTab === "products"
+                    ? "block animate-in fade-in duration-300"
+                    : "hidden"
+                }
+              >
+                <MerchantProducts
+                  merchantProfile={merchantProfile}
+                  autoOpenForm={triggerAddProduct}
+                />
+              </div>
             )}
 
-            {activeTab === "products" && (
-              <MerchantProducts
-                merchantProfile={merchantProfile}
-                autoOpenForm={triggerAddProduct}
-              />
+            {/* 3. ORDERS */}
+            {visitedTabs["orders"] && (
+              <div
+                className={
+                  activeTab === "orders"
+                    ? "block animate-in fade-in duration-300"
+                    : "hidden"
+                }
+              >
+                <MerchantOrders merchantProfile={merchantProfile} />
+              </div>
             )}
 
-            {activeTab === "orders" && (
-              <MerchantOrders merchantProfile={merchantProfile} />
+            {/* 4. MESSAGES */}
+            {visitedTabs["messages"] && (
+              <div
+                className={
+                  activeTab === "messages"
+                    ? "block animate-in fade-in duration-300"
+                    : "hidden"
+                }
+              >
+                <MerchantMessages />
+              </div>
             )}
 
-            {activeTab === "messages" && <MerchantMessages />}
+            {/* 5. FINANCE / WALLET */}
+            {visitedTabs["wallet"] || visitedTabs["finance"] ? (
+              <div
+                className={
+                  activeTab === "wallet" || activeTab === "finance"
+                    ? "block animate-in fade-in duration-300"
+                    : "hidden"
+                }
+              >
+                <MerchantFinanceDashboard />
+              </div>
+            ) : null}
 
-            {(activeTab === "wallet" || activeTab === "finance") && (
-              <MerchantFinanceDashboard />
-            )}
-
+            {/* 6. LOCATION (Modal Style) */}
             {activeTab === "location" && (
-              <div className="bg-white border border-slate-200 overflow-hidden">
+              <div className="bg-white border-2 border-slate-100 animate-in zoom-in-95 duration-200">
                 <LocationPickerModal
                   merchantProfile={merchantProfile}
                   onClose={() => setActiveTab("overview")}
@@ -136,23 +201,21 @@ export const MerchantDashboard: React.FC = () => {
         </main>
 
         {/* BOTTOM NAV MOBILE */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-slate-100 bg-white">
           <MerchantSidebar
             activeTab={activeTab}
-            // PERBAIKAN 2: Casting tipe data juga di sini
             setActiveTab={(tab: any) => setActiveTab(tab as TabType)}
             merchantProfile={merchantProfile}
             onLocationClick={() => setActiveTab("location")}
             onLogout={logout}
             onToggleStatus={toggleShopStatus}
             onAddProduct={handleAddProductShortcut}
-            orderCount={orders.length}
-            productCount={products.length}
+            orderCount={validOrdersCount}
+            productCount={validProductsCount}
           />
         </div>
       </div>
 
-      {/* MODAL ALARM */}
       <MerchantAlarmModal
         incomingOrder={incomingOrder}
         onProcess={handleProcessOrder}

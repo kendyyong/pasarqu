@@ -20,6 +20,11 @@ import { PartnerDetailModal } from "./components/PartnerDetailModal";
 import { LocalAdminHeader } from "./components/LocalAdminHeader";
 import { LocalAdminContent } from "./components/LocalAdminContent";
 
+// ✅ 1. DEFINE PROPS INTERFACE
+interface LocalAdminProps {
+  onBack?: () => void; // Opsional agar tidak pecah jika dipanggil tanpa onBack
+}
+
 type TabType =
   | "overview"
   | "merchants"
@@ -33,7 +38,8 @@ type TabType =
   | "broadcast"
   | "orders";
 
-export const LocalAdminDashboard: React.FC = () => {
+// ✅ 2. TERIMA PROPS onBack
+export const LocalAdminDashboard: React.FC<LocalAdminProps> = ({ onBack }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [detailModal, setDetailModal] = useState<{
@@ -93,6 +99,15 @@ export const LocalAdminDashboard: React.FC = () => {
         <main className="p-10 max-w-7xl mx-auto w-full pb-32">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
             <div className="text-left text-slate-800">
+              {/* ✅ 3. GUNAKAN onBack JIKA ADA (OPSIONAL) */}
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  className="mb-4 text-[10px] font-black uppercase text-slate-400 hover:text-teal-600 transition-colors flex items-center gap-1"
+                >
+                  ← Kembali ke Utama
+                </button>
+              )}
               <h1 className="text-4xl font-black uppercase tracking-tighter leading-none mb-3">
                 {activeTab === "overview"
                   ? "Dashboard Wilayah"

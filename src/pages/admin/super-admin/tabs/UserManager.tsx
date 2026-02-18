@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 // ✅ FIX: Jalur mundur satu tingkat ke folder components
-import { Badge, Card, Button } from "../components/SharedUI";
+import { Badge, Card, Button } from "../../../../components/ui/SharedUI";
 
 interface UserManagerProps {
   allUsers: any[];

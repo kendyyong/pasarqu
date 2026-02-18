@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../../../lib/supabaseClient";
 import { useToast } from "../../../../contexts/ToastContext";
-import { Input } from "./SharedUI";
+import { Input } from "../../../../components/ui/SharedUI";
 
 interface Props {
   markets: any[];

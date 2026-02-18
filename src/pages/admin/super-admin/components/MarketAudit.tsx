@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { ArrowLeft, Shield, Store, Truck, Users, Eye } from "lucide-react";
-import { TabAudit } from "./SharedUI";
+import { TabAudit } from "../../../../components/ui/SharedUI";
 
 export const MarketAuditFullView = ({
   market,

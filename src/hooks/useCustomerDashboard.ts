@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-// PERBAIKAN 1: Jalur import disesuaikan (cukup mundur 1 folder)
+import { useState, useEffect, useCallback } from "react";
+// PERBAIKAN 1: Jalur import disesuaikan
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -8,8 +8,8 @@ export const useCustomerDashboard = () => {
   const [stats, setStats] = useState({ unpaid: 0, packing: 0, delivering: 0 });
   const [loading, setLoading] = useState(true);
 
-  // Fungsi untuk menghitung jumlah pesanan berdasarkan status
-  const fetchStats = async () => {
+  // ✅ Menggunakan useCallback agar fungsi stabil dan bisa di-export dengan aman
+  const fetchStats = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -21,7 +21,7 @@ export const useCustomerDashboard = () => {
         .in("status", ["UNPAID", "PAID"]); // Filter dasar
 
       if (data) {
-        // PERBAIKAN 2: Tambahkan tipe ': any' pada parameter (o)
+        // PERBAIKAN 2: Filter logika stats
         const unpaid = data.filter((o: any) => o.status === "UNPAID").length;
         
         const packing = data.filter((o: any) => 
@@ -41,9 +41,9 @@ export const useCustomerDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
-  // Realtime Listener: Update angka otomatis jika ada perubahan status order
+  // Realtime Listener
   useEffect(() => {
     fetchStats();
     if (!user) return;
@@ -52,7 +52,12 @@ export const useCustomerDashboard = () => {
       .channel(`customer_stats_${user.id}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "orders", filter: `customer_id=eq.${user.id}` },
+        { 
+          event: "*", 
+          schema: "public", 
+          table: "orders", 
+          filter: `customer_id=eq.${user.id}` 
+        },
         () => fetchStats()
       )
       .subscribe();
@@ -60,7 +65,13 @@ export const useCustomerDashboard = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, fetchStats]);
 
-  return { stats, loading, profile };
+  // ✅ Tambahkan refreshData: fetchStats agar Dashboard tidak error lagi
+  return { 
+    stats, 
+    loading, 
+    profile, 
+    refreshData: fetchStats 
+  };
 };
