@@ -8,20 +8,18 @@ import { useAuth } from "../../../contexts/AuthContext";
 
 // --- COMPONENTS ---
 import { Sidebar } from "./components/Sidebar";
+import { MarketAuditFullView } from "./components/MarketAudit";
 import { SuperAdminHeader } from "./components/SuperAdminHeader";
 import { SuperAdminContent } from "./components/SuperAdminContent";
 
-// PERBAIKAN 1: Jalur MarketAudit (Pastikan file ada di folder components super-admin)
-import { MarketAuditFullView } from "./components/MarketAudit";
-
-// PERBAIKAN 2: Jalur PageLoader (Gunakan 'Ui' sesuai struktur fisik Juragan)
-import { PageLoader } from "../../../components/Ui/PageLoader";
+// ✅ FIX: Standarisasi ke 'ui' (huruf kecil) agar Vercel build lancar
+import { PageLoader } from "../../../components/ui/PageLoader";
 
 export const SuperAdminDashboard: React.FC = () => {
   const { logout, profile } = useAuth();
   const navigate = useNavigate();
 
-  // PANGGIL HOOK UTAMA
+  // PANGGIL HOOK UTAMA (LOGIKA DIPISAH)
   const {
     isDark,
     toggleTheme,
@@ -48,7 +46,7 @@ export const SuperAdminDashboard: React.FC = () => {
     <div
       className={`min-h-screen ${currentTheme.bg} ${currentTheme.text} font-sans flex text-left overflow-hidden transition-colors duration-500`}
     >
-      {/* SIDEBAR */}
+      {/* SIDEBAR (NAVIGASI) */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -63,7 +61,7 @@ export const SuperAdminDashboard: React.FC = () => {
       />
 
       <div className="flex-1 ml-72 flex flex-col h-screen overflow-hidden relative">
-        {/* HEADER */}
+        {/* HEADER (THEME TOGGLE & PROFILE) */}
         <SuperAdminHeader
           activeTab={activeTab}
           isDark={isDark}
@@ -75,7 +73,7 @@ export const SuperAdminDashboard: React.FC = () => {
 
         <main className={`flex-1 p-8 overflow-y-auto no-scrollbar`}>
           {auditMarket ? (
-            /* VIEW AUDIT MARKET */
+            /* VIEW AUDIT MARKET (DRILL DOWN WILAYAH) */
             <div className="animate-in fade-in slide-in-from-bottom-2">
               <button
                 onClick={() => setAuditMarket(null)}
@@ -91,7 +89,7 @@ export const SuperAdminDashboard: React.FC = () => {
               />
             </div>
           ) : (
-            /* KONTEN UTAMA (ROUTING FITUR) */
+            /* KONTEN UTAMA (ROUTING FITUR BERDASARKAN TAB) */
             <SuperAdminContent
               activeTab={activeTab}
               theme={currentTheme}
