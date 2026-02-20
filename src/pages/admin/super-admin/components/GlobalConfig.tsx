@@ -9,6 +9,9 @@ import {
   AlertTriangle,
   Loader2,
   Sparkles,
+  ShieldCheck,
+  RefreshCw,
+  Zap,
 } from "lucide-react";
 import { useToast } from "../../../../contexts/ToastContext";
 import { createAuditLog } from "../../../../lib/auditHelper";
@@ -23,7 +26,7 @@ export const GlobalConfig = () => {
   // State untuk AI Auditor
   const [aiWarning, setAiWarning] = useState<string | null>(null);
 
-  // State Bersih (Hanya Operasional & System)
+  // State Bersih
   const [formData, setFormData] = useState({
     max_distance_km: 0,
     min_app_version: "",
@@ -50,7 +53,7 @@ export const GlobalConfig = () => {
         });
       }
     } catch (err: any) {
-      showToast("Gagal memuat pengaturan: " + err.message, "error");
+      showToast("GAGAL MEMUAT PENGATURAN", "error");
     } finally {
       setLoading(false);
     }
@@ -60,17 +63,13 @@ export const GlobalConfig = () => {
     fetchSettings();
   }, []);
 
-  // --- LOGIKA AI AUDITOR (GUARDRAIL OPERASIONAL) ---
+  // AI AUDITOR LOGIC
   useEffect(() => {
     const runAiAudit = () => {
       if (formData.max_distance_km > 50) {
-        setAiWarning(
-          "AI Alert: Radius > 50KM berisiko bagi kurir motor & kesegaran barang.",
-        );
+        setAiWarning("AI ALERT: RADIUS > 50KM BERISIKO BAGI KESEGARAN BARANG.");
       } else if (formData.is_maintenance) {
-        setAiWarning(
-          "AI Info: Mode Perbaikan sedang aktif. Seluruh akses aplikasi ditutup.",
-        );
+        setAiWarning("AI INFO: MODE PEMELIHARAAN AKTIF. AKSES PUBLIK DITUTUP.");
       } else {
         setAiWarning(null);
       }
@@ -87,18 +86,16 @@ export const GlobalConfig = () => {
         .eq("id", 1);
 
       if (error) throw error;
-
       await refreshConfig();
-
       await createAuditLog(
         "UPDATE_GLOBAL_SETTINGS",
         "SYSTEM",
-        `Mengubah operasional sistem (Radius: ${formData.max_distance_km}KM, Maintenance: ${formData.is_maintenance})`,
+        `Mengubah sistem (Radius: ${formData.max_distance_km}KM, Maint: ${formData.is_maintenance})`,
       );
 
-      showToast("Pengaturan sistem diperbarui!", "success");
+      showToast("KONFIGURASI BERHASIL DIPERBARUI", "success");
     } catch (err: any) {
-      showToast("Gagal menyimpan: " + err.message, "error");
+      showToast("GAGAL MENYIMPAN", "error");
     } finally {
       setSaving(false);
     }
@@ -114,142 +111,160 @@ export const GlobalConfig = () => {
 
   if (loading)
     return (
-      <div className="flex justify-center py-20">
-        <Loader2 className="animate-spin text-teal-600" size={32} />
+      <div className="flex flex-col items-center justify-center py-40 gap-4 font-black">
+        <RefreshCw className="animate-spin text-[#008080]" size={40} />
+        <p className="text-[10px] tracking-widest text-slate-400">
+          SYNCING CORE SYSTEM...
+        </p>
       </div>
     );
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500 text-left text-slate-800">
-      {/* HEADER */}
-      <div className="flex items-center justify-between mb-4">
+    <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-500 font-black uppercase tracking-tighter text-left">
+      {/* HEADER SECTION */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b-4 border-slate-900 pb-4">
         <div>
-          <h2 className="text-xl font-black uppercase tracking-tighter">
-            Kontrol Utama Sistem
+          <h2 className="text-[20px] font-black text-slate-900 flex items-center gap-2">
+            <ShieldCheck className="text-[#008080]" size={24} /> KONTROL UTAMA
+            SISTEM
           </h2>
-          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
-            Operasional & Keamanan Aplikasi
+          <p className="text-[10px] text-slate-400 mt-1 tracking-widest font-bold">
+            OPERASIONAL & PARAMETER KEAMANAN APLIKASI PASARQU.
           </p>
         </div>
         <button
           onClick={handleSave}
           disabled={saving}
-          className="bg-slate-900 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-teal-600 active:scale-95 transition-all shadow-lg shadow-slate-200 disabled:opacity-50"
+          className="bg-slate-900 text-white px-8 py-3 rounded-md font-black text-[11px] tracking-widest flex items-center gap-2 hover:bg-[#008080] transition-all border-b-4 border-black/20 disabled:opacity-50"
         >
           {saving ? (
             <Loader2 className="animate-spin" size={16} />
           ) : (
             <Save size={16} />
           )}
-          Simpan Perubahan
+          SIMPAN KONFIGURASI
         </button>
       </div>
 
-      {/* AI AUDITOR BANNER */}
+      {/* AI AUDITOR BANNER - SUDUT TEGAS */}
       {aiWarning && (
-        <div className="bg-amber-50 border border-amber-100 p-4 rounded-[1.5rem] flex items-center gap-4">
-          <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-white shrink-0">
+        <div className="bg-slate-900 border-l-8 border-orange-500 p-4 rounded-md flex items-center gap-4 shadow-xl">
+          <div className="w-10 h-10 bg-orange-500 rounded-md flex items-center justify-center text-white shrink-0 shadow-lg">
             <Sparkles size={20} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-amber-800 uppercase tracking-widest">
-              AI Security Auditor
+            <p className="text-[9px] font-black text-orange-400 tracking-widest">
+              AI SECURITY AUDITOR
             </p>
-            <p className="text-xs font-bold text-amber-600">{aiWarning}</p>
+            <p className="text-[11px] font-black text-white">{aiWarning}</p>
           </div>
         </div>
       )}
 
-      {/* 1. OPERASIONAL */}
-      <section className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-all">
-        <div className="absolute top-0 right-0 p-6 text-slate-50 group-hover:text-blue-50 transition-colors">
-          <MapPin size={64} />
-        </div>
-        <h3 className="text-sm font-black uppercase tracking-widest mb-6 flex items-center gap-2 relative z-10">
-          <MapPin size={18} className="text-blue-500" /> Jangkauan & Layanan
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Radius Maksimal (KM)
-            </label>
-            <input
-              type="number"
-              name="max_distance_km"
-              value={formData.max_distance_km}
-              onChange={handleChange}
-              className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-blue-500 outline-none"
-            />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* 1. JANGKAUAN LAYANAN */}
+        <section className="bg-white p-6 rounded-md border border-slate-200 shadow-sm relative overflow-hidden group">
+          <div className="absolute -top-2 -right-2 text-slate-50 group-hover:text-teal-50 transition-colors">
+            <MapPin size={80} />
           </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              WhatsApp Center
-            </label>
-            <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-4 focus-within:ring-2 focus-within:ring-blue-500">
-              <MessageCircle size={16} className="text-green-500" />
+          <h3 className="text-[12px] font-black mb-6 flex items-center gap-2 relative z-10 border-b border-slate-100 pb-3">
+            <MapPin size={18} className="text-[#008080]" /> LOGISTIK & RADIUS
+          </h3>
+
+          <div className="space-y-4 relative z-10">
+            <div className="space-y-1.5">
+              <label className="text-[9px] text-slate-400 tracking-widest">
+                RADIUS MAKSIMAL PENGIRIMAN (KM)
+              </label>
               <input
-                type="text"
-                name="cs_whatsapp"
-                value={formData.cs_whatsapp}
+                type="number"
+                name="max_distance_km"
+                value={formData.max_distance_km}
                 onChange={handleChange}
-                className="w-full bg-transparent border-none py-3 font-bold outline-none"
-                placeholder="628..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-md px-4 py-3 font-black text-[13px] focus:border-[#008080] outline-none transition-all"
               />
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 2. KONTROL APLIKASI */}
-      <section className="bg-white p-8 rounded-[2rem] shadow-sm border border-red-100 relative overflow-hidden group hover:shadow-md transition-all">
-        <div className="absolute top-0 right-0 p-6 text-slate-50 group-hover:text-red-50 transition-colors">
-          <Server size={64} />
-        </div>
-        <h3 className="text-sm font-black uppercase tracking-widest mb-6 flex items-center gap-2 relative z-10">
-          <Server size={18} className="text-red-500" /> Pemeliharaan Sistem
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10 items-center">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Versi Aplikasi Minimum
-            </label>
-            <div className="flex items-center gap-2">
-              <Smartphone size={16} className="text-slate-400" />
-              <input
-                type="text"
-                name="min_app_version"
-                value={formData.min_app_version}
-                onChange={handleChange}
-                className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold focus:ring-2 focus:ring-red-500 outline-none"
-                placeholder="1.0.0"
-              />
+            <div className="space-y-1.5">
+              <label className="text-[9px] text-slate-400 tracking-widest">
+                WHATSAPP CS CENTER
+              </label>
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-md px-4 focus-within:border-[#008080]">
+                <MessageCircle size={16} className="text-green-600" />
+                <input
+                  type="text"
+                  name="cs_whatsapp"
+                  value={formData.cs_whatsapp}
+                  onChange={handleChange}
+                  className="w-full bg-transparent py-3 font-black text-[13px] outline-none"
+                  placeholder="628..."
+                />
+              </div>
             </div>
           </div>
+        </section>
 
-          <div className="bg-red-50 p-6 rounded-2xl border border-red-100 flex items-center justify-between">
-            <div>
-              <h4 className="font-black text-red-600 text-sm uppercase flex items-center gap-2">
-                <AlertTriangle size={16} /> Maintenance Mode
-              </h4>
-              <p className="text-[10px] text-red-400 font-bold mt-1">
-                Kunci aplikasi untuk semua user
-              </p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                name="is_maintenance"
-                checked={formData.is_maintenance}
-                onChange={handleChange}
-                className="sr-only peer"
-              />
-              <div className="w-14 h-7 bg-slate-200 rounded-full peer peer-checked:bg-red-600 after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:after:translate-x-full"></div>
-            </label>
+        {/* 2. PEMELIHARAAN SISTEM */}
+        <section className="bg-white p-6 rounded-md border border-slate-200 shadow-sm relative overflow-hidden group">
+          <div className="absolute -top-2 -right-2 text-slate-50 group-hover:text-red-50 transition-colors">
+            <Server size={80} />
           </div>
-        </div>
-      </section>
+          <h3 className="text-[12px] font-black mb-6 flex items-center gap-2 relative z-10 border-b border-slate-100 pb-3">
+            <Server size={18} className="text-red-600" /> STATUS APLIKASI
+          </h3>
+
+          <div className="space-y-6 relative z-10">
+            <div className="space-y-1.5">
+              <label className="text-[9px] text-slate-400 tracking-widest">
+                VERSI MINIMUM (FORCE UPDATE)
+              </label>
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-md px-4">
+                <Smartphone size={16} className="text-slate-400" />
+                <input
+                  type="text"
+                  name="min_app_version"
+                  value={formData.min_app_version}
+                  onChange={handleChange}
+                  className="w-full bg-transparent py-3 font-black text-[13px] outline-none"
+                  placeholder="1.0.0"
+                />
+              </div>
+            </div>
+
+            <div
+              className={`p-4 rounded-md border-2 transition-all flex items-center justify-between ${formData.is_maintenance ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-100"}`}
+            >
+              <div>
+                <h4
+                  className={`text-[11px] font-black ${formData.is_maintenance ? "text-red-700" : "text-slate-600"}`}
+                >
+                  MAINTENANCE MODE
+                </h4>
+                <p className="text-[8px] font-bold text-slate-400 tracking-widest">
+                  KUNCI AKSES GLOBAL
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="is_maintenance"
+                  checked={formData.is_maintenance}
+                  onChange={handleChange}
+                  className="sr-only peer"
+                />
+                <div className="w-12 h-6 bg-slate-300 rounded-full peer peer-checked:bg-red-600 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+              </label>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      {/* FOOTER NOTICE */}
+      <div className="bg-slate-900 p-4 rounded-md text-center border-b-4 border-[#008080] shadow-xl">
+        <p className="text-[9px] text-white/50 font-black tracking-[0.2em]">
+          PERUBAHAN PADA PANEL INI BERSIFAT INSTAN DAN MEMPENGARUHI SELURUH NODE
+          PENGGUNA.
+        </p>
+      </div>
     </div>
   );
 };

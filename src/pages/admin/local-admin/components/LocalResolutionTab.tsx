@@ -3,13 +3,9 @@ import { supabase } from "../../../../lib/supabaseClient";
 import { useAuth } from "../../../../contexts/AuthContext";
 import { useToast } from "../../../../contexts/ToastContext";
 import {
-  AlertCircle,
   MessageSquare,
-  Clock,
   CheckCircle2,
   ShieldAlert,
-  Search,
-  ExternalLink,
   ChevronRight,
   BrainCircuit,
   Loader2,
@@ -17,17 +13,18 @@ import {
   Scale,
   RefreshCw,
   XCircle,
+  Truck,
+  Store,
 } from "lucide-react";
 
 export const LocalResolutionTab = () => {
   const { profile } = useAuth();
   const { showToast } = useToast();
-  const [filter, setFilter] = useState("PENDING");
+  const [filter, setFilter] = useState("open");
   const [complaints, setComplaints] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCase, setSelectedCase] = useState<any>(null);
 
-  // AI States
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
   const [aiRecommendation, setAiRecommendation] = useState<string | null>(null);
 
@@ -40,18 +37,23 @@ export const LocalResolutionTab = () => {
         .select(
           `
           *,
-          orders(*),
-          profiles:customer_id(full_name, phone_number),
-          merchants:merchant_id(shop_name)
+          orders!inner(
+            id,
+            total_price,
+            market_id,
+            merchant_id,
+            courier_id
+          ),
+          profiles:user_id ( name ) 
         `,
         )
-        .eq("market_id", profile.managed_market_id)
+        .eq("orders.market_id", profile.managed_market_id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       setComplaints(data || []);
     } catch (err: any) {
-      showToast(err.message, "error");
+      showToast("GAGAL MEMUAT DATA: " + err.message, "error");
     } finally {
       setLoading(false);
     }
@@ -61,103 +63,130 @@ export const LocalResolutionTab = () => {
     fetchComplaints();
   }, [profile]);
 
-  // --- LOGIKA AI DISPUTE ANALYZER ---
   const analyzeWithAI = async (item: any) => {
     setAiAnalyzing(true);
     setAiRecommendation(null);
     try {
-      // Simulasi Berpikir AI (Bisa dihubungkan ke OpenAI/Gemini API via Edge Function)
       await new Promise((res) => setTimeout(res, 2000));
-
-      const issue = item.reason.toLowerCase();
+      const issue = (item.reason || item.message || "").toLowerCase();
       let advice = "";
 
       if (issue.includes("busuk") || issue.includes("basi")) {
         advice =
-          "Saran AI: SETUJUI REFUND. Barang kategori 'Segar' yang rusak saat tiba merupakan tanggung jawab Mitra/Kurir. Disarankan untuk memotong saldo Merchant guna mengembalikan dana pembeli.";
-      } else if (issue.includes("kurang") || issue.includes("tidak ada")) {
+          "SARAN AI: SETUJUI REFUND. MASALAH PADA KUALITAS BARANG, DISARANKAN PENALTI TOKO.";
+      } else if (issue.includes("kurang") || issue.includes("hilang")) {
         advice =
-          "Saran AI: PARTIAL REFUND. Mohon verifikasi berat timbangan kurir dan nota toko. Jika valid, kembalikan selisih dana ke saldo pembeli.";
-      } else if (issue.includes("lama") || issue.includes("telat")) {
-        advice =
-          "Saran AI: KOMPENSASI ONGKIR. Pesanan sudah diterima tapi terlambat. Berikan voucher atau kompensasi ongkos kirim kepada pembeli untuk menjaga retensi.";
+          "SARAN AI: INVESTIGASI KURIR. JIKA BARANG HILANG DI JALAN, DISARANKAN PENALTI KURIR.";
       } else {
         advice =
-          "Saran AI: INVESTIGASI. Bukti belum cukup kuat. Gunakan fitur Chat untuk meminta foto barang dari Pembeli.";
+          "SARAN AI: INVESTIGASI LANJUTAN. CEK BUKTI FOTO SEBELUM MENETAPKAN PENALTI.";
       }
-
       setAiRecommendation(advice);
     } catch (err) {
-      showToast("AI sedang sibuk, coba lagi nanti.", "error");
+      showToast("AI SEDANG SIBUK", "error");
     } finally {
       setAiAnalyzing(false);
     }
   };
 
+  // 🚩 FUNGSI RESOLUSI DENGAN LOGIKA PENALTI SALDO
   const handleResolve = async (
     id: string,
-    resolution: "REFUNDED" | "REJECTED",
+    resolution: "RESOLVED" | "REJECTED",
+    target: "MERCHANT" | "COURIER" = "MERCHANT",
   ) => {
     try {
-      const { error } = await supabase
+      // 1. Update status komplain
+      const { error: updateError } = await supabase
         .from("complaints")
-        .update({ status: "RESOLVED", resolution_type: resolution })
+        .update({ status: resolution })
         .eq("id", id);
 
-      if (error) throw error;
-      showToast(`Kasus ditutup sebagai: ${resolution}`, "success");
+      if (updateError) throw updateError;
+
+      // 2. Jika disetujui (Refund), jalankan pemotongan saldo otomatis
+      if (resolution === "RESOLVED") {
+        const targetId =
+          target === "MERCHANT"
+            ? selectedCase.orders.merchant_id
+            : selectedCase.orders.courier_id;
+
+        if (!targetId) {
+          showToast(`GAGAL: ID ${target} TIDAK DITEMUKAN`, "error");
+          return;
+        }
+
+        const { error: rpcError } = await supabase.rpc(
+          "handle_penalty_refund",
+          {
+            p_target_id: targetId,
+            p_amount: selectedCase.orders.total_price,
+            p_complaint_id: id,
+            p_reason: `PENALTI KOMPLAIN #${id.slice(0, 8)} (${target})`,
+          },
+        );
+
+        if (rpcError) throw rpcError;
+        showToast(
+          `REFUND BERHASIL. SALDO ${target} TELAH DIPOTONG.`,
+          "success",
+        );
+      } else {
+        showToast(`KOMPLAIN DITOLAK. TIDAK ADA PEMOTONGAN SALDO.`, "info");
+      }
+
       setSelectedCase(null);
       fetchComplaints();
     } catch (err: any) {
-      showToast(err.message, "error");
+      showToast("PROSES GAGAL: " + err.message, "error");
     }
   };
 
   if (loading)
     return (
       <div className="py-20 text-center flex flex-col items-center gap-4">
-        <Loader2 className="animate-spin text-teal-500" size={40} />
-        <p className="text-[10px] font-black uppercase text-slate-400">
-          Menghubungkan ke Pusat Resolusi...
+        <Loader2 className="animate-spin text-[#008080]" size={40} />
+        <p className="text-[12px] font-black uppercase text-slate-400 tracking-widest">
+          MENGHUBUNGKAN KE PUSAT RESOLUSI...
         </p>
       </div>
     );
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 text-left">
-      {/* HEADER & FILTER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="space-y-6 animate-in fade-in duration-700 text-left font-black uppercase tracking-tighter">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter">
-            Pusat Resolusi Wilayah
+          <h3 className="text-[16px] font-black text-slate-800 flex items-center gap-2">
+            <ShieldAlert className="text-[#FF6600]" size={20} /> PUSAT RESOLUSI
+            LOKAL
           </h3>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-            Gunakan bantuan AI untuk menengahi sengketa mitra dan pelanggan
+          <p className="text-[10px] font-bold text-slate-400 mt-1 tracking-widest normal-case">
+            PENGAMBILAN KEPUTUSAN PENALTI TOKO ATAU KURIR.
           </p>
         </div>
-        <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
-          {["PENDING", "RESOLVED"].map((s) => (
+        <div className="flex bg-white p-1 rounded-md border border-slate-200 shadow-sm">
+          {["open", "RESOLVED", "REJECTED"].map((s) => (
             <button
               key={s}
               onClick={() => setFilter(s)}
-              className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${filter === s ? "bg-teal-600 text-white shadow-lg" : "text-slate-400 hover:text-slate-600"}`}
+              className={`px-4 py-2 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${filter === s ? "bg-[#008080] text-white shadow-md" : "text-slate-400 hover:text-slate-600"}`}
             >
-              {s}
+              {s === "open" ? "PENDING" : s}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* COMPLAINT LIST (KIRI) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* LIST KIRI */}
         <div
-          className={`space-y-4 ${selectedCase ? "lg:col-span-5" : "lg:col-span-12"}`}
+          className={`space-y-3 ${selectedCase ? "lg:col-span-5" : "lg:col-span-12"}`}
         >
           {complaints.filter((c) => c.status === filter).length === 0 ? (
-            <div className="bg-white p-20 rounded-[3rem] border border-dashed border-slate-200 text-center">
-              <CheckCircle2 className="text-slate-300 mx-auto mb-4" size={32} />
-              <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                Antrian Bersih!
+            <div className="bg-white p-16 rounded-md border-2 border-dashed border-slate-200 text-center shadow-sm">
+              <CheckCircle2 className="text-slate-300 mx-auto mb-3" size={32} />
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                ANTREAN BERSIH
               </p>
             </div>
           ) : (
@@ -170,190 +199,127 @@ export const LocalResolutionTab = () => {
                     setSelectedCase(item);
                     setAiRecommendation(null);
                   }}
-                  className={`bg-white p-6 rounded-[2.5rem] border transition-all group cursor-pointer ${selectedCase?.id === item.id ? "border-teal-500 ring-2 ring-teal-500/10 shadow-xl" : "border-slate-100 shadow-sm hover:border-teal-200"}`}
+                  className={`bg-white p-4 rounded-md border transition-all cursor-pointer ${selectedCase?.id === item.id ? "border-[#008080] border-l-8 shadow-md" : "border-slate-200 shadow-sm hover:border-teal-200"}`}
                 >
-                  <div className="flex flex-col md:flex-row justify-between gap-4">
-                    <div className="flex-1 space-y-3">
-                      <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 bg-orange-100 text-orange-600 text-[9px] font-black rounded-lg uppercase">
-                          #{item.id.slice(0, 8)}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase">
-                          {new Date(item.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <h4 className="text-lg font-black text-slate-800 leading-tight uppercase group-hover:text-teal-600 transition-colors">
-                        {item.reason}
-                      </h4>
-                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
-                        <span className="text-slate-900">
-                          {item.profiles?.full_name}
-                        </span>
-                        <ChevronRight size={14} className="text-slate-300" />
-                        <span className="text-teal-600">
-                          {item.merchants?.shop_name}
-                        </span>
-                      </div>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="px-2 py-0.5 bg-orange-50 text-[#FF6600] border border-orange-100 text-[9px] font-black rounded uppercase">
+                      #{item.id.slice(0, 8)}
+                    </span>
+                    <div className="text-[10px] font-black text-slate-800">
+                      RP {item.orders?.total_price?.toLocaleString()}
                     </div>
-                    <div className="flex items-center">
-                      <div className="bg-slate-50 px-4 py-2 rounded-xl text-center">
-                        <p className="text-[8px] font-black text-slate-400 uppercase mb-1">
-                          Nilai Order
-                        </p>
-                        <p className="text-xs font-black text-slate-800">
-                          Rp {item.orders?.total_price?.toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
+                  </div>
+                  <h4 className="text-[12px] font-black text-slate-800 leading-tight uppercase truncate">
+                    {item.subject || item.message}
+                  </h4>
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 mt-2">
+                    <span className="text-slate-900 truncate max-w-[100px]">
+                      {item.profiles?.name || "PELANGGAN"}
+                    </span>
+                    <ChevronRight size={12} className="text-slate-300" />
+                    <span className="text-[#008080] truncate max-w-[100px]">
+                      MITRA PASAR
+                    </span>
                   </div>
                 </div>
               ))
           )}
         </div>
 
-        {/* AI PANEL (KANAN - Muncul jika item dipilih) */}
+        {/* DETAIL KANAN */}
         {selectedCase && (
-          <div className="lg:col-span-7 animate-in slide-in-from-right-10 duration-500 sticky top-24">
-            <div className="bg-slate-900 rounded-[3rem] p-1 shadow-2xl overflow-hidden">
-              <div className="bg-white rounded-[2.8rem] p-8 space-y-8">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg">
-                      <Scale size={24} />
-                    </div>
-                    <div>
-                      <h3 className="font-black text-slate-800 uppercase italic leading-none">
-                        Keputusan Admin
-                      </h3>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 tracking-widest">
-                        No. Kasus: #{selectedCase.id.slice(0, 8)}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setSelectedCase(null)}
-                    className="p-2 hover:bg-red-50 text-slate-300 hover:text-red-500 transition-all"
-                  >
-                    <X size={24} />
-                  </button>
+          <div className="lg:col-span-7 animate-in slide-in-from-right-8 duration-500 sticky top-24">
+            <div className="bg-white rounded-md p-6 border border-slate-200 shadow-xl space-y-6">
+              <div className="flex justify-between items-center border-b pb-4">
+                <div className="flex items-center gap-2">
+                  <Scale size={20} className="text-slate-400" />
+                  <h3 className="font-black text-slate-800 text-[14px]">
+                    DETAIL KEPUTUSAN
+                  </h3>
                 </div>
+                <X
+                  onClick={() => setSelectedCase(null)}
+                  className="cursor-pointer text-slate-400"
+                />
+              </div>
 
-                {/* AREA ANALISIS AI */}
-                <div className="bg-indigo-50 rounded-[2rem] border border-indigo-100 p-6 relative overflow-hidden">
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2 text-indigo-600">
-                        <BrainCircuit
-                          size={20}
-                          className={aiAnalyzing ? "animate-pulse" : ""}
-                        />
-                        <span className="text-[10px] font-black uppercase tracking-widest">
-                          AI Dispute Intelligence
-                        </span>
-                      </div>
-                      {!aiRecommendation && (
-                        <button
-                          onClick={() => analyzeWithAI(selectedCase)}
-                          disabled={aiAnalyzing}
-                          className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase shadow-lg shadow-indigo-200 active:scale-95 transition-all flex items-center gap-2"
-                        >
-                          {aiAnalyzing ? (
-                            <Loader2 size={12} className="animate-spin" />
-                          ) : (
-                            <RefreshCw size={12} />
-                          )}
-                          Mulai Analisis
-                        </button>
-                      )}
+              <div className="bg-orange-50 p-4 border-l-4 border-[#FF6600]">
+                <p className="text-[11px] font-bold text-slate-700 normal-case leading-relaxed">
+                  "{selectedCase.message}"
+                </p>
+                {selectedCase.proof_url && (
+                  <img
+                    src={selectedCase.proof_url}
+                    alt="Bukti"
+                    className="mt-3 w-full max-h-[150px] object-cover rounded-md border border-orange-200"
+                  />
+                )}
+              </div>
+
+              {/* AI BOX */}
+              <div className="bg-slate-900 rounded-md p-5 relative overflow-hidden">
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2 text-teal-400">
+                      <BrainCircuit size={18} />
+                      <span className="text-[10px] font-black tracking-widest">
+                        AI ASSISTANT
+                      </span>
                     </div>
-
-                    {aiAnalyzing ? (
-                      <div className="space-y-3 py-4">
-                        <div className="h-2 w-3/4 bg-indigo-200 rounded animate-pulse"></div>
-                        <div className="h-2 w-full bg-indigo-200 rounded animate-pulse"></div>
-                        <div className="h-2 w-1/2 bg-indigo-200 rounded animate-pulse"></div>
-                      </div>
-                    ) : aiRecommendation ? (
-                      <div className="animate-in zoom-in-95">
-                        <p className="text-xs font-bold text-indigo-900 leading-relaxed bg-white/60 p-4 rounded-2xl border border-indigo-200 shadow-inner italic">
-                          "{aiRecommendation}"
-                        </p>
-                        <button
-                          onClick={() => setAiRecommendation(null)}
-                          className="mt-3 text-[8px] font-black text-indigo-400 uppercase underline"
-                        >
-                          Analisis Ulang
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="text-[10px] font-bold text-indigo-400 uppercase italic">
-                        Klik tombol untuk mendapatkan rekomendasi solusi
-                        berbasis data.
-                      </p>
+                    {!aiRecommendation && (
+                      <button
+                        onClick={() => analyzeWithAI(selectedCase)}
+                        disabled={aiAnalyzing}
+                        className="px-3 py-1.5 bg-[#008080] text-white rounded text-[9px] font-black"
+                      >
+                        {aiAnalyzing ? "PROSES..." : "ANALISIS"}
+                      </button>
                     )}
                   </div>
-                  <BrainCircuit
-                    className="absolute -right-6 -bottom-6 text-indigo-500/10"
-                    size={140}
-                  />
-                </div>
-
-                {/* INPUT TINDAKAN */}
-                <div className="space-y-4">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">
-                    Pilih Resolusi Akhir:
-                  </p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <button
-                      onClick={() => handleResolve(selectedCase.id, "REFUNDED")}
-                      className="py-5 bg-teal-500 text-white rounded-[1.8rem] font-black uppercase text-[10px] tracking-widest shadow-xl shadow-teal-500/20 flex flex-col items-center gap-2 hover:bg-teal-600 transition-all border-b-4 border-teal-700"
-                    >
-                      <CheckCircle2 size={20} />
-                      Setujui Refund
-                    </button>
-                    <button
-                      onClick={() => handleResolve(selectedCase.id, "REJECTED")}
-                      className="py-5 bg-slate-900 text-white rounded-[1.8rem] font-black uppercase text-[10px] tracking-widest shadow-xl flex flex-col items-center gap-2 hover:bg-red-600 transition-all border-b-4 border-slate-700 hover:border-red-800"
-                    >
-                      <XCircle size={20} />
-                      Tolak Komplain
-                    </button>
-                  </div>
-                </div>
-
-                {/* KONTAK PIHAK TERKAIT */}
-                <div className="pt-6 border-t border-slate-100 flex justify-between items-center">
-                  <button className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-slate-800 transition-all">
-                    <MessageSquare size={14} /> Chat Pembeli
-                  </button>
-                  <button className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-slate-800 transition-all">
-                    <MessageSquare size={14} /> Chat Toko
-                  </button>
+                  {aiRecommendation && (
+                    <p className="text-[11px] text-white font-black leading-relaxed bg-white/10 p-3 rounded">
+                      {aiRecommendation}
+                    </p>
+                  )}
                 </div>
               </div>
+
+              {/* TOMBOL TINDAKAN */}
+              {selectedCase.status === "open" && (
+                <div className="space-y-4">
+                  <p className="text-[10px] text-slate-400 tracking-widest">
+                    PILIH PIHAK YANG BERTANGGUNG JAWAB (PENALTI):
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() =>
+                        handleResolve(selectedCase.id, "RESOLVED", "MERCHANT")
+                      }
+                      className="py-4 bg-[#008080] text-white rounded-md font-black text-[10px] flex flex-col items-center gap-2 border-b-4 border-teal-800 active:translate-y-1 active:border-b-0"
+                    >
+                      <Store size={20} /> PENALTI TOKO
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleResolve(selectedCase.id, "RESOLVED", "COURIER")
+                      }
+                      className="py-4 bg-[#FF6600] text-white rounded-md font-black text-[10px] flex flex-col items-center gap-2 border-b-4 border-orange-800 active:translate-y-1 active:border-b-0"
+                    >
+                      <Truck size={20} /> PENALTI KURIR
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => handleResolve(selectedCase.id, "REJECTED")}
+                    className="w-full py-3 bg-slate-100 text-slate-500 rounded-md font-black text-[10px] hover:bg-red-50 hover:text-red-600 transition-all uppercase"
+                  >
+                    Tolak Komplain (Tanpa Refund)
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
       </div>
-
-      {/* FOOTER POLICY */}
-      {!selectedCase && (
-        <div className="bg-slate-900 p-8 rounded-[3rem] text-white flex items-center gap-6 shadow-2xl">
-          <div className="w-16 h-16 bg-white/10 rounded-[1.5rem] flex items-center justify-center shrink-0">
-            <ShieldAlert className="text-orange-400" size={32} />
-          </div>
-          <div>
-            <h4 className="text-sm font-black uppercase tracking-widest mb-1 italic">
-              Otoritas Hakim Wilayah
-            </h4>
-            <p className="text-[10px] text-slate-400 font-bold leading-relaxed uppercase">
-              Keputusan penolakan atau pengembalian dana bersifat mutlak.
-              Gunakan analisis AI sebagai bahan pertimbangan data teknis sebelum
-              memberikan vonis.
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -14,11 +14,12 @@ import {
   Link as LinkIcon,
   Palette,
   Type,
+  LayoutGrid,
+  RefreshCw,
 } from "lucide-react";
 import * as Icons from "lucide-react";
 import { useToast } from "../../../../contexts/ToastContext";
 
-// Helper: Preview Icon Dinamis agar admin bisa lihat icon sebelum save
 const DynamicIcon = ({ name, size = 18 }: { name: string; size?: number }) => {
   // @ts-ignore
   const IconComponent = Icons[name];
@@ -34,7 +35,6 @@ export const MenuManager = () => {
   const [menus, setMenus] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 1. Ambil Data dari Tabel app_menus
   const fetchMenus = async () => {
     setIsLoading(true);
     try {
@@ -46,7 +46,7 @@ export const MenuManager = () => {
       if (error) throw error;
       setMenus(data || []);
     } catch (err: any) {
-      console.error(err);
+      showToast("GAGAL MEMUAT MENU: " + err.message, "error");
     } finally {
       setIsLoading(false);
     }
@@ -56,7 +56,6 @@ export const MenuManager = () => {
     fetchMenus();
   }, []);
 
-  // 2. Logic Update Status (On/Off)
   const toggleMenuStatus = async (id: string, currentStatus: boolean) => {
     const { error } = await supabase
       .from("app_menus")
@@ -69,144 +68,158 @@ export const MenuManager = () => {
         ),
       );
       showToast(
-        currentStatus ? "Menu dinonaktifkan" : "Menu diaktifkan",
+        currentStatus ? "MENU DINONAKTIFKAN" : "MENU DIAKTIFKAN",
         "success",
       );
     }
   };
 
-  // 3. Logic Tambah Menu Baru
   const handleAdd = async () => {
     const newMenu = {
-      label: "Menu Baru",
+      label: "MENU BARU",
       icon_name: "Zap",
       target_url: "/",
-      color_class: "bg-teal-600",
+      color_class: "bg-[#008080]",
       order_index: menus.length + 1,
       is_active: true,
     };
     const { error } = await supabase.from("app_menus").insert([newMenu]);
     if (!error) {
       fetchMenus();
-      showToast("Menu berhasil ditambahkan", "success");
+      showToast("MENU BERHASIL DITAMBAHKAN", "success");
     }
   };
 
-  // 4. Logic Hapus Menu
   const handleDelete = async (id: string) => {
-    if (window.confirm("Hapus menu ini secara permanen?")) {
+    if (window.confirm("HAPUS MENU INI SECARA PERMANEN?")) {
       const { error } = await supabase.from("app_menus").delete().eq("id", id);
       if (!error) {
         setMenus((prev) => prev.filter((m) => m.id !== id));
-        showToast("Menu dihapus", "success");
+        showToast("MENU DIHAPUS", "success");
       }
     }
   };
 
-  // 5. Logic Update Field (Simpan saat kursor keluar dari input)
   const handleUpdateField = async (id: string, field: string, value: any) => {
     const { error } = await supabase
       .from("app_menus")
       .update({ [field]: value })
       .eq("id", id);
-    if (!error) showToast("Tersimpan", "success");
+    if (!error) showToast("DATA TERSIMPAN", "success");
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 text-left">
-      {/* SECTION 1: IKLAN SLIDE (BANNER) */}
-      <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100 relative overflow-hidden">
-        <div className="flex items-center justify-between mb-8 relative z-10">
+    <div className="space-y-6 animate-in fade-in duration-500 text-left font-black uppercase tracking-tighter">
+      {/* SECTION 1: BANNER IKLAN */}
+      <div className="bg-white rounded-md p-6 shadow-sm border border-slate-200">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="font-black text-slate-900 uppercase tracking-tighter text-xl flex items-center gap-2">
-              <ImageIcon className="text-teal-600" /> Iklan Slide Beranda
+            <h3 className="text-[14px] font-black text-slate-900 flex items-center gap-2">
+              <ImageIcon className="text-[#008080]" size={20} /> IKLAN SLIDE
+              BERANDA
             </h3>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-              Banner promosi teratas
+            <p className="text-[10px] font-bold text-slate-400 mt-1 tracking-widest uppercase">
+              BANNER PROMOSI UTAMA APLIKASI
             </p>
           </div>
-          <button className="bg-teal-50 text-teal-600 px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-teal-600 hover:text-white transition-all">
-            <Upload size={16} className="mr-2 inline" /> Tambah Banner
+          <button className="bg-slate-50 border border-slate-200 text-slate-600 px-4 py-2 rounded-md font-black text-[11px] hover:bg-[#008080] hover:text-white transition-all">
+            <Upload size={14} className="mr-2 inline" /> TAMBAH BANNER
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="aspect-[2/1] bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300 gap-2 hover:border-teal-400 hover:text-teal-400 cursor-pointer transition-all">
-            <Plus size={32} />
-            <span className="text-[9px] font-black uppercase">
-              Slot Iklan Baru
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="aspect-[2/1] bg-slate-50 rounded-md border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300 gap-2 hover:border-[#008080] hover:text-[#008080] cursor-pointer transition-all">
+            <Plus size={24} />
+            <span className="text-[9px] font-black uppercase tracking-widest">
+              SLOT IKLAN BARU
             </span>
           </div>
-          <div className="aspect-[2/1] bg-slate-800 rounded-2xl relative overflow-hidden shadow-md">
+
+          {/* Contoh Banner Aktif */}
+          <div className="aspect-[2/1] bg-slate-800 rounded-md relative overflow-hidden group border border-slate-200">
             <img
               src="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800"
               alt="Promo"
-              className="w-full h-full object-cover opacity-60"
+              className="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-500"
             />
-            <div className="absolute top-2 right-2 bg-white/20 backdrop-blur-md p-1.5 rounded-lg text-white hover:bg-red-500 cursor-pointer transition-colors">
-              <X size={14} />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+            <div className="absolute bottom-2 left-2">
+              <p className="text-[8px] text-white font-black px-2 py-0.5 bg-[#FF6600] rounded-sm">
+                AKTIF
+              </p>
             </div>
+            <button className="absolute top-2 right-2 bg-white/10 backdrop-blur-md p-1.5 rounded-md text-white hover:bg-red-600 transition-colors">
+              <X size={14} />
+            </button>
           </div>
         </div>
       </div>
 
       {/* SECTION 2: TOMBOL NAVIGASI GRID */}
-      <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100 relative">
-        <div className="flex justify-between items-center mb-8">
+      <div className="bg-white rounded-md p-6 shadow-sm border border-slate-200 relative">
+        <div className="flex justify-between items-center mb-6">
           <div>
-            <h3 className="font-black text-slate-900 uppercase tracking-tighter text-xl flex items-center gap-2">
-              <Zap className="text-orange-500" /> Tombol Navigasi Grid
+            <h3 className="text-[14px] font-black text-slate-900 flex items-center gap-2">
+              <LayoutGrid className="text-[#FF6600]" size={20} /> TOMBOL
+              NAVIGASI GRID
             </h3>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-              Menu navigasi utama pelanggan
+            <p className="text-[10px] font-bold text-slate-400 mt-1 tracking-widest uppercase">
+              MENU UTAMA PADA DASHBOARD PELANGGAN
             </p>
           </div>
           <button
             onClick={handleAdd}
-            className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-teal-600 transition-all shadow-lg shadow-slate-200"
+            className="bg-[#008080] text-white px-5 py-2.5 rounded-md font-black text-[11px] flex items-center gap-2 hover:bg-slate-900 transition-all shadow-lg active:scale-95"
           >
-            <Plus size={16} /> Tambah Menu
+            <Plus size={16} /> TAMBAH MENU
           </button>
         </div>
 
         {isLoading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="animate-spin text-teal-600" />
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <RefreshCw className="animate-spin text-[#008080]" size={32} />
+            <p className="text-[10px] text-slate-400 font-black">
+              MENGHUBUNGKAN KE DATABASE...
+            </p>
           </div>
         ) : (
-          <div className="grid gap-4">
+          <div className="space-y-3">
             {menus.map((menu) => (
               <div
                 key={menu.id}
-                className="flex flex-col lg:flex-row items-center p-6 bg-slate-50 rounded-[2rem] border border-slate-100 gap-6 group hover:bg-white hover:shadow-md transition-all"
+                className="flex flex-col lg:flex-row items-center p-4 bg-white border border-slate-100 rounded-md gap-6 hover:border-[#008080] hover:shadow-md transition-all group"
               >
                 {/* Preview Ikon */}
                 <div
-                  className={`w-14 h-14 ${menu.color_class || "bg-teal-600"} text-white rounded-2xl flex items-center justify-center shadow-lg shrink-0`}
+                  className={`w-12 h-12 ${menu.color_class || "bg-[#008080]"} text-white rounded-md flex items-center justify-center shadow-lg shrink-0 border-b-4 border-black/20`}
                 >
-                  <DynamicIcon name={menu.icon_name} size={24} />
+                  <DynamicIcon name={menu.icon_name} size={22} />
                 </div>
 
                 {/* Edit Form */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-1 w-full">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-1 w-full text-left">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                      Label
+                    <label className="text-[9px] font-black text-slate-400 tracking-widest uppercase ml-1">
+                      Label Menu
                     </label>
                     <input
-                      className="w-full bg-white border-none rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-teal-500 transition-all"
+                      className="w-full bg-slate-50 border border-slate-100 rounded-md px-3 py-2.5 text-[12px] font-black focus:border-[#008080] outline-none transition-all uppercase"
                       defaultValue={menu.label}
                       onBlur={(e) =>
-                        handleUpdateField(menu.id, "label", e.target.value)
+                        handleUpdateField(
+                          menu.id,
+                          "label",
+                          e.target.value.toUpperCase(),
+                        )
                       }
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                      URL / Path
+                    <label className="text-[9px] font-black text-slate-400 tracking-widest uppercase ml-1">
+                      Rute / URL
                     </label>
                     <input
-                      className="w-full bg-white border-none rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-teal-500 transition-all"
+                      className="w-full bg-slate-50 border border-slate-100 rounded-md px-3 py-2.5 text-[12px] font-black focus:border-[#008080] outline-none transition-all"
                       defaultValue={menu.target_url}
                       onBlur={(e) =>
                         handleUpdateField(menu.id, "target_url", e.target.value)
@@ -214,11 +227,11 @@ export const MenuManager = () => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                      Icon Name (Lucide)
+                    <label className="text-[9px] font-black text-slate-400 tracking-widest uppercase ml-1">
+                      Nama Ikon (Lucide)
                     </label>
                     <input
-                      className="w-full bg-white border-none rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-teal-500 transition-all"
+                      className="w-full bg-slate-50 border border-slate-100 rounded-md px-3 py-2.5 text-[12px] font-black focus:border-[#008080] outline-none transition-all"
                       defaultValue={menu.icon_name}
                       onBlur={(e) =>
                         handleUpdateField(menu.id, "icon_name", e.target.value)
@@ -226,11 +239,11 @@ export const MenuManager = () => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                      Warna Latar
+                    <label className="text-[9px] font-black text-slate-400 tracking-widest uppercase ml-1">
+                      Warna Tema
                     </label>
                     <select
-                      className="w-full bg-white border-none rounded-xl px-4 py-3 text-xs font-bold cursor-pointer"
+                      className="w-full bg-slate-50 border border-slate-100 rounded-md px-3 py-2.5 text-[12px] font-black cursor-pointer focus:border-[#008080] outline-none"
                       defaultValue={menu.color_class}
                       onChange={(e) =>
                         handleUpdateField(
@@ -240,30 +253,30 @@ export const MenuManager = () => {
                         )
                       }
                     >
-                      <option value="bg-teal-600">Teal</option>
-                      <option value="bg-orange-500">Orange</option>
-                      <option value="bg-blue-500">Blue</option>
-                      <option value="bg-red-500">Red</option>
-                      <option value="bg-purple-600">Purple</option>
-                      <option value="bg-slate-800">Black</option>
+                      <option value="bg-[#008080]">TOSCA (PRIMARY)</option>
+                      <option value="bg-[#FF6600]">ORANGE (SECONDARY)</option>
+                      <option value="bg-blue-600">BLUE SKY</option>
+                      <option value="bg-red-600">DANGER RED</option>
+                      <option value="bg-purple-600">ROYAL PURPLE</option>
+                      <option value="bg-slate-900">DEEP BLACK</option>
                     </select>
                   </div>
                 </div>
 
                 {/* Aksi Toggle & Hapus */}
-                <div className="flex items-center gap-3 border-l pl-6 border-slate-200">
+                <div className="flex items-center gap-4 lg:border-l lg:pl-6 border-slate-200">
                   <button
                     onClick={() => toggleMenuStatus(menu.id, menu.is_active)}
                   >
                     {menu.is_active ? (
-                      <ToggleRight className="text-teal-600" size={32} />
+                      <ToggleRight className="text-[#008080]" size={36} />
                     ) : (
-                      <ToggleLeft className="text-slate-300" size={32} />
+                      <ToggleLeft className="text-slate-300" size={36} />
                     )}
                   </button>
                   <button
                     onClick={() => handleDelete(menu.id)}
-                    className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                    className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-md transition-all"
                   >
                     <Trash2 size={20} />
                   </button>
@@ -272,6 +285,13 @@ export const MenuManager = () => {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="bg-slate-900 p-4 rounded-md text-center border-b-4 border-[#008080]">
+        <p className="text-[10px] text-white font-black tracking-widest uppercase">
+          SELURUH PERUBAHAN PADA HALAMAN INI AKAN BERDAMPAK LANGSUNG PADA
+          TAMPILAN APLIKASI PELANGGAN.
+        </p>
       </div>
     </div>
   );

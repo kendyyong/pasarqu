@@ -9,14 +9,17 @@ import {
   TrendingUp,
   Loader2,
   RefreshCcw,
+  Activity,
+  Layers,
 } from "lucide-react";
 import { supabase } from "../../../../lib/supabaseClient";
+import { useToast } from "../../../../contexts/ToastContext";
 
-// --- KONFIGURASI PETA ---
+// --- CONFIG ---
 const mapContainerStyle = {
   width: "100%",
   height: "100%",
-  borderRadius: "0.75rem",
+  borderRadius: "0.375rem",
 };
 const centerDefault = { lat: -0.7893, lng: 113.9213 };
 
@@ -31,8 +34,8 @@ const formatRupiah = (num: number) => {
 interface Props {
   isLoaded: boolean;
   markets: any[];
-  darkMode: boolean;
-  theme: any;
+  darkMode?: boolean;
+  theme?: any;
   setAuditMarket: (market: any) => void;
 }
 
@@ -41,6 +44,7 @@ export const DashboardOverview: React.FC<Props> = ({
   markets,
   setAuditMarket,
 }) => {
+  const { showToast } = useToast();
   const [selectedMarker, setSelectedMarker] = useState<any>(null);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [stats, setStats] = useState({
@@ -50,16 +54,6 @@ export const DashboardOverview: React.FC<Props> = ({
   });
   const [loading, setLoading] = useState(true);
 
-  const mapOptions = {
-    disableDefaultUI: false,
-    zoomControl: true,
-    gestureHandling: "greedy",
-    styles: [
-      { featureType: "poi", stylers: [{ visibility: "off" }] },
-      { featureType: "transit", stylers: [{ visibility: "off" }] },
-    ],
-  };
-
   const fetchLiveData = async () => {
     setLoading(true);
     try {
@@ -67,7 +61,7 @@ export const DashboardOverview: React.FC<Props> = ({
         .from("orders")
         .select("*, profiles(name)")
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(8);
 
       if (orders) setRecentOrders(orders);
 
@@ -84,7 +78,7 @@ export const DashboardOverview: React.FC<Props> = ({
         active_users: userCount || 0,
       });
     } catch (err) {
-      console.error("Gagal memuat live data", err);
+      showToast("GAGAL SYNC DATA", "error");
     } finally {
       setLoading(false);
     }
@@ -92,75 +86,56 @@ export const DashboardOverview: React.FC<Props> = ({
 
   useEffect(() => {
     fetchLiveData();
-    const interval = setInterval(fetchLiveData, 30000);
+    const interval = setInterval(fetchLiveData, 45000);
     return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="space-y-3 md:space-y-6 animate-in fade-in pb-10 font-black uppercase tracking-tighter">
-      {/* 1. KARTU STATISTIK (GARIS TEPI & BORDER-B DIHAPUS) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-6">
-        <div className="bg-white p-3 md:p-6 rounded-xl md:rounded-[1.5rem] shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between">
-          <div className="order-2 md:order-1">
-            <p className="text-[8px] md:text-[10px] text-slate-400 mb-0.5 md:mb-1">
-              TOTAL OMSET
-            </p>
-            <h3 className="text-sm md:text-2xl text-slate-800 italic leading-none">
-              {formatRupiah(stats.revenue)}
-            </h3>
-          </div>
-          <div className="w-8 h-8 md:w-12 md:h-12 bg-teal-50 text-[#008080] rounded-lg md:rounded-2xl flex items-center justify-center order-1 md:order-2 mb-2 md:mb-0">
-            <TrendingUp size={16} className="md:w-6 md:h-6" />
-          </div>
-        </div>
-
-        <div className="bg-white p-3 md:p-6 rounded-xl md:rounded-[1.5rem] shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between">
-          <div className="order-2 md:order-1">
-            <p className="text-[8px] md:text-[10px] text-slate-400 mb-0.5 md:mb-1">
-              TOTAL TRANSAKSI
-            </p>
-            <h3 className="text-sm md:text-2xl text-slate-800 italic leading-none">
-              {stats.total_orders}
-            </h3>
-          </div>
-          <div className="w-8 h-8 md:w-12 md:h-12 bg-orange-50 text-[#FF6600] rounded-lg md:rounded-2xl flex items-center justify-center order-1 md:order-2 mb-2 md:mb-0">
-            <ShoppingBag size={16} className="md:w-6 md:h-6" />
-          </div>
-        </div>
-
-        <div className="col-span-2 md:col-span-1 bg-white p-3 md:p-6 rounded-xl md:rounded-[1.5rem] shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-[8px] md:text-[10px] text-slate-400 mb-0.5 md:mb-1">
-              USER TERDAFTAR
-            </p>
-            <h3 className="text-sm md:text-2xl text-slate-800 italic leading-none">
-              {stats.active_users}
-            </h3>
-          </div>
-          <div className="w-8 h-8 md:w-12 md:h-12 bg-slate-50 text-slate-800 rounded-lg md:rounded-2xl flex items-center justify-center">
-            <User size={16} className="md:w-6 md:h-6" />
-          </div>
+    <div className="space-y-4 md:space-y-6 animate-in fade-in duration-700 font-black uppercase tracking-tighter text-left pb-10">
+      {/* 1. TOP STATS - HYBRID GRID (2 Cols on Mobile, 3 Cols on Desktop) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
+        <StatCard
+          title="TOTAL OMSET"
+          value={formatRupiah(stats.revenue)}
+          icon={<TrendingUp size={20} />}
+          border="border-teal-600"
+        />
+        <StatCard
+          title="TRANSAKSI"
+          value={stats.total_orders.toLocaleString()}
+          icon={<ShoppingBag size={20} />}
+          border="border-orange-600"
+        />
+        <div className="col-span-2 md:col-span-1">
+          <StatCard
+            title="USER AKTIF"
+            value={stats.active_users.toLocaleString()}
+            icon={<User size={20} />}
+            border="border-slate-900"
+          />
         </div>
       </div>
 
-      {/* 2. AREA PETA & LIVE FEED (GARIS TEPI DIHAPUS) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-6 lg:h-[600px]">
-        {/* PETA */}
-        <div className="lg:col-span-2 bg-white p-2 md:p-4 rounded-xl md:rounded-[2rem] shadow-sm relative overflow-hidden flex flex-col h-[350px] lg:h-full">
-          <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-sm border border-slate-50">
-            <h4 className="text-[8px] md:text-[10px] text-slate-800 flex items-center gap-2">
-              <MapPin size={12} className="text-[#FF6600]" /> MONITORING
-              REAL-TIME
-            </h4>
+      {/* 2. MAIN MONITORING - HYBRID LAYOUT (Stacking on Mobile) */}
+      <div className="flex flex-col lg:grid lg:grid-cols-12 gap-4 md:gap-6">
+        {/* LEFT: PETA GIS (Full width on Mobile, 8 Cols on Desktop) */}
+        <div className="lg:col-span-8 bg-white p-2 md:p-3 rounded-md border border-slate-200 shadow-sm relative flex flex-col h-[350px] md:h-[500px] lg:h-[650px]">
+          <div className="absolute top-4 left-4 z-10 hidden md:flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-md shadow-xl border-b-2 border-teal-500">
+            <Layers size={14} className="text-teal-400" />
+            <span className="text-[9px] tracking-widest">LIVE GIS MONITOR</span>
           </div>
 
-          <div className="flex-1 rounded-lg md:rounded-[1.5rem] overflow-hidden bg-slate-100 relative">
+          <div className="flex-1 rounded-md overflow-hidden bg-slate-100 relative border border-slate-100">
             {isLoaded ? (
               <GoogleMap
                 mapContainerStyle={mapContainerStyle}
                 center={centerDefault}
                 zoom={5}
-                options={mapOptions}
+                options={{
+                  disableDefaultUI: true,
+                  zoomControl: true,
+                  gestureHandling: "greedy",
+                }}
               >
                 {markets?.map((m) => (
                   <Marker
@@ -172,7 +147,6 @@ export const DashboardOverview: React.FC<Props> = ({
                     onClick={() => setSelectedMarker(m)}
                   />
                 ))}
-
                 {selectedMarker && (
                   <InfoWindow
                     position={{
@@ -182,81 +156,108 @@ export const DashboardOverview: React.FC<Props> = ({
                     onCloseClick={() => setSelectedMarker(null)}
                   >
                     <div className="p-1 min-w-[120px] font-black uppercase text-left">
-                      <h3 className="text-[10px] mb-2 text-slate-800 leading-tight">
+                      <p className="text-[10px] mb-2 text-slate-900 border-b pb-1">
                         {selectedMarker.name}
-                      </h3>
+                      </p>
                       <button
                         onClick={() => setAuditMarket(selectedMarker)}
-                        className="w-full py-1.5 bg-[#008080] text-white text-[9px] rounded flex items-center justify-center gap-1"
+                        className="w-full py-1.5 bg-slate-900 text-white text-[9px] rounded flex items-center justify-center gap-1"
                       >
-                        <SearchCode size={10} /> Audit
+                        <SearchCode size={12} /> AUDIT
                       </button>
                     </div>
                   </InfoWindow>
                 )}
               </GoogleMap>
             ) : (
-              <div className="flex items-center justify-center h-full text-slate-400 font-bold text-[10px] uppercase tracking-widest">
-                <Loader2 className="animate-spin mr-2" /> Menghubungkan...
+              <div className="h-full flex items-center justify-center text-slate-400 text-[10px]">
+                MENYAMBUNGKAN SATELIT...
               </div>
             )}
           </div>
         </div>
 
-        {/* FEED TRANSAKSI */}
-        <div className="bg-white p-3 md:p-6 rounded-xl md:rounded-[2rem] shadow-sm flex flex-col h-[400px] lg:h-full overflow-hidden">
-          <div className="flex items-center justify-between mb-4 md:mb-6">
-            <h3 className="text-[10px] md:text-[12px] text-slate-800 flex items-center gap-2 leading-none">
-              <RefreshCcw
-                size={12}
-                className={
-                  loading ? "animate-spin text-[#008080]" : "text-slate-400"
-                }
-              />
-              LIVE TRANSAKSI
-            </h3>
-            <span className="w-1.5 h-1.5 md:w-2 md:h-2 bg-green-500 rounded-full animate-ping"></span>
-          </div>
-
-          <div className="flex-1 overflow-y-auto pr-1 space-y-2 md:space-y-4 no-scrollbar">
-            {recentOrders.length === 0 ? (
-              <div className="text-center py-10 text-slate-300">
-                <p className="text-[10px]">MENUNGGU...</p>
+        {/* RIGHT: LIVE FEED (Full width on Mobile, 4 Cols on Desktop) */}
+        <div className="lg:col-span-4 flex flex-col gap-4">
+          <div className="bg-slate-900 rounded-md shadow-xl flex flex-col h-[450px] lg:h-[650px] overflow-hidden border-b-8 border-teal-600">
+            <div className="p-4 flex items-center justify-between border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <RefreshCcw
+                  size={14}
+                  className={`text-teal-400 ${loading ? "animate-spin" : ""}`}
+                />
+                <h3 className="text-[11px] text-white tracking-widest">
+                  LIVE ORDERS
+                </h3>
               </div>
-            ) : (
-              recentOrders.map((order) => (
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-ping"></div>
+                <span className="text-[8px] text-white/50">REALTIME</span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
+              {recentOrders.map((order) => (
                 <div
                   key={order.id}
-                  className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-all group"
+                  className="p-3 bg-white/5 border border-white/5 rounded-md flex items-center gap-3 hover:bg-white/10 transition-all group"
                 >
                   <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0 ${order.status === "COMPLETED" ? "bg-green-500" : "bg-orange-500"}`}
+                    className={`w-9 h-9 rounded flex items-center justify-center text-white shrink-0 ${order.status === "COMPLETED" ? "bg-teal-600" : "bg-[#FF6600]"}`}
                   >
-                    <ShoppingBag size={14} />
+                    <ShoppingBag size={16} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start leading-none">
-                      <h4 className="text-[11px] md:text-[12px] text-slate-800 font-black font-sans">
-                        {formatRupiah(order.total_price || 0)}
-                      </h4>
-                      <span className="text-[8px] text-slate-400 flex items-center gap-0.5">
-                        <Clock size={8} />{" "}
+                    <div className="flex justify-between items-center">
+                      <span className="text-[12px] text-white font-black">
+                        {formatRupiah(order.total_price)}
+                      </span>
+                      <span className="text-[8px] text-white/30">
                         {new Date(order.created_at).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
                       </span>
                     </div>
-                    <p className="text-[9px] text-slate-500 mt-1 truncate uppercase">
-                      {order.profiles?.name || "GUEST"}
+                    <p className="text-[9px] text-teal-400 truncate mt-0.5">
+                      {order.profiles?.name || "PELANGGAN"}
                     </p>
                   </div>
                 </div>
-              ))
-            )}
+              ))}
+            </div>
+
+            <button className="m-4 p-3 bg-white/10 text-white rounded text-[9px] font-black hover:bg-white/20 transition-all">
+              TAMPILKAN SEMUA LOG
+            </button>
           </div>
         </div>
+      </div>
+
+      {/* 3. MOBILE NOTICE - Only visible on small screens */}
+      <div className="lg:hidden bg-orange-50 p-4 rounded-md border border-orange-100 flex items-center gap-3">
+        <Activity size={18} className="text-[#FF6600]" />
+        <p className="text-[9px] text-[#FF6600] font-black leading-tight">
+          MODE MOBILE AKTIF: GESTUR DUA JARI UNTUK NAVIGASI PETA.
+        </p>
       </div>
     </div>
   );
 };
+
+// --- SUB-COMPONENT STAT CARD ---
+const StatCard = ({ title, value, icon, border }: any) => (
+  <div
+    className={`bg-white p-4 md:p-6 rounded-md border border-slate-200 shadow-sm flex items-center justify-between border-b-4 ${border} hover:shadow-md transition-all`}
+  >
+    <div className="min-w-0">
+      <p className="text-[8px] md:text-[10px] text-slate-400 mb-1 tracking-widest">
+        {title}
+      </p>
+      <h3 className="text-sm md:text-xl text-slate-900 truncate">{value}</h3>
+    </div>
+    <div className="w-9 h-9 md:w-12 md:h-12 bg-slate-50 text-slate-400 rounded-md flex items-center justify-center shrink-0 ml-2">
+      {icon}
+    </div>
+  </div>
+);

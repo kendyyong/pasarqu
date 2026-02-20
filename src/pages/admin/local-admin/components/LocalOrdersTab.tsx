@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../../../../lib/supabaseClient";
 import {
   ShoppingBag,
-  Clock,
   Truck,
   CheckCircle2,
   Search,
@@ -15,6 +14,9 @@ import {
   Package,
   Wallet,
   MessageCircle,
+  Clock,
+  ChevronRight,
+  Activity,
 } from "lucide-react";
 import { useToast } from "../../../../contexts/ToastContext";
 
@@ -44,7 +46,6 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
         )
         .eq("market_id", marketId);
 
-      // ✅ LOGIKA FILTER KHUSUS PENDING (BELUM BAYAR)
       if (filter === "PENDING") {
         query = query.eq("status", "UNPAID");
       } else if (filter !== "ALL") {
@@ -56,7 +57,6 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
       });
 
       if (error) {
-        // Fallback jika relasi Foreign Key bermasalah
         const { data: fallbackData } = await supabase
           .from("orders")
           .select(`*, customer:profiles!customer_id(name, phone)`)
@@ -75,7 +75,7 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
         setOrders(data || []);
       }
     } catch (err: any) {
-      showToast("GAGAL LOAD DATA", "error");
+      showToast("GAGAL LOAD DATA PESANAN", "error");
     } finally {
       setLoading(false);
     }
@@ -108,26 +108,27 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
   );
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-500 text-left pb-20 font-black uppercase tracking-tighter">
-      {/* HEADER MONITOR */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center shadow-inner">
-            <ActivityIcon className="animate-pulse" />
+    <div className="space-y-3 animate-in fade-in duration-500 text-left pb-24 font-black uppercase tracking-tighter">
+      {/* 🟢 HEADER COMPACT */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white p-3 rounded-md border-b-4 border-[#008080] shadow-sm">
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 bg-slate-900 text-[#008080] rounded-md flex items-center justify-center shadow-lg border-b-2 border-[#FF6600] shrink-0">
+            <Activity size={20} className="animate-pulse" />
           </div>
-          <div className="leading-none text-left">
-            <h3 className="text-[16px] font-black text-slate-800 italic leading-none">
-              ORDER CONTROL TOWER
+          <div>
+            <h3 className="text-[14px] font-black text-slate-900 leading-none">
+              ORDER CONTROL
             </h3>
-            <p className="text-[9px] text-slate-400 tracking-widest uppercase mt-1">
-              MONITORING LOGISTIK WILAYAH
+            <p className="text-[9px] text-slate-400 tracking-widest mt-0.5">
+              MONITORING NODE
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <div className="relative flex-1 md:flex-none">
+
+        <div className="flex gap-2 w-full lg:w-auto">
+          <div className="relative flex-1 lg:w-64">
             <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
               size={14}
             />
             <input
@@ -135,23 +136,23 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
               placeholder="CARI NAMA / ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 pr-4 py-2 bg-slate-50 border-none rounded-xl text-[12px] font-black uppercase outline-none focus:ring-2 ring-teal-500 w-full md:w-48 transition-all"
+              className="w-full pl-9 pr-3 py-2 bg-slate-100 border-none rounded-md text-[11px] font-black outline-none focus:ring-2 ring-[#008080]"
             />
           </div>
           <button
             onClick={fetchOrders}
-            className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-900 hover:text-white transition-all"
+            className="p-2 bg-slate-900 text-white rounded-md hover:bg-[#008080] transition-all"
           >
             <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
       </div>
 
-      {/* TAB FILTER */}
-      <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar">
+      {/* 🔵 FILTER TABS COMPACT */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
         {[
           { label: "SEMUA", value: "ALL" },
-          { label: "PENDING (BELUM BAYAR)", value: "PENDING" },
+          { label: "UNPAID", value: "PENDING" },
           { label: "DIKEMAS", value: "PACKING" },
           { label: "DIKIRIM", value: "SHIPPING" },
           { label: "SELESAI", value: "COMPLETED" },
@@ -159,12 +160,12 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
           <button
             key={tab.value}
             onClick={() => setFilter(tab.value)}
-            className={`px-5 py-2 rounded-xl text-[10px] font-black transition-all border whitespace-nowrap ${
+            className={`px-4 py-2 rounded-md text-[10px] font-black transition-all border-b-2 whitespace-nowrap ${
               filter === tab.value
                 ? tab.value === "PENDING"
-                  ? "bg-[#FF6600] text-white border-transparent shadow-lg"
-                  : "bg-teal-600 text-white border-transparent shadow-lg"
-                : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50"
+                  ? "bg-[#FF6600] text-white border-orange-900 shadow-sm"
+                  : "bg-[#008080] text-white border-teal-900 shadow-sm"
+                : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50"
             }`}
           >
             {tab.label}
@@ -172,57 +173,69 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
         ))}
       </div>
 
-      {/* LIST ORDERS */}
-      <div className="space-y-2">
+      {/* 🟠 ORDERS LIST COMPACT */}
+      <div className="grid grid-cols-1 gap-3">
         {loading ? (
-          <div className="py-20 flex flex-col items-center gap-2">
-            <Loader2 className="animate-spin text-teal-600" size={32} />
-            <p className="text-[10px] text-slate-400">MEMPROSES DATA...</p>
+          <div className="py-20 flex flex-col items-center gap-3">
+            <Loader2 className="animate-spin text-[#008080]" size={40} />
+            <p className="text-[10px] text-slate-500 font-black tracking-widest">
+              SINKRONISASI...
+            </p>
           </div>
         ) : filteredOrders.length === 0 ? (
-          <div className="bg-white p-20 rounded-[2rem] text-center border-2 border-dashed border-slate-100">
-            <ShoppingBag className="mx-auto text-slate-100 mb-2" size={48} />
-            <p className="text-[12px] text-slate-300 uppercase italic leading-none">
-              Belum ada aktivitas di jalur ini
+          <div className="bg-white py-16 rounded-md text-center border-2 border-dashed border-slate-200">
+            <p className="text-[12px] text-slate-300 font-black uppercase tracking-widest">
+              KOSONG
             </p>
           </div>
         ) : (
           filteredOrders.map((order) => (
             <div
               key={order.id}
-              className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4 group hover:border-teal-200 transition-all"
+              className="bg-white rounded-md border-l-4 border-[#008080] shadow-sm p-3 lg:p-4 group hover:shadow-md transition-all border border-slate-100"
             >
               <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-                <div className="lg:w-1/4 space-y-2 border-b lg:border-b-0 lg:border-r border-slate-50 pb-4 lg:pb-0 lg:pr-4 text-left">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[9px] bg-slate-900 text-white px-2 py-0.5 rounded font-sans font-bold">
-                      #{order.id.slice(0, 8)}
+                {/* IDENTITAS */}
+                <div className="lg:w-1/3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] bg-slate-900 text-white px-1.5 py-0.5 rounded-sm font-black">
+                      ID: {order.id.slice(0, 8).toUpperCase()}
                     </span>
-                    <span className="text-[9px] text-slate-400 font-sans">
+                    <span className="text-[9px] text-slate-400 font-black flex items-center gap-1 uppercase">
+                      <Clock size={10} />{" "}
                       {new Date(order.created_at).toLocaleTimeString()}
                     </span>
                   </div>
-                  <h4 className="text-[14px] text-slate-800 leading-none truncate font-black">
-                    {order.customer?.name || "PEMBELI"}
-                  </h4>
-                  <div className="flex items-center gap-1.5 text-slate-400">
-                    <MapPin size={12} className="text-red-500 shrink-0" />
-                    <p className="text-[11px] font-sans lowercase truncate italic leading-none font-bold">
+                  <div>
+                    <h4 className="text-[14px] md:text-[16px] text-slate-900 font-black leading-none truncate">
+                      {order.customer?.name || "PEMBELI"}
+                    </h4>
+                    <p className="text-[9px] text-[#008080] font-black flex items-center gap-1 mt-1">
+                      <Store size={10} /> MITRA LOKAL
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-1.5 text-slate-500 bg-slate-50 p-2 rounded-md border border-slate-100">
+                    <MapPin
+                      size={12}
+                      className="text-[#FF6600] shrink-0 mt-0.5"
+                    />
+                    <p className="text-[10px] font-black lowercase leading-tight line-clamp-1">
                       {order.address}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex-1 flex items-center justify-between px-2 relative">
-                  <div className="absolute top-5 left-10 right-10 h-0.5 bg-slate-50 -z-0" />
+                {/* PROGRESS TRACKER COMPACT */}
+                <div className="flex-1 flex items-center justify-between px-1 md:px-6 relative py-2 lg:py-0">
+                  <div className="absolute top-1/2 left-8 right-8 h-1 bg-slate-100 -translate-y-4 z-0 rounded-full" />
                   <Step
                     icon={<Wallet size={14} />}
-                    label="LUNAS"
+                    label="PAY"
                     done={order.status === "PAID"}
                   />
                   <Step
                     icon={<Package size={14} />}
-                    label="PROSES"
+                    label="PACK"
                     active={order.shipping_status === "PACKING"}
                     done={["SHIPPING", "COMPLETED"].includes(
                       order.shipping_status,
@@ -230,26 +243,30 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
                   />
                   <Step
                     icon={<Truck size={14} />}
-                    label="KURIR"
+                    label="SHIP"
                     active={order.shipping_status === "SHIPPING"}
                     done={order.shipping_status === "COMPLETED"}
                   />
                   <Step
                     icon={<CheckCircle2 size={14} />}
-                    label="DANA"
+                    label="DONE"
                     active={order.shipping_status === "COMPLETED"}
                     done={order.shipping_status === "COMPLETED"}
                     isDana
                   />
                 </div>
 
-                <div className="lg:w-1/4 flex flex-col gap-2 border-t lg:border-t-0 lg:border-l border-slate-50 pt-4 lg:pt-0 lg:pl-4 text-left">
-                  <div className="flex justify-between items-center text-[12px]">
-                    <span className="text-slate-400">TAGIHAN</span>
-                    <span className="text-[#FF6600] font-sans font-black">
+                {/* FINANCE & BUTTONS */}
+                <div className="lg:w-1/4 flex flex-row lg:flex-col items-center lg:items-end justify-between gap-3 border-t lg:border-t-0 lg:border-l border-slate-100 pt-3 lg:pt-0 lg:pl-6">
+                  <div className="text-left lg:text-right shrink-0">
+                    <p className="text-[8px] text-slate-400 font-black tracking-widest mb-0.5">
+                      TAGIHAN
+                    </p>
+                    <p className="text-[16px] text-[#FF6600] font-black leading-none">
                       RP {order.total_price?.toLocaleString()}
-                    </span>
+                    </p>
                   </div>
+
                   {filter === "PENDING" ? (
                     <button
                       onClick={() =>
@@ -258,18 +275,18 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
                           "_blank",
                         )
                       }
-                      className="w-full py-2 bg-green-500 text-white rounded-xl text-[10px] flex items-center justify-center gap-2 hover:bg-green-600 transition-all font-black uppercase shadow-md shadow-green-100"
+                      className="flex-1 lg:w-full py-2 bg-green-600 text-white rounded-md text-[10px] font-black flex items-center justify-center gap-1.5 hover:bg-green-700 transition-all shadow-sm active:translate-y-0.5"
                     >
-                      <MessageCircle size={14} /> HUBUNGI (TAGIH WA)
+                      <MessageCircle size={14} /> TAGIH
                     </button>
                   ) : (
                     <button
                       onClick={() =>
                         window.open(`/invoice/${order.id}`, "_blank")
                       }
-                      className="w-full py-2 bg-slate-900 text-white rounded-xl text-[10px] flex items-center justify-center gap-2 hover:bg-teal-600 transition-all font-black uppercase shadow-sm"
+                      className="flex-1 lg:w-full py-2 bg-slate-900 text-white rounded-md text-[10px] font-black flex items-center justify-center gap-1.5 hover:bg-[#008080] transition-all shadow-sm active:translate-y-0.5"
                     >
-                      <Eye size={12} /> LIHAT DETAIL
+                      <Eye size={14} /> DETAIL
                     </button>
                   )}
                 </div>
@@ -282,10 +299,18 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
   );
 };
 
+// --- SUB-COMPONENTS COMPACT ---
+
 const Step = ({ icon, label, active, done, isDana }: any) => (
-  <div className="relative z-10 flex flex-col items-center gap-1 w-12 text-center">
+  <div className="relative z-10 flex flex-col items-center gap-1.5 w-10 text-center">
     <div
-      className={`w-10 h-10 rounded-xl flex items-center justify-center border-2 transition-all ${done ? "bg-teal-600 border-teal-600 text-white shadow-md" : active ? "bg-white border-teal-500 text-teal-600 scale-110 shadow-lg" : "bg-white border-slate-50 text-slate-200"}`}
+      className={`w-9 h-9 md:w-11 md:h-11 rounded-md flex items-center justify-center border-2 transition-all ${
+        done
+          ? "bg-[#008080] border-[#008080] text-white shadow-md"
+          : active
+            ? "bg-white border-[#FF6600] text-[#FF6600] scale-110 shadow-lg"
+            : "bg-white border-slate-100 text-slate-200"
+      }`}
     >
       {isDana && done ? (
         <DollarSign size={16} className="animate-bounce" />
@@ -296,25 +321,9 @@ const Step = ({ icon, label, active, done, isDana }: any) => (
       )}
     </div>
     <span
-      className={`text-[8px] font-black leading-none mt-1 ${active || done ? "text-slate-800" : "text-slate-300"}`}
+      className={`text-[8px] font-black tracking-widest leading-none ${active || done ? "text-slate-900" : "text-slate-300"}`}
     >
       {label}
     </span>
   </div>
-);
-
-const ActivityIcon = ({ className }: { className?: string }) => (
-  <svg
-    className={className}
-    width="20"
-    height="20"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="3"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-  </svg>
 );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { GoogleMap, Marker, InfoWindow } from "@react-google-maps/api";
 import { supabase } from "../../../../lib/supabaseClient";
 import {
@@ -8,7 +8,8 @@ import {
   Loader2,
   Info,
   ShieldCheck,
-  Navigation,
+  Radio,
+  MapPin,
 } from "lucide-react";
 
 interface Props {
@@ -27,16 +28,31 @@ export const LocalRadarTab: React.FC<Props> = ({
   isLoaded,
 }) => {
   const [selectedPin, setSelectedPin] = useState<any>(null);
-
-  // --- 1. STATE UNTUK LIVE TRACKING ---
   const [liveCouriers, setLiveCouriers] = useState<any[]>(initialCouriers);
+  const mapRef = useRef<google.maps.Map | null>(null);
 
-  // --- 2. REAL-TIME LISTENER: MENDENGARKAN PERGERAKAN GPS ---
+  const [mapCenter, setMapCenter] = useState({ lat: -6.2, lng: 106.816666 });
+
+  useEffect(() => {
+    if (myMarket) {
+      const lat = parseFloat(myMarket.lat || myMarket.latitude);
+      const lng = parseFloat(myMarket.lng || myMarket.longitude);
+
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const newCenter = { lat, lng };
+        setMapCenter(newCenter);
+
+        if (mapRef.current) {
+          mapRef.current.panTo(newCenter);
+          mapRef.current.setZoom(15);
+        }
+      }
+    }
+  }, [myMarket]);
+
   useEffect(() => {
     if (!myMarket?.id) return;
-
     setLiveCouriers(initialCouriers);
-
     const channel = supabase
       .channel("local_radar_tracking")
       .on(
@@ -62,251 +78,237 @@ export const LocalRadarTab: React.FC<Props> = ({
         },
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(channel);
     };
   }, [myMarket?.id, initialCouriers]);
 
-  // KOORDINAT PUSAT PASAR
-  const center = {
-    lat: Number(myMarket?.latitude) || -6.2,
-    lng: Number(myMarket?.longitude) || 106.816666,
-  };
-
-  const mapContainerStyle = {
-    width: "100%",
-    height: "600px",
-    borderRadius: "2.5rem",
-  };
+  const mapContainerStyle = { width: "100%", height: "450px" };
 
   const options = {
     disableDefaultUI: false,
     zoomControl: true,
     mapTypeControl: false,
     streetViewControl: false,
+    gestureHandling: "greedy",
     styles: [
       { featureType: "poi", stylers: [{ visibility: "off" }] },
       { featureType: "transit", stylers: [{ visibility: "off" }] },
     ],
   };
 
-  // --- 3. ICON DEFINITIONS (SVG PATHS) ---
-  // Icon Motor yang Bold dan Clean
-  const bikeIcon = {
-    path: "M19.44 7H17c-.52 0-.98.33-1.15.82l-1.01 2.94C13.25 10.28 11.23 10 9 10c-3.11 0-5.83 1.59-7.39 4h3.55c.42-1.15 1.52-2 2.84-2 1.66 0 3 1.34 3 3s-1.34 3-3 3c-1.32 0-2.42-.85-2.84-2H1V17h1c0 2.21 1.79 4 4 4s4-1.79 4-4c0-.18-.02-.35-.06-.52 1.56.33 3.19.52 4.93.52 2.07 0 3.9-.27 5.48-.78l.65 1.91c.17.49.63.82 1.15.82h1.85c.55 0 1-.45 1-1v-2l-4-9zm-1.94 2L20 13h-4.3l.83-2.43c.12-.34.43-.57.79-.57h.18z",
-    fillColor: "#0d9488", // Teal 600
-    fillOpacity: 1,
-    strokeWeight: 1.5,
-    strokeColor: "#ffffff",
-    scale: 1.8,
-    anchor: isLoaded ? new google.maps.Point(12, 12) : undefined,
-  };
-
-  if (!isLoaded)
+  if (!isLoaded || !window.google) {
     return (
-      <div className="h-[600px] flex flex-col items-center justify-center bg-white rounded-[2.5rem] border border-slate-100">
-        <Loader2 className="animate-spin text-teal-600 mb-4" size={40} />
-        <p className="text-xs font-black text-slate-400 uppercase tracking-widest text-center">
-          Inisialisasi Radar Wilayah...
-        </p>
+      <div className="h-[450px] flex flex-col items-center justify-center bg-white rounded-md border-2 border-slate-100 shadow-inner uppercase font-black tracking-widest text-[12px]">
+        <Loader2 className="animate-spin text-[#008080] mb-4" size={48} />
+        SINKRONISASI NODE SUPER ADMIN...
       </div>
     );
+  }
+
+  // 🚀 LINK ICON HTTPS KLASIK GOOGLE MAPS (DIJAMIN 1000% MUNCUL & ANTI BLOKIR)
+  // Format string murni tanpa embel-embel object.
+  const pinOffice = "https://maps.google.com/mapfiles/ms/icons/orange-dot.png";
+  const pinStore = "https://maps.google.com/mapfiles/ms/icons/green-dot.png";
+  const pinBike = "https://maps.google.com/mapfiles/ms/icons/blue-dot.png";
+  const pinUser = "https://maps.google.com/mapfiles/ms/icons/yellow-dot.png";
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-700 text-left">
-      {/* INFO PANEL */}
-      <div className="flex flex-wrap gap-4">
-        <div className="bg-white px-6 py-4 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 bg-teal-50 text-teal-600 rounded-2xl flex items-center justify-center shadow-sm">
-            <Store size={20} />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">
-              Toko Terdata
-            </p>
-            <p className="text-lg font-black text-slate-800">
-              {merchants.length}
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white px-6 py-4 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center shadow-sm">
-            <Bike size={20} />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">
-              Kurir Standby
-            </p>
-            <p className="text-lg font-black text-slate-800">
-              {liveCouriers.length}
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white px-6 py-4 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-sm">
-            <User size={20} />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">
-              Total Pelanggan
-            </p>
-            <p className="text-lg font-black text-slate-800">
-              {customers.length}
-            </p>
-          </div>
-        </div>
+    <div className="space-y-4 animate-in fade-in duration-500 text-left font-black uppercase tracking-tighter pb-20">
+      {/* 🟢 TOP ANALYTICS PANEL */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <StatCard
+          label="TOKO"
+          value={merchants.length}
+          icon={<Store size={18} />}
+          color="text-[#008080]"
+          bg="bg-teal-50"
+        />
+        <StatCard
+          label="KURIR"
+          value={liveCouriers.length}
+          icon={<Bike size={18} />}
+          color="text-[#FF6600]"
+          bg="bg-orange-50"
+        />
+        <StatCard
+          label="WARGA"
+          value={customers.length}
+          icon={<User size={18} />}
+          color="text-blue-600"
+          bg="bg-blue-50"
+        />
       </div>
 
-      {/* MAP AREA */}
-      <div className="relative border-4 border-white shadow-2xl rounded-[3rem] overflow-hidden group">
+      {/* 🔵 MAP AREA */}
+      <div className="relative border-2 border-slate-200 shadow-md rounded-md overflow-hidden bg-slate-100">
+        {/* BADGE INFO KIRI ATAS */}
+        <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 pointer-events-none">
+          <div className="bg-[#008080] text-white px-3 py-1.5 rounded-md shadow-lg flex items-center gap-2 border-b-2 border-black/20 text-[9px]">
+            <ShieldCheck size={14} /> ENCRYPTED RADAR
+          </div>
+          <div className="bg-slate-900 text-white px-3 py-1.5 rounded-md shadow-lg flex items-center gap-2 border-b-2 border-[#FF6600] text-[9px]">
+            <Radio size={14} className="animate-pulse text-[#FF6600]" />
+            NODE: {myMarket?.name || "LOCAL"}
+          </div>
+        </div>
+
         <GoogleMap
           mapContainerStyle={mapContainerStyle}
           zoom={15}
-          center={center}
+          center={mapCenter}
           options={options}
+          onLoad={(map) => {
+            mapRef.current = map;
+          }}
         >
-          {/* PIN PASAR ADMIN */}
+          {/* 📍 PIN PASAR NODE (ORANYE) */}
           <Marker
-            position={center}
-            icon={{
-              url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
-            }}
-            onClick={() => setSelectedPin({ ...myMarket, type: "PASAR UTAMA" })}
+            position={mapCenter}
+            icon={pinOffice}
+            onClick={() =>
+              setSelectedPin({ ...myMarket, type: "PASAR UTAMA (SUPER ADMIN)" })
+            }
           />
 
-          {/* PIN TOKO */}
-          {merchants.map(
-            (m) =>
-              m.latitude && (
-                <Marker
-                  key={m.id}
-                  position={{
-                    lat: Number(m.latitude),
-                    lng: Number(m.longitude),
-                  }}
-                  icon={{
-                    url: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
-                  }}
-                  onClick={() => setSelectedPin({ ...m, type: "MITRA TOKO" })}
-                />
-              ),
-          )}
+          {/* 📍 PIN MITRA TOKO (HIJAU) */}
+          {merchants.map((m) => {
+            const lat = parseFloat(m.lat || m.latitude);
+            const lng = parseFloat(m.lng || m.longitude);
+            if (isNaN(lat) || isNaN(lng)) return null;
+            return (
+              <Marker
+                key={m.id}
+                position={{ lat, lng }}
+                icon={pinStore}
+                onClick={() => setSelectedPin({ ...m, type: "MITRA TOKO" })}
+              />
+            );
+          })}
 
-          {/* PIN KURIR: BENTUK MOTOR (LIVE TRACKING) */}
-          {liveCouriers.map(
-            (c) =>
-              c.latitude && (
-                <Marker
-                  key={c.id}
-                  position={{
-                    lat: Number(c.latitude),
-                    lng: Number(c.longitude),
-                  }}
-                  icon={bikeIcon}
-                  onClick={() => setSelectedPin({ ...c, type: "MITRA KURIR" })}
-                />
-              ),
-          )}
+          {/* 📍 PIN KURIR LIVE (BIRU) */}
+          {liveCouriers.map((c) => {
+            const lat = parseFloat(c.lat || c.latitude);
+            const lng = parseFloat(c.lng || c.longitude);
+            if (isNaN(lat) || isNaN(lng)) return null;
+            return (
+              <Marker
+                key={c.id}
+                position={{ lat, lng }}
+                icon={pinBike}
+                onClick={() => setSelectedPin({ ...c, type: "MITRA KURIR" })}
+              />
+            );
+          })}
 
-          {/* PIN PEMBELI */}
-          {customers.map(
-            (u) =>
-              u.latitude && (
-                <Marker
-                  key={u.id}
-                  position={{
-                    lat: Number(u.latitude),
-                    lng: Number(u.longitude),
-                  }}
-                  icon={{
-                    url: "http://maps.google.com/mapfiles/ms/icons/yellow-dot.png",
-                  }}
-                  onClick={() => setSelectedPin({ ...u, type: "PELANGGAN" })}
-                />
-              ),
-          )}
+          {/* 📍 PIN PELANGGAN (KUNING) */}
+          {customers.map((u) => {
+            const lat = parseFloat(u.lat || u.latitude);
+            const lng = parseFloat(u.lng || u.longitude);
+            if (isNaN(lat) || isNaN(lng)) return null;
+            return (
+              <Marker
+                key={u.id}
+                position={{ lat, lng }}
+                icon={pinUser}
+                onClick={() => setSelectedPin({ ...u, type: "PELANGGAN" })}
+              />
+            );
+          })}
 
+          {/* 💬 INFO WINDOW (MUNCUL SAAT PIN DIKLIK) */}
           {selectedPin && (
             <InfoWindow
               position={{
-                lat: Number(selectedPin.latitude),
-                lng: Number(selectedPin.longitude),
+                lat: parseFloat(
+                  selectedPin.lat || selectedPin.latitude || mapCenter.lat,
+                ),
+                lng: parseFloat(
+                  selectedPin.lng || selectedPin.longitude || mapCenter.lng,
+                ),
               }}
               onCloseClick={() => setSelectedPin(null)}
             >
-              <div className="p-3 min-w-[180px] font-sans text-left">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-2 h-2 rounded-full bg-teal-500 animate-pulse"></div>
-                  <p className="text-[9px] font-black text-teal-600 uppercase tracking-widest">
-                    {selectedPin.type}
-                  </p>
-                </div>
-                <h4 className="font-black text-slate-800 text-xs uppercase leading-tight">
+              <div className="p-2 min-w-[180px] font-black uppercase text-left">
+                <p className="text-[9px] text-[#008080] mb-1">
+                  {selectedPin.type}
+                </p>
+                <h4 className="text-[12px] text-slate-900 leading-tight">
                   {selectedPin.shop_name ||
                     selectedPin.full_name ||
                     selectedPin.name}
                 </h4>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  {selectedPin.address || "Lokasi Terverifikasi"}
-                </p>
-                {selectedPin.phone_number && (
-                  <p className="text-[9px] font-bold text-slate-400 mt-2 border-t pt-2 italic">
-                    Hubungi: {selectedPin.phone_number}
-                  </p>
-                )}
               </div>
             </InfoWindow>
           )}
         </GoogleMap>
-
-        {/* FLOATING SHIELD INFO */}
-        <div className="absolute top-6 left-6 bg-teal-600 text-white px-4 py-2 rounded-2xl shadow-lg flex items-center gap-2">
-          <ShieldCheck size={14} />
-          <span className="text-[9px] font-black uppercase tracking-widest">
-            Enkripsi Wilayah Aktif
-          </span>
-        </div>
-
-        {/* LEGEND TABLE */}
-        <div className="absolute bottom-10 right-10 bg-white/95 backdrop-blur-md p-6 rounded-[2rem] border border-white shadow-2xl hidden md:block">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">
-            Legend Maps
-          </p>
-          <div className="space-y-3">
-            <LegendItem color="bg-blue-500" label="Pasar Anda" />
-            <LegendItem color="bg-green-500" label="Mitra Toko" />
-            <LegendItem color="bg-teal-600" label="Motor Kurir" />
-            <LegendItem color="bg-yellow-500" label="Pelanggan" />
-          </div>
-        </div>
       </div>
 
-      <div className="p-5 bg-white rounded-[2rem] border border-slate-100 flex items-start gap-4">
-        <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shrink-0">
-          <Info size={20} />
-        </div>
-        <div>
-          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-1">
-            Keamanan Wilayah
-          </h4>
-          <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-            Radar ini telah dikunci pada titik koordinat <b>{myMarket?.name}</b>
-            . Anda memantau armada kurir secara real-time berdasarkan data
-            koordinat GPS terenkripsi.
+      {/* 🟠 LEGEND PETA */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
+        <LegendCard color="bg-[#FF6600]" label="PUSAT KONTROL" />
+        <LegendCard color="bg-[#22c55e]" label="MITRA TOKO" />
+        <LegendCard color="bg-[#3b82f6]" label="UNIT KURIR" />
+        <LegendCard color="bg-[#eab308]" label="WARGA" />
+      </div>
+
+      {/* ⚙️ DEBUG & SECURITY FOOTER */}
+      <div className="p-3 bg-white rounded-md border-l-4 border-[#FF6600] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 mt-4">
+        <div className="flex items-center gap-3">
+          <Info size={18} className="text-[#FF6600] shrink-0" />
+          <p className="text-[9px] text-slate-500 leading-tight font-black uppercase">
+            RADAR MENGACU PADA NODE:{" "}
+            <span className="text-[#008080]">
+              {myMarket?.name || "TIDAK DIKETAHUI"}
+            </span>
           </p>
+        </div>
+
+        <div className="bg-slate-100 p-2 rounded-md flex items-center gap-2 border border-slate-200">
+          <MapPin size={12} className="text-[#FF6600]" />
+          <span className="text-[9px] font-black text-slate-600">
+            TARGET GPS:{" "}
+            <span className="text-[#008080]">
+              {mapCenter.lat.toFixed(6)}, {mapCenter.lng.toFixed(6)}
+            </span>
+          </span>
         </div>
       </div>
     </div>
   );
 };
 
-const LegendItem = ({ color, label }: { color: string; label: string }) => (
-  <div className="flex items-center gap-3">
-    <div className={`w-3 h-3 rounded-full ${color} shadow-sm`}></div>
-    <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">
+// HELPER COMPONENTS
+const StatCard = ({ label, value, icon, color, bg }: any) => {
+  const borderClass =
+    color === "text-[#008080]"
+      ? "border-[#008080]"
+      : color === "text-[#FF6600]"
+        ? "border-[#FF6600]"
+        : "border-blue-600";
+  return (
+    <div
+      className={`bg-white p-3 rounded-md border border-slate-200 shadow-sm flex items-center gap-3 border-b-4 ${borderClass}`}
+    >
+      <div
+        className={`w-9 h-9 ${bg} ${color} rounded-md flex items-center justify-center shadow-inner shrink-0`}
+      >
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-[8px] font-black text-slate-400 mb-1">{label}</p>
+        <p className="text-[16px] font-black text-slate-900 truncate">
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+const LegendCard = ({ color, label }: { color: string; label: string }) => (
+  <div className="bg-white p-3 rounded-md border border-slate-200 shadow-sm flex items-center gap-3">
+    <div className={`w-3.5 h-3.5 rounded-sm ${color} shadow-inner`}></div>
+    <span className="text-[10px] font-black text-slate-700 tracking-tight">
       {label}
     </span>
   </div>

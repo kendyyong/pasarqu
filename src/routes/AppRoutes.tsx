@@ -56,8 +56,13 @@ export const AppRoutes = () => {
 
   if (isChecking)
     return (
-      <div className="h-screen flex items-center justify-center bg-white font-sans text-teal-600">
-        <Loader2 className="animate-spin" size={40} />
+      <div className="h-screen flex items-center justify-center bg-white font-black uppercase text-[#008080]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="animate-spin" size={40} />
+          <p className="text-[10px] tracking-[0.3em]">
+            MENGHUBUNGKAN KE SERVER...
+          </p>
+        </div>
       </div>
     );
 
@@ -69,6 +74,7 @@ export const AppRoutes = () => {
     "/portal",
     "/super-admin",
     "/admin",
+    "/admin-wilayah", // ✅ Sinkron dengan Admin Lokal
     "/waiting-approval",
     "/track-order",
     "/merchant-promo",
@@ -78,7 +84,7 @@ export const AppRoutes = () => {
     "/invoice",
     "/checkout",
     "/settings/address",
-    "/order-history", // ✅ Bypass agar bisa diakses tanpa paksaan pilih pasar ulang
+    "/order-history",
   ];
 
   const isBypassRoute = bypassRoutes.some((route) =>
@@ -207,7 +213,7 @@ export const AppRoutes = () => {
         }
       />
 
-      {/* --- ✅ RUTE PENGATURAN ALAMAT CUSTOMER --- */}
+      {/* --- RUTE PENGATURAN ALAMAT CUSTOMER --- */}
       <Route
         path="/settings/address"
         element={
@@ -217,7 +223,7 @@ export const AppRoutes = () => {
         }
       />
 
-      {/* --- ✅ RUTE RIWAYAT PESANAN CUSTOMER --- */}
+      {/* --- RUTE RIWAYAT PESANAN CUSTOMER --- */}
       <Route
         path="/order-history"
         element={
@@ -227,22 +233,26 @@ export const AppRoutes = () => {
         }
       />
 
+      {/* --- 🚩 ADMIN WILAYAH (LOKAL) --- */}
       <Route
-        path="/admin-wilayah"
+        path="/admin-wilayah/*"
         element={
           <ProtectedRoute allowedRoles={["LOCAL_ADMIN"]}>
             <LocalAdminDashboard onBack={() => navigate("/")} />
           </ProtectedRoute>
         }
       />
+
+      {/* --- SUPER ADMIN --- */}
       <Route
-        path="/super-admin"
+        path="/super-admin/*"
         element={
           <ProtectedRoute allowedRoles={["SUPER_ADMIN"]}>
             <SuperAdminDashboard />
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/admin/shipping-config"
         element={

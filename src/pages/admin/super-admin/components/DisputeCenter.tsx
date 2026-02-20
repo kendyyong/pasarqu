@@ -2,9 +2,7 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../../../../lib/supabaseClient";
 import {
   ShieldAlert,
-  MessageSquare,
   Sparkles,
-  User,
   Loader2,
   Send,
   BrainCircuit,
@@ -33,15 +31,16 @@ export const DisputeCenter = () => {
   const fetchComplaints = async () => {
     setLoading(true);
     try {
+      // 🚩 PERBAIKAN: Hanya mengambil data inti komplain agar kebal error relasi database
       const { data, error } = await supabase
         .from("complaints")
-        .select("*, profiles(name)")
+        .select("*")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       setComplaints(data || []);
     } catch (err: any) {
-      showToast("Error Supabase: " + err.message, "error");
+      showToast("ERROR DATABASE: " + err.message, "error");
       console.error("Detail Error:", err);
     } finally {
       setLoading(false);
@@ -66,7 +65,7 @@ export const DisputeCenter = () => {
         color: "bg-red-50 text-red-600 border-red-100",
       });
       setAiDraft(
-        "Halo Kak, kami sangat menyesal atas kendala ini. Tim kami sudah memvalidasi laporan Kakak dan akan segera memproses solusi terbaik dalam 1x24 jam.",
+        "HALO KAK, KAMI SANGAT MENYESAL ATAS KENDALA INI. TIM KAMI SUDAH MEMVALIDASI LAPORAN KAKAK DAN AKAN SEGERA MEMPROSES SOLUSI TERBAIK DALAM 1X24 JAM.",
       );
     } else {
       setSentiment({
@@ -75,7 +74,7 @@ export const DisputeCenter = () => {
         color: "bg-blue-50 text-blue-600 border-blue-100",
       });
       setAiDraft(
-        "Halo Kak, terima kasih sudah menghubungi kami. Mohon lampirkan foto bukti tambahan agar kami bisa segera membantu menyelesaikan masalah ini ya.",
+        "HALO KAK, TERIMA KASIH SUDAH MENGHUBUNGI KAMI. MOHON LAMPIRKAN FOTO BUKTI TAMBAHAN AGAR KAMI BISA SEGERA MEMBANTU MENYELESAIKAN MASALAH INI.",
       );
     }
     setAiAnalyzing(false);
@@ -104,7 +103,7 @@ export const DisputeCenter = () => {
             </div>
           ) : complaints.length === 0 ? (
             <div className="p-10 text-center bg-white rounded-md border-2 border-dashed border-slate-100 text-slate-300 text-[10px]">
-              BELUM ADA KOMPLAIN
+              BELUM ADA KOMPLAIN MASUK
             </div>
           ) : (
             complaints.map((item) => (
@@ -121,19 +120,21 @@ export const DisputeCenter = () => {
                 }`}
               >
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-[9px] text-slate-400 font-bold">
-                    {new Date(item.created_at).toLocaleDateString()}
+                  <span className="text-[9px] text-slate-400 font-black">
+                    {item.created_at
+                      ? new Date(item.created_at).toLocaleDateString()
+                      : "HARI INI"}
                   </span>
                   <div
                     className={`px-2 py-0.5 rounded text-[8px] text-white ${item.status === "open" ? "bg-red-500" : "bg-green-500"}`}
                   >
-                    {item.status}
+                    {item.status || "OPEN"}
                   </div>
                 </div>
                 <h4 className="font-black text-slate-800 text-[11px] mb-1 truncate">
-                  {item.subject || "LAPORAN MASALAH"}
+                  {item.subject || "LAPORAN KENDALA"}
                 </h4>
-                <p className="text-[10px] text-slate-500 line-clamp-2 normal-case font-bold">
+                <p className="text-[10px] text-slate-500 line-clamp-2 font-bold normal-case">
                   {item.message}
                 </p>
               </div>
@@ -153,19 +154,34 @@ export const DisputeCenter = () => {
               <div className="relative z-10">
                 <div className="flex items-center gap-4 mb-4">
                   <div className="w-12 h-12 bg-slate-900 text-white rounded-md flex items-center justify-center font-black text-xl shadow-md">
-                    {selectedDispute.profiles?.name?.charAt(0) || "?"}
+                    P
                   </div>
                   <div>
                     <h3 className="font-black text-slate-800 text-[14px] leading-none">
-                      {selectedDispute.profiles?.name || "PENGGUNA TANPA NAMA"}
+                      PENGGUNA PASARQU
                     </h3>
-                    <p className="text-[10px] text-[#008080] mt-1 tracking-widest">
-                      PELAPOR TERVERIFIKASI
+                    <p className="text-[10px] text-[#008080] mt-1 tracking-widest font-black">
+                      KODE: {selectedDispute.user_id?.slice(0, 8) || "ANONIM"}
                     </p>
                   </div>
                 </div>
+
+                {/* 🚩 TAMPILAN BUKTI FOTO (JIKA ADA) */}
+                {selectedDispute.proof_url && (
+                  <div className="mb-4">
+                    <p className="text-[10px] text-slate-400 mb-2 font-black">
+                      LAMPIRAN BUKTI:
+                    </p>
+                    <img
+                      src={selectedDispute.proof_url}
+                      alt="Bukti Komplain"
+                      className="max-h-[150px] rounded-md border border-slate-200 object-cover shadow-sm"
+                    />
+                  </div>
+                )}
+
                 <div className="bg-slate-50 p-4 rounded-md border border-slate-100 border-l-4 border-l-[#FF6600]">
-                  <p className="text-[12px] text-slate-700 leading-relaxed font-bold normal-case italic">
+                  <p className="text-[12px] text-slate-700 leading-relaxed font-bold normal-case">
                     "{selectedDispute.message}"
                   </p>
                 </div>
@@ -201,10 +217,10 @@ export const DisputeCenter = () => {
                 ) : (
                   <div className="animate-in slide-in-from-bottom-2">
                     <div
-                      className={`flex items-center gap-2 mb-5 px-3 py-1.5 rounded border w-fit ${sentiment?.color}`}
+                      className={`flex items-center gap-2 mb-5 px-3 py-1.5 rounded border w-fit font-black ${sentiment?.color}`}
                     >
                       {sentiment?.icon}
-                      <span className="text-[9px] font-black tracking-widest">
+                      <span className="text-[9px] tracking-widest">
                         HASIL: {sentiment?.label}
                       </span>
                     </div>
@@ -215,7 +231,7 @@ export const DisputeCenter = () => {
                       <textarea
                         value={aiDraft}
                         onChange={(e) => setAiDraft(e.target.value)}
-                        className="w-full bg-white/5 border border-white/10 rounded-md p-4 text-[12px] text-white font-bold focus:border-[#008080] outline-none transition-all normal-case min-h-[100px] resize-none shadow-inner"
+                        className="w-full bg-white/5 border border-white/10 rounded-md p-4 text-[12px] text-white font-bold focus:border-[#008080] outline-none transition-all normal-case min-h-[100px] resize-none shadow-inner uppercase"
                       />
                       <div className="flex justify-end gap-2 pt-2">
                         <button className="px-5 py-3 rounded-md border border-white/10 text-white font-black text-[10px] hover:bg-red-600 transition-all flex items-center gap-2 uppercase">
