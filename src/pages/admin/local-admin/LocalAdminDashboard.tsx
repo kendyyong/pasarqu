@@ -19,10 +19,11 @@ import { PartnerDetailModal } from "./components/PartnerDetailModal";
 // --- LOCAL UI COMPONENTS ---
 import { LocalAdminHeader } from "./components/LocalAdminHeader";
 import { LocalAdminContent } from "./components/LocalAdminContent";
+import { AdminProductVerification } from "./components/AdminProductVerification"; // ✅ IMPORT HALAMAN VERIFIKASI
 
 // ✅ 1. DEFINE PROPS INTERFACE
 interface LocalAdminProps {
-  onBack?: () => void; // Opsional agar tidak pecah jika dipanggil tanpa onBack
+  onBack?: () => void;
 }
 
 type TabType =
@@ -122,14 +123,18 @@ export const LocalAdminDashboard: React.FC<LocalAdminProps> = ({ onBack }) => {
             <div className="flex bg-white p-2 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40">
               <button
                 onClick={() => setActiveTab("products")}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-[1.5rem] transition-all group shrink-0 text-orange-500 hover:bg-orange-50"
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-[1.5rem] transition-all group shrink-0 ${activeTab === "products" ? "bg-orange-500 text-white shadow-lg" : "text-orange-500 hover:bg-orange-50"}`}
               >
                 <ClipboardCheck size={18} />
-                <span className="text-[10px] font-black uppercase tracking-widest">
+                <span
+                  className={`text-[10px] font-black uppercase tracking-widest ${activeTab === "products" ? "block" : "hidden group-hover:block"}`}
+                >
                   Produk
                 </span>
                 {pendingProducts.length > 0 && (
-                  <span className="bg-orange-500 text-white text-[8px] px-1.5 py-0.5 rounded-full animate-bounce">
+                  <span
+                    className={`text-[8px] px-1.5 py-0.5 rounded-full ${activeTab === "products" ? "bg-white text-orange-600" : "bg-orange-500 text-white animate-bounce"}`}
+                  >
                     {pendingProducts.length}
                   </span>
                 )}
@@ -169,21 +174,28 @@ export const LocalAdminDashboard: React.FC<LocalAdminProps> = ({ onBack }) => {
             </div>
           </div>
 
-          <LocalAdminContent
-            activeTab={activeTab}
-            isAlarmActive={isAlarmActive}
-            data={{
-              myMarket,
-              myMerchants,
-              myCouriers,
-              myCustomers,
-              pendingProducts,
-              marketFinance,
-              profile,
-              isLoaded,
-            }}
-            actions={{ fetchData, stopAlarm, setDetailModal }}
-          />
+          {/* ✅ 4. ROUTING KONTEN TAB */}
+          {activeTab === "products" ? (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <AdminProductVerification />
+            </div>
+          ) : (
+            <LocalAdminContent
+              activeTab={activeTab}
+              isAlarmActive={isAlarmActive}
+              data={{
+                myMarket,
+                myMerchants,
+                myCouriers,
+                myCustomers,
+                pendingProducts,
+                marketFinance,
+                profile,
+                isLoaded,
+              }}
+              actions={{ fetchData, stopAlarm, setDetailModal }}
+            />
+          )}
         </main>
       </div>
 

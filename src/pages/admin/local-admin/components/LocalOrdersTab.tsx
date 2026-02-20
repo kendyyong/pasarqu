@@ -6,15 +6,15 @@ import {
   Truck,
   CheckCircle2,
   Search,
-  MoreVertical,
-  Phone,
   MapPin,
-  ExternalLink,
-  DollarSign,
   Loader2,
   RefreshCw,
   Store,
   Eye,
+  DollarSign,
+  Package,
+  Wallet,
+  MessageCircle,
 } from "lucide-react";
 import { useToast } from "../../../../contexts/ToastContext";
 
@@ -26,10 +26,11 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
   const { showToast } = useToast();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("ALL"); // ALL, PENDING, DELIVERING, COMPLETED
+  const [filter, setFilter] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
 
   const fetchOrders = async () => {
+    if (!marketId) return;
     setLoading(true);
     try {
       let query = supabase
@@ -37,14 +38,16 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
         .select(
           `
           *,
-          profiles:customer_id(full_name, phone_number),
-          merchants:merchant_id(shop_name),
-          couriers:courier_id(full_name, phone_number)
+          customer:profiles!customer_id(name, phone),
+          courier:couriers!courier_id(full_name, phone_number)
         `,
         )
         .eq("market_id", marketId);
 
-      if (filter !== "ALL") {
+      // ✅ LOGIKA FILTER KHUSUS PENDING (BELUM BAYAR)
+      if (filter === "PENDING") {
+        query = query.eq("status", "UNPAID");
+      } else if (filter !== "ALL") {
         query = query.eq("shipping_status", filter);
       }
 
@@ -52,10 +55,27 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
         ascending: false,
       });
 
-      if (error) throw error;
-      setOrders(data || []);
+      if (error) {
+        // Fallback jika relasi Foreign Key bermasalah
+        const { data: fallbackData } = await supabase
+          .from("orders")
+          .select(`*, customer:profiles!customer_id(name, phone)`)
+          .eq("market_id", marketId)
+          .order("created_at", { ascending: false });
+
+        const manualFiltered =
+          filter === "ALL"
+            ? fallbackData
+            : filter === "PENDING"
+              ? fallbackData?.filter((o) => o.status === "UNPAID")
+              : fallbackData?.filter((o) => o.shipping_status === filter);
+
+        setOrders(manualFiltered || []);
+      } else {
+        setOrders(data || []);
+      }
     } catch (err: any) {
-      showToast(err.message, "error");
+      showToast("GAGAL LOAD DATA", "error");
     } finally {
       setLoading(false);
     }
@@ -63,10 +83,8 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
 
   useEffect(() => {
     fetchOrders();
-
-    // 🔴 MONITOR LIVE: Update Otomatis jika status berubah
     const channel = supabase
-      .channel("local_orders_stream")
+      .channel(`local_orders_${marketId}`)
       .on(
         "postgres_changes",
         {
@@ -78,7 +96,6 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
         () => fetchOrders(),
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(channel);
     };
@@ -86,31 +103,31 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
 
   const filteredOrders = orders.filter(
     (o) =>
-      o.id.includes(searchTerm) ||
-      o.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()),
+      o.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (o.customer?.name || "").toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 text-left pb-20">
-      {/* HEADER MONITOR & SEARCH */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+    <div className="space-y-4 animate-in fade-in duration-500 text-left pb-20 font-black uppercase tracking-tighter">
+      {/* HEADER MONITOR */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-2xl flex items-center justify-center shadow-inner">
+          <div className="w-10 h-10 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center shadow-inner">
             <ActivityIcon className="animate-pulse" />
           </div>
-          <div>
-            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter italic">
-              Order Control Tower
+          <div className="leading-none text-left">
+            <h3 className="text-[16px] font-black text-slate-800 italic leading-none">
+              ORDER CONTROL TOWER
             </h3>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              Monitoring Alur Logistik & Dana
+            <p className="text-[9px] text-slate-400 tracking-widest uppercase mt-1">
+              MONITORING LOGISTIK WILAYAH
             </p>
           </div>
         </div>
         <div className="flex gap-2">
-          <div className="relative">
+          <div className="relative flex-1 md:flex-none">
             <Search
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300"
               size={14}
             />
             <input
@@ -118,48 +135,54 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
               placeholder="CARI NAMA / ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-6 py-3 bg-slate-50 border-none rounded-xl text-[10px] font-black uppercase outline-none focus:ring-2 ring-teal-500 w-48 transition-all"
+              className="pl-9 pr-4 py-2 bg-slate-50 border-none rounded-xl text-[12px] font-black uppercase outline-none focus:ring-2 ring-teal-500 w-full md:w-48 transition-all"
             />
           </div>
           <button
             onClick={fetchOrders}
-            className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-900 hover:text-white transition-all"
+            className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-900 hover:text-white transition-all"
           >
-            <RefreshCw size={18} />
+            <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
       </div>
 
-      {/* FILTER TABS */}
-      <div className="flex flex-wrap gap-2 p-1.5 bg-white rounded-[2rem] border border-slate-100 shadow-sm w-fit">
-        {["ALL", "PAID", "PICKING_UP", "DELIVERING", "COMPLETED"].map((s) => (
+      {/* TAB FILTER */}
+      <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar">
+        {[
+          { label: "SEMUA", value: "ALL" },
+          { label: "PENDING (BELUM BAYAR)", value: "PENDING" },
+          { label: "DIKEMAS", value: "PACKING" },
+          { label: "DIKIRIM", value: "SHIPPING" },
+          { label: "SELESAI", value: "COMPLETED" },
+        ].map((tab) => (
           <button
-            key={s}
-            onClick={() => setFilter(s)}
-            className={`px-6 py-2.5 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest transition-all ${
-              filter === s
-                ? "bg-teal-600 text-white shadow-lg"
-                : "text-slate-400 hover:text-slate-600"
+            key={tab.value}
+            onClick={() => setFilter(tab.value)}
+            className={`px-5 py-2 rounded-xl text-[10px] font-black transition-all border whitespace-nowrap ${
+              filter === tab.value
+                ? tab.value === "PENDING"
+                  ? "bg-[#FF6600] text-white border-transparent shadow-lg"
+                  : "bg-teal-600 text-white border-transparent shadow-lg"
+                : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50"
             }`}
           >
-            {s.replace("_", " ")}
+            {tab.label}
           </button>
         ))}
       </div>
 
-      {/* LIST ORDER DENGAN PIPELINE VISUAL */}
-      <div className="grid grid-cols-1 gap-5">
+      {/* LIST ORDERS */}
+      <div className="space-y-2">
         {loading ? (
-          <div className="py-20 flex flex-col items-center gap-4">
-            <Loader2 className="animate-spin text-teal-600" size={40} />
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Sinkronisasi Data Transaksi...
-            </p>
+          <div className="py-20 flex flex-col items-center gap-2">
+            <Loader2 className="animate-spin text-teal-600" size={32} />
+            <p className="text-[10px] text-slate-400">MEMPROSES DATA...</p>
           </div>
         ) : filteredOrders.length === 0 ? (
-          <div className="bg-white p-20 rounded-[3rem] text-center border-2 border-dashed border-slate-100">
-            <ShoppingBag className="mx-auto text-slate-100 mb-4" size={64} />
-            <p className="text-xs font-black text-slate-300 uppercase tracking-widest">
+          <div className="bg-white p-20 rounded-[2rem] text-center border-2 border-dashed border-slate-100">
+            <ShoppingBag className="mx-auto text-slate-100 mb-2" size={48} />
+            <p className="text-[12px] text-slate-300 uppercase italic leading-none">
               Belum ada aktivitas di jalur ini
             </p>
           </div>
@@ -167,142 +190,88 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
           filteredOrders.map((order) => (
             <div
               key={order.id}
-              className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden hover:border-teal-200 transition-all group"
+              className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4 group hover:border-teal-200 transition-all"
             >
-              <div className="p-6 md:p-8 flex flex-col lg:flex-row lg:items-center gap-10">
-                {/* 1. KARTU IDENTITAS ORDER */}
-                <div className="lg:w-1/4 space-y-3 border-b lg:border-b-0 lg:border-r border-slate-50 pb-6 lg:pb-0 lg:pr-8">
-                  <div className="flex items-center justify-between">
-                    <span className="px-3 py-1 bg-slate-900 text-white text-[8px] font-black rounded-lg uppercase tracking-widest shadow-lg">
+              <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                <div className="lg:w-1/4 space-y-2 border-b lg:border-b-0 lg:border-r border-slate-50 pb-4 lg:pb-0 lg:pr-4 text-left">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[9px] bg-slate-900 text-white px-2 py-0.5 rounded font-sans font-bold">
                       #{order.id.slice(0, 8)}
                     </span>
-                    <span className="text-[9px] font-bold text-slate-400">
+                    <span className="text-[9px] text-slate-400 font-sans">
                       {new Date(order.created_at).toLocaleTimeString()}
                     </span>
                   </div>
-                  <h4 className="font-black text-slate-800 text-base uppercase leading-none tracking-tighter">
-                    {order.profiles?.full_name}
+                  <h4 className="text-[14px] text-slate-800 leading-none truncate font-black">
+                    {order.customer?.name || "PEMBELI"}
                   </h4>
-                  <div className="flex items-center gap-2 text-teal-600">
-                    <Store size={14} />
-                    <p className="text-[10px] font-black uppercase truncate">
-                      {order.merchants?.shop_name}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <MapPin size={12} />
-                    <p className="text-[9px] font-bold uppercase truncate italic">
-                      {order.address || "Alamat tidak terbaca"}
+                  <div className="flex items-center gap-1.5 text-slate-400">
+                    <MapPin size={12} className="text-red-500 shrink-0" />
+                    <p className="text-[11px] font-sans lowercase truncate italic leading-none font-bold">
+                      {order.address}
                     </p>
                   </div>
                 </div>
 
-                {/* 2. PIPELINE VISUAL (ALUR BARANG & DANA) */}
-                <div className="flex-1 px-4">
-                  <div className="flex items-center justify-between relative">
-                    {/* Background Progress Line */}
-                    <div className="absolute top-1/2 left-0 w-full h-[3px] bg-slate-50 -translate-y-1/2 z-0"></div>
+                <div className="flex-1 flex items-center justify-between px-2 relative">
+                  <div className="absolute top-5 left-10 right-10 h-0.5 bg-slate-50 -z-0" />
+                  <Step
+                    icon={<Wallet size={14} />}
+                    label="LUNAS"
+                    done={order.status === "PAID"}
+                  />
+                  <Step
+                    icon={<Package size={14} />}
+                    label="PROSES"
+                    active={order.shipping_status === "PACKING"}
+                    done={["SHIPPING", "COMPLETED"].includes(
+                      order.shipping_status,
+                    )}
+                  />
+                  <Step
+                    icon={<Truck size={14} />}
+                    label="KURIR"
+                    active={order.shipping_status === "SHIPPING"}
+                    done={order.shipping_status === "COMPLETED"}
+                  />
+                  <Step
+                    icon={<CheckCircle2 size={14} />}
+                    label="DANA"
+                    active={order.shipping_status === "COMPLETED"}
+                    done={order.shipping_status === "COMPLETED"}
+                    isDana
+                  />
+                </div>
 
-                    <Step
-                      icon={<CreditCard size={14} />}
-                      label="Lunas"
-                      active={true}
-                      done={true}
-                    />
-                    <Step
-                      icon={<Store size={14} />}
-                      label="Toko"
-                      active={order.shipping_status !== "SEARCHING_COURIER"}
-                      done={[
-                        "PICKING_UP",
-                        "DELIVERING",
-                        "DELIVERED",
-                        "COMPLETED",
-                      ].includes(order.shipping_status)}
-                    />
-                    <Step
-                      icon={<Truck size={14} />}
-                      label="Kurir"
-                      active={order.shipping_status === "DELIVERING"}
-                      done={["DELIVERED", "COMPLETED"].includes(
-                        order.shipping_status,
-                      )}
-                    />
-
-                    {/* INDIKATOR BAGI HASIL DANA ($) */}
-                    <div
-                      className={`z-10 flex flex-col items-center gap-2 group relative`}
+                <div className="lg:w-1/4 flex flex-col gap-2 border-t lg:border-t-0 lg:border-l border-slate-50 pt-4 lg:pt-0 lg:pl-4 text-left">
+                  <div className="flex justify-between items-center text-[12px]">
+                    <span className="text-slate-400">TAGIHAN</span>
+                    <span className="text-[#FF6600] font-sans font-black">
+                      RP {order.total_price?.toLocaleString()}
+                    </span>
+                  </div>
+                  {filter === "PENDING" ? (
+                    <button
+                      onClick={() =>
+                        window.open(
+                          `https://wa.me/${order.customer?.phone?.replace(/^0/, "62")}`,
+                          "_blank",
+                        )
+                      }
+                      className="w-full py-2 bg-green-500 text-white rounded-xl text-[10px] flex items-center justify-center gap-2 hover:bg-green-600 transition-all font-black uppercase shadow-md shadow-green-100"
                     >
-                      <div
-                        className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all border-4 shadow-xl ${
-                          order.shipping_status === "COMPLETED"
-                            ? "bg-teal-500 border-teal-100 text-white"
-                            : "bg-white border-slate-50 text-slate-200"
-                        }`}
-                      >
-                        <DollarSign
-                          size={20}
-                          className={
-                            order.shipping_status === "COMPLETED"
-                              ? "animate-bounce"
-                              : ""
-                          }
-                        />
-                      </div>
-                      <span
-                        className={`text-[8px] font-black uppercase tracking-widest ${order.shipping_status === "COMPLETED" ? "text-teal-600" : "text-slate-300"}`}
-                      >
-                        {order.shipping_status === "COMPLETED"
-                          ? "Dana Cair"
-                          : "Pending"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. INFO LOGISTIK & FINANCE (PEEK) */}
-                <div className="lg:w-1/4 flex flex-col gap-3 border-t lg:border-t-0 lg:border-l border-slate-50 pt-6 lg:pt-0 lg:pl-8">
-                  <div className="bg-slate-50 p-3 rounded-2xl flex items-center justify-between border border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                        <Truck size={14} className="text-teal-600" />
-                      </div>
-                      <div>
-                        <p className="text-[7px] font-black text-slate-400 uppercase">
-                          Kurir
-                        </p>
-                        <p className="text-[10px] font-black text-slate-700 uppercase">
-                          {order.couriers?.full_name?.split(" ")[0] || "..."}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-[10px] font-black text-teal-600">
-                      Rp {order.courier_earning_total?.toLocaleString()}
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-50 p-3 rounded-2xl flex items-center justify-between border border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                        <DollarSign size={14} className="text-orange-500" />
-                      </div>
-                      <div>
-                        <p className="text-[7px] font-black text-slate-400 uppercase">
-                          Platform
-                        </p>
-                        <p className="text-[10px] font-black text-slate-700 uppercase">
-                          Revenue
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-[10px] font-black text-orange-600">
-                      Rp {order.app_earning_total?.toLocaleString()}
-                    </p>
-                  </div>
-
-                  <button className="w-full py-2 bg-slate-900 text-white rounded-xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-teal-600 transition-all">
-                    <Eye size={12} /> Cek Detail Item
-                  </button>
+                      <MessageCircle size={14} /> HUBUNGI (TAGIH WA)
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() =>
+                        window.open(`/invoice/${order.id}`, "_blank")
+                      }
+                      className="w-full py-2 bg-slate-900 text-white rounded-xl text-[10px] flex items-center justify-center gap-2 hover:bg-teal-600 transition-all font-black uppercase shadow-sm"
+                    >
+                      <Eye size={12} /> LIHAT DETAIL
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -313,22 +282,21 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
   );
 };
 
-// HELPER COMPONENTS
-const Step = ({ icon, label, active, done }: any) => (
-  <div className={`z-10 flex flex-col items-center gap-2 group relative`}>
+const Step = ({ icon, label, active, done, isDana }: any) => (
+  <div className="relative z-10 flex flex-col items-center gap-1 w-12 text-center">
     <div
-      className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all border-2 ${
-        done
-          ? "bg-teal-600 border-teal-600 text-white shadow-lg"
-          : active
-            ? "bg-white border-teal-500 text-teal-600 shadow-xl scale-110"
-            : "bg-white border-slate-100 text-slate-200"
-      }`}
+      className={`w-10 h-10 rounded-xl flex items-center justify-center border-2 transition-all ${done ? "bg-teal-600 border-teal-600 text-white shadow-md" : active ? "bg-white border-teal-500 text-teal-600 scale-110 shadow-lg" : "bg-white border-slate-50 text-slate-200"}`}
     >
-      {done ? <CheckCircle2 size={16} /> : icon}
+      {isDana && done ? (
+        <DollarSign size={16} className="animate-bounce" />
+      ) : done ? (
+        <CheckCircle2 size={16} />
+      ) : (
+        icon
+      )}
     </div>
     <span
-      className={`text-[8px] font-black uppercase tracking-widest ${active || done ? "text-slate-800" : "text-slate-300"}`}
+      className={`text-[8px] font-black leading-none mt-1 ${active || done ? "text-slate-800" : "text-slate-300"}`}
     >
       {label}
     </span>
@@ -348,21 +316,5 @@ const ActivityIcon = ({ className }: { className?: string }) => (
     strokeLinejoin="round"
   >
     <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-  </svg>
-);
-
-const CreditCard = ({ size }: { size: number }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect width="20" height="14" x="2" y="5" rx="2" />
-    <line x1="2" x2="22" y1="10" y2="10" />
   </svg>
 );

@@ -29,8 +29,6 @@ export const MerchantDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [triggerAddProduct, setTriggerAddProduct] = useState(false);
 
-  // State untuk melacak tab mana saja yang PERNAH dibuka
-  // Agar tidak memuat semua tab sekaligus di awal (Lazy Load)
   const [visitedTabs, setVisitedTabs] = useState<Record<string, boolean>>({
     overview: true,
   });
@@ -45,14 +43,12 @@ export const MerchantDashboard: React.FC = () => {
     stopAlarm,
   } = useMerchantDashboard();
 
-  // Update daftar tab yang pernah dikunjungi
   useEffect(() => {
     if (!visitedTabs[activeTab]) {
       setVisitedTabs((prev) => ({ ...prev, [activeTab]: true }));
     }
   }, [activeTab, visitedTabs]);
 
-  // Safe Counters
   const validProductsCount = products
     ? products.filter((p: any) => p && p.id).length
     : 0;
@@ -66,13 +62,6 @@ export const MerchantDashboard: React.FC = () => {
     setTimeout(() => setTriggerAddProduct(false), 500);
   };
 
-  const handleProcessOrder = () => {
-    stopAlarm();
-    setActiveTab("orders");
-    fetchBaseData();
-  };
-
-  // Tampilan awal saat memuat data profil
   if (!merchantProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white font-black text-slate-300 uppercase tracking-[0.3em] animate-pulse">
@@ -83,7 +72,6 @@ export const MerchantDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white flex flex-col md:flex-row font-sans text-left overflow-hidden">
-      {/* SIDEBAR */}
       <aside className="hidden md:flex w-64 h-screen fixed left-0 top-0 z-50 border-r border-slate-100 bg-white">
         <MerchantSidebar
           activeTab={activeTab}
@@ -98,31 +86,17 @@ export const MerchantDashboard: React.FC = () => {
         />
       </aside>
 
-      {/* KONTEN UTAMA */}
       <div className="flex-1 flex flex-col min-w-0 md:ml-64 w-full md:w-[calc(100%-16rem)] h-screen overflow-hidden">
-        {/* HEADER */}
         <MerchantHeader
           shopName={merchantProfile.shop_name}
           marketName={merchantProfile.market_name}
           isOpen={merchantProfile.is_shop_open}
         />
 
-        {/* TAB CONTENT AREA */}
         <main className="flex-1 overflow-y-auto no-scrollbar pb-24 md:pb-6 bg-slate-50/30">
           <div className="p-3 md:p-6 w-full max-w-[1400px] mx-auto relative">
-            {/* TEKNIK ANTI-KEDIP (KEEP ALIVE):
-                Semua tab dirender tapi disembunyikan (hidden) jika tidak aktif.
-                Ini mencegah "Unmount/Mount" yang menyebabkan layar putih.
-            */}
-
             {/* 1. OVERVIEW */}
-            <div
-              className={
-                activeTab === "overview"
-                  ? "block animate-in fade-in duration-300"
-                  : "hidden"
-              }
-            >
+            <div className={activeTab === "overview" ? "block" : "hidden"}>
               <MerchantOverview
                 merchantProfile={merchantProfile}
                 stats={{
@@ -132,15 +106,9 @@ export const MerchantDashboard: React.FC = () => {
               />
             </div>
 
-            {/* 2. PRODUCTS */}
+            {/* 2. PRODUCTS - FIX: Mengirimkan props yang sudah didefinisikan */}
             {visitedTabs["products"] && (
-              <div
-                className={
-                  activeTab === "products"
-                    ? "block animate-in fade-in duration-300"
-                    : "hidden"
-                }
-              >
+              <div className={activeTab === "products" ? "block" : "hidden"}>
                 <MerchantProducts
                   merchantProfile={merchantProfile}
                   autoOpenForm={triggerAddProduct}
@@ -150,46 +118,34 @@ export const MerchantDashboard: React.FC = () => {
 
             {/* 3. ORDERS */}
             {visitedTabs["orders"] && (
-              <div
-                className={
-                  activeTab === "orders"
-                    ? "block animate-in fade-in duration-300"
-                    : "hidden"
-                }
-              >
+              <div className={activeTab === "orders" ? "block" : "hidden"}>
                 <MerchantOrders merchantProfile={merchantProfile} />
               </div>
             )}
 
             {/* 4. MESSAGES */}
             {visitedTabs["messages"] && (
-              <div
-                className={
-                  activeTab === "messages"
-                    ? "block animate-in fade-in duration-300"
-                    : "hidden"
-                }
-              >
+              <div className={activeTab === "messages" ? "block" : "hidden"}>
                 <MerchantMessages />
               </div>
             )}
 
-            {/* 5. FINANCE / WALLET */}
-            {visitedTabs["wallet"] || visitedTabs["finance"] ? (
+            {/* 5. FINANCE */}
+            {(visitedTabs["wallet"] || visitedTabs["finance"]) && (
               <div
                 className={
                   activeTab === "wallet" || activeTab === "finance"
-                    ? "block animate-in fade-in duration-300"
+                    ? "block"
                     : "hidden"
                 }
               >
                 <MerchantFinanceDashboard />
               </div>
-            ) : null}
+            )}
 
-            {/* 6. LOCATION (Modal Style) */}
+            {/* 6. LOCATION */}
             {activeTab === "location" && (
-              <div className="bg-white border-2 border-slate-100 animate-in zoom-in-95 duration-200">
+              <div className="bg-white border-2 border-slate-100">
                 <LocationPickerModal
                   merchantProfile={merchantProfile}
                   onClose={() => setActiveTab("overview")}
@@ -218,7 +174,11 @@ export const MerchantDashboard: React.FC = () => {
 
       <MerchantAlarmModal
         incomingOrder={incomingOrder}
-        onProcess={handleProcessOrder}
+        onProcess={() => {
+          stopAlarm();
+          setActiveTab("orders");
+          fetchBaseData();
+        }}
         onMute={stopAlarm}
       />
     </div>

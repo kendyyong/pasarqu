@@ -1,11 +1,7 @@
 import React from "react";
-import {
-  ShoppingBasket,
-  Timer,
-  Package,
-  Store,
-  Tag, // Icon baru untuk diskon
-} from "lucide-react";
+import { ShoppingBasket, Timer, Package, Store, Tag } from "lucide-react";
+// ✅ Jalur diperbaiki: Mundur 2 langkah ke src, lalu ke hooks
+import { useMerchantProducts } from "../../hooks/useMerchantProducts";
 
 interface Props {
   product: any;
@@ -22,22 +18,18 @@ export const ProductCard: React.FC<Props> = ({
   const isLowStock = product.stock > 0 && product.stock < 5;
 
   // LOGIC DISKON
-  // Cek apakah ada diskon aktif
   const hasDiscount =
     product.discount_type &&
     product.discount_type !== "none" &&
     product.discount_value > 0;
 
-  // Tentukan harga yang ditampilkan (Gunakan final_price jika ada diskon)
   const displayPrice = hasDiscount ? product.final_price : product.price;
 
-  // Hitung persentase untuk badge jika tipenya 'fixed' (potongan harga)
   let discountBadgeText = "";
   if (hasDiscount) {
     if (product.discount_type === "percent") {
       discountBadgeText = `-${product.discount_value}%`;
     } else {
-      // Hitung persen manual untuk tampilan badge jika potongannya rupiah
       const percent = Math.round(
         ((product.price - product.final_price) / product.price) * 100,
       );
@@ -64,7 +56,7 @@ export const ProductCard: React.FC<Props> = ({
           alt={product.name}
         />
 
-        {/* BADGE DISKON (Baru) */}
+        {/* BADGE DISKON */}
         {hasDiscount && !isHabis && (
           <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-sm z-10 animate-pulse">
             {discountBadgeText}
@@ -87,14 +79,12 @@ export const ProductCard: React.FC<Props> = ({
           </p>
         </div>
 
-        <h4 className="text-[11px] font-bold text-slate-800 line-clamp-2 mb-2 leading-tight min-h-[32px]">
+        <h4 className="text-[11px] font-bold text-slate-800 line-clamp-2 mb-2 leading-tight min-h-[32px] text-left">
           {product.name}
         </h4>
 
         <div className="mt-auto mb-3">
-          {/* HARGA AREA */}
-          <div className="flex flex-col">
-            {/* Harga Coret (Jika Diskon) */}
+          <div className="flex flex-col text-left">
             {hasDiscount && (
               <span className="text-[10px] text-slate-400 line-through font-medium mb-[-2px]">
                 Rp {product.price.toLocaleString()}

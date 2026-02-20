@@ -19,21 +19,34 @@ export const CartItemCard: React.FC<Props> = ({
   onRemove,
   onNavigate,
 }) => (
-  <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-    <div className="px-3 py-2 border-b border-slate-50 flex items-center gap-2 bg-slate-50/50">
-      <input
-        type="checkbox"
-        checked={isSelected}
-        onChange={() => onToggle(item.id)}
-        className="w-4 h-4 accent-teal-600 rounded cursor-pointer"
-      />
-      <Store size={14} className="text-slate-500" />
-      <span className="text-xs font-bold text-slate-700">Toko Official</span>
-      <ArrowRight size={12} className="text-slate-400" />
+  <div className="bg-white border-2 border-slate-100 overflow-hidden transition-all hover:border-teal-500/30">
+    {/* HEADER TOKO */}
+    <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggle(item.id)}
+          className="w-4 h-4 accent-teal-600 rounded cursor-pointer"
+        />
+        <Store size={14} className="text-teal-600" />
+        <span className="text-[10px] font-black text-slate-800 uppercase tracking-tighter">
+          {item.merchant_name || "TOKO PASARQU"}
+        </span>
+      </div>
+      <button
+        onClick={() => onNavigate(item.id)}
+        className="text-[9px] font-black text-slate-400 hover:text-teal-600 uppercase flex items-center gap-1"
+      >
+        Detail <ArrowRight size={10} />
+      </button>
     </div>
-    <div className="p-3 flex gap-3">
+
+    {/* BODY KONTEN */}
+    <div className="p-3 flex gap-4">
+      {/* GAMBAR PRODUK */}
       <div
-        className="w-20 h-20 bg-slate-100 rounded-lg overflow-hidden shrink-0 border border-slate-100 cursor-pointer"
+        className="w-16 h-16 bg-slate-50 border border-slate-100 overflow-hidden shrink-0 cursor-pointer"
         onClick={() => onNavigate(item.id)}
       >
         <img
@@ -42,44 +55,51 @@ export const CartItemCard: React.FC<Props> = ({
           className="w-full h-full object-cover"
         />
       </div>
+
+      {/* INFORMASI PRODUK */}
       <div className="flex-1 flex flex-col justify-between">
         <h3
-          className="text-sm font-medium text-slate-800 line-clamp-2 leading-snug cursor-pointer"
+          className="text-[11px] font-black text-slate-900 uppercase leading-tight line-clamp-2 cursor-pointer tracking-tight"
           onClick={() => onNavigate(item.id)}
         >
           {item.name}
         </h3>
-        <div className="flex items-end justify-between mt-2">
-          <span className="text-sm font-black text-teal-700">
-            Rp{item.price.toLocaleString()}
+
+        <div className="flex items-center justify-between mt-2">
+          <span className="text-xs font-black text-orange-600">
+            RP {item.price.toLocaleString()}
           </span>
-          <div className="flex items-center border border-slate-200 rounded-md bg-white shadow-sm">
+
+          {/* KONTROL QUANTITY */}
+          <div className="flex items-center border-2 border-slate-900 bg-white">
             <button
               onClick={() => onUpdateQty(item.id, -1)}
-              className="w-7 h-7 flex items-center justify-center text-slate-500 hover:bg-slate-50 border-r border-slate-200 disabled:opacity-50"
+              className="w-6 h-6 flex items-center justify-center text-slate-900 hover:bg-slate-100 disabled:opacity-30"
               disabled={item.quantity <= 1}
             >
-              <Minus size={12} strokeWidth={3} />
+              <Minus size={10} strokeWidth={4} />
             </button>
-            <span className="w-9 text-center text-xs font-bold text-slate-700">
+            <span className="w-8 text-center text-[10px] font-black text-slate-900 border-x-2 border-slate-900">
               {item.quantity}
             </span>
             <button
               onClick={() => onUpdateQty(item.id, 1)}
-              className="w-7 h-7 flex items-center justify-center text-teal-600 hover:bg-teal-50 border-l border-slate-200"
+              className="w-6 h-6 flex items-center justify-center text-teal-600 hover:bg-teal-50"
             >
-              <Plus size={12} strokeWidth={3} />
+              <Plus size={10} strokeWidth={4} />
             </button>
           </div>
         </div>
       </div>
     </div>
-    <div className="px-3 py-2 border-t border-slate-50 flex justify-end">
+
+    {/* FOOTER ACTIONS */}
+    <div className="px-3 py-1.5 border-t border-slate-50 flex justify-end">
       <button
         onClick={() => onRemove(item.id)}
-        className="text-[10px] text-slate-400 hover:text-red-500 flex items-center gap-1"
+        className="text-[9px] font-black text-slate-400 hover:text-red-600 uppercase flex items-center gap-1 transition-colors"
       >
-        <Trash2 size={12} /> Hapus
+        <Trash2 size={11} /> Hapus Barang
       </button>
     </div>
   </div>

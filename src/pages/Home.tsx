@@ -19,7 +19,7 @@ interface HomeProps {
   searchQuery: string;
 }
 
-// --- SKELETON LOADER (Fitur Asli) ---
+// --- SKELETON LOADER ---
 const SkeletonCard = () => (
   <div className="flex flex-col h-full bg-white border border-slate-100 rounded-none overflow-hidden animate-pulse">
     <div className="aspect-square w-full bg-slate-200" />
@@ -35,7 +35,7 @@ const SkeletonCard = () => (
 
 export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   const navigate = useNavigate();
-  const { selectedMarket, addToCart } = useMarket();
+  const { selectedMarket, addToCart, markets, setMarketById } = useMarket(); // Pastikan setMarketById ada di context Anda
   const { showToast } = useToast();
 
   const [products, setProducts] = useState<any[]>([]);
@@ -43,6 +43,21 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   const [ads, setAds] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeSlide, setActiveSlide] = useState(0);
+
+  // --- LOGIKA BARU: SINKRONISASI PASAR PASCA LOGOUT ---
+  useEffect(() => {
+    // Ambil ID pasar yang dititipkan di localStorage saat logout
+    const savedMarketId = localStorage.getItem("active_market_id");
+
+    // Jika ada ID titipan dan ID tersebut berbeda dengan pasar yang sedang aktif
+    if (savedMarketId && selectedMarket?.id !== savedMarketId) {
+      // Panggil fungsi untuk mengganti pasar secara global
+      // Pastikan fungsi setMarketById atau logic serupa tersedia di MarketContext Anda
+      if (typeof setMarketById === "function") {
+        setMarketById(savedMarketId);
+      }
+    }
+  }, [selectedMarket, setMarketById]);
 
   // --- FETCH DATA LOGIC ---
   const fetchAds = async () => {
@@ -71,6 +86,12 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
 
       if (selectedMarket?.id) {
         query = query.eq("market_id", selectedMarket.id);
+      } else {
+        // Jika belum ada pasar terpilih, coba ambil dari localStorage sebagai cadangan terakhir
+        const fallbackId = localStorage.getItem("active_market_id");
+        if (fallbackId) {
+          query = query.eq("market_id", fallbackId);
+        }
       }
 
       const { data, error } = await query;
@@ -133,7 +154,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   return (
     <div className="w-full font-sans text-left bg-white min-h-screen pb-16 pt-[10px] overflow-x-hidden">
       <div className="max-w-[1200px] mx-auto">
-        {/* 1. IKLAN SLIDE (Fitur Asli) */}
+        {/* 1. IKLAN SLIDE */}
         {!searchQuery && ads.length > 0 && (
           <div className="mt-0">
             <div className="relative h-44 md:h-72 w-full overflow-hidden rounded-none md:rounded-xl group border-none text-left shadow-md">
@@ -159,7 +180,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
           </div>
         )}
 
-        {/* 2. QUICK ACTIONS (Fitur Asli) */}
+        {/* 2. QUICK ACTIONS */}
         {!searchQuery && quickActions.length > 0 && (
           <div className="mt-5 px-4 md:px-0">
             <div className="bg-white p-5 overflow-x-auto no-scrollbar flex gap-6 rounded-xl border border-slate-100 shadow-sm">
@@ -183,7 +204,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
           </div>
         )}
 
-        {/* 3. PRODUK GRID (Fitur Asli) */}
+        {/* 3. PRODUK GRID */}
         <div className="mt-8 mb-8">
           <div className="flex items-center justify-between mb-4 px-5 md:px-1">
             <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
@@ -200,7 +221,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                 ))}
               </>
             ) : (
-              filteredProducts.map((product, index) => {
+              filteredProducts.map((product) => {
                 const isHabis = product.stock <= 0;
                 const isLowStock = product.stock > 0 && product.stock < 5;
 
@@ -210,7 +231,6 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
                     onClick={() => navigate(`/product/${product.id}`)}
                     className={`flex flex-col h-full bg-white rounded-none md:rounded-xl md:border md:border-slate-100 md:shadow-sm overflow-hidden group transition-all ${isHabis ? "opacity-90" : ""}`}
                   >
-                    {/* AREA GAMBAR */}
                     <div className="aspect-square w-full overflow-hidden bg-slate-50 cursor-pointer relative">
                       <img
                         src={
@@ -292,7 +312,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
           </div>
         </div>
 
-        {/* 4. PORTAL MITRA (Fitur Asli) */}
+        {/* 4. PORTAL MITRA */}
         <div className="mt-8 mb-10 px-4 md:px-0 pb-20">
           <div className="bg-slate-900 p-6 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden rounded-2xl shadow-2xl">
             <div className="relative z-10 flex flex-col md:flex-row items-center gap-4 text-center md:text-left">

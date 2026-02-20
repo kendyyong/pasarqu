@@ -5,7 +5,8 @@ import { AppHeader } from "../components/layout/AppHeader";
 import { HeroOnboarding } from "./home/components/HeroOnboarding";
 import { HomeMenuGrid } from "./home/components/HomeMenuGrid";
 import { CartDrawer } from "../components/shared/CartDrawer";
-import { CheckoutPaymentPage } from "./checkout/CheckoutPaymentPage";
+
+// ✅ FIX JALUR IMPORT (Hanya mundur 1 tingkat)
 import { useAuth } from "../contexts/AuthContext";
 import { useMarket } from "../contexts/MarketContext";
 
@@ -27,18 +28,17 @@ export const MarketplaceApp = () => {
     "home" | "search" | "orders" | "account"
   >("home");
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const totalCartItems = useMemo(() => {
     return cart.reduce((sum, item) => sum + (item.quantity || 0), 0);
   }, [cart]);
 
+  // Efek jika ada redirect untuk langsung buka checkout setelah login
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("openCheckout") === "true" && user) {
-      setTimeout(() => setIsCheckoutOpen(true), 500);
-      navigate("/", { replace: true });
+      navigate("/checkout", { replace: true });
     }
   }, [location, user, navigate]);
 
@@ -47,7 +47,7 @@ export const MarketplaceApp = () => {
     if (!user) {
       navigate("/register?redirect=checkout");
     } else {
-      setTimeout(() => setIsCheckoutOpen(true), 300);
+      navigate("/checkout");
     }
   };
 
@@ -94,13 +94,6 @@ export const MarketplaceApp = () => {
           onRemove={removeFromCart}
           onCheckout={handleCheckoutTrigger}
         />
-
-        {user && (
-          <CheckoutPaymentPage
-            isOpen={isCheckoutOpen}
-            onClose={() => setIsCheckoutOpen(false)}
-          />
-        )}
       </MobileLayout>
     </div>
   );

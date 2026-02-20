@@ -1,5 +1,3 @@
-// --- FULL SCRIPT src/types.ts ---
-
 export enum UserRole {
   SUPER_ADMIN = "SUPER_ADMIN",
   LOCAL_ADMIN = "LOCAL_ADMIN",
@@ -54,7 +52,7 @@ export interface ShippingRates {
 export interface Market {
   id: string;
   name: string;
-  brandName: string; // ✅ Digunakan untuk Branding Area di Top Bar
+  brandName: string;
   district: string;
   latitude: number;
   longitude: number;
@@ -99,10 +97,13 @@ export interface Product {
   };
 }
 
+// UPDATE: CartItem sekarang memiliki distance dan merchant_name
 export interface CartItem extends Product {
   quantity: number;
   variant_name?: string;
   product?: Product;
+  distance?: number;      
+  merchant_name?: string; 
 }
 
 export interface StoreProfile {
@@ -176,6 +177,10 @@ export interface Order {
   proof_of_transfer?: string;
   pickupCode?: string;
   buyerName?: string;
+  // Kabel data tambahan untuk Admin
+  courier_surge_fee?: number;
+  total_platform_fee?: number;
+  total_merchants?: number;
 }
 
 export type Transaction = Order;

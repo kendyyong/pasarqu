@@ -29,7 +29,8 @@ export const MerchantMessages = () => {
         .from("merchants")
         .select("is_shop_open")
         .eq("id", user.id)
-        .single();
+        .maybeSingle(); // FIX: Menggunakan maybeSingle agar tidak Error 406
+
       if (data) setIsShopOpen(data.is_shop_open);
     };
 
@@ -66,7 +67,8 @@ export const MerchantMessages = () => {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          `id, status, created_at, profiles:customer_id (full_name), couriers:courier_id (full_name)`,
+          // FIX: Menggunakan 'name' bukan 'full_name' sesuai tabel database Anda
+          `id, status, created_at, profiles:customer_id (name), couriers:courier_id (name)`,
         )
         .eq("merchant_id", user?.id)
         .order("created_at", { ascending: false });
@@ -158,7 +160,7 @@ export const MerchantMessages = () => {
                     onClick={() =>
                       setSelectedChat({
                         orderId: order.id,
-                        name: order.profiles?.full_name || "Pelanggan",
+                        name: order.profiles?.name || "Pelanggan", // FIX: Menggunakan name
                         type: "merchant_customer",
                       })
                     }
@@ -170,7 +172,8 @@ export const MerchantMessages = () => {
                       </div>
                       <div className="text-left">
                         <h4 className="font-black text-[10px] uppercase truncate max-w-[120px]">
-                          {order.profiles?.full_name || "Pelanggan"}
+                          {order.profiles?.name || "Pelanggan"}{" "}
+                          {/* FIX: Menggunakan name */}
                         </h4>
                         <p className="text-[7px] font-bold uppercase opacity-50">
                           Buyer (Layanan CS)
@@ -188,7 +191,7 @@ export const MerchantMessages = () => {
                       onClick={() =>
                         setSelectedChat({
                           orderId: order.id,
-                          name: order.couriers?.full_name || "Kurir",
+                          name: order.couriers?.name || "Kurir", // FIX: Menggunakan name
                           type: "courier_merchant",
                         })
                       }
@@ -200,7 +203,7 @@ export const MerchantMessages = () => {
                         </div>
                         <div className="text-left">
                           <h4 className="font-black text-[10px] uppercase truncate max-w-[120px]">
-                            {order.couriers?.full_name}
+                            {order.couriers?.name} {/* FIX: Menggunakan name */}
                           </h4>
                           <p className="text-[7px] font-bold uppercase opacity-60">
                             Koordinasi Driver

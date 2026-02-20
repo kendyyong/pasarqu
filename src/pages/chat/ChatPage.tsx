@@ -8,6 +8,7 @@ import {
   X,
   Send,
   ArrowLeft,
+  User,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabaseClient";
@@ -22,7 +23,6 @@ export const ChatPage = () => {
 
   useEffect(() => {
     if (!user) return;
-
     const fetchRooms = async () => {
       setLoading(true);
       const { data, error } = await supabase
@@ -40,7 +40,6 @@ export const ChatPage = () => {
       if (!error) setConversations(data || []);
       setLoading(false);
     };
-
     fetchRooms();
   }, [user]);
 
@@ -57,40 +56,36 @@ export const ChatPage = () => {
     );
 
   return (
-    <div className="min-h-screen bg-slate-100 font-sans text-left">
-      {/* Container Utama dengan Max-Width agar tidak terlalu lebar di Desktop */}
-      <div className="max-w-[1200px] mx-auto h-screen bg-white flex overflow-hidden shadow-2xl border-x border-slate-200">
+    <div className="min-h-screen bg-slate-50 font-black uppercase tracking-tighter text-left">
+      <div className="max-w-[1400px] mx-auto h-screen bg-white flex overflow-hidden shadow-2xl">
         {/* --- KOLOM KIRI: DAFTAR CHAT --- */}
         <div
-          className={`w-full md:w-[350px] border-r border-slate-100 flex flex-col ${isMobileChatOpen ? "hidden md:flex" : "flex"}`}
+          className={`w-full md:w-[380px] border-r border-slate-100 flex flex-col ${isMobileChatOpen ? "hidden md:flex" : "flex"}`}
         >
-          <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-white">
-            <div className="flex items-center gap-3">
+          <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-white shrink-0">
+            <div className="flex items-center gap-4">
               <button
                 onClick={() => navigate("/")}
-                className="p-1 hover:text-teal-600 transition-colors"
+                className="p-2 hover:bg-slate-50 rounded-full transition-all"
               >
-                <ArrowLeft size={20} />
+                <ArrowLeft size={24} />
               </button>
-              <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">
+              <h2 className="text-xl font-black">
                 PESAN <span className="text-teal-600">MASUK</span>
               </h2>
             </div>
-            <button className="w-10 h-10 bg-slate-50 flex items-center justify-center text-teal-600 hover:bg-teal-600 hover:text-white transition-all">
-              <Plus size={20} />
-            </button>
           </div>
 
           <div className="p-4 border-b border-slate-50">
             <div className="relative">
               <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                size={16}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                size={18}
               />
               <input
                 type="text"
-                placeholder="Cari percakapan..."
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border-none text-xs font-bold focus:ring-1 ring-teal-500 transition-all outline-none"
+                placeholder="CARI KONTAK..."
+                className="w-full pl-12 pr-4 py-4 bg-slate-50 border-none text-[11px] font-black focus:ring-2 ring-teal-500 transition-all outline-none rounded-2xl"
               />
             </div>
           </div>
@@ -105,9 +100,9 @@ export const ChatPage = () => {
                 <div
                   key={room.id}
                   onClick={() => handleSelect(room.id)}
-                  className={`p-4 flex items-center gap-4 cursor-pointer transition-all border-b border-slate-50 ${activeRoomId === room.id ? "bg-teal-50" : "hover:bg-slate-50"}`}
+                  className={`p-5 flex items-center gap-4 cursor-pointer transition-all border-b border-slate-50 ${activeRoomId === room.id ? "bg-teal-50 border-l-4 border-l-teal-600" : "hover:bg-slate-50"}`}
                 >
-                  <div className="w-12 h-12 bg-slate-200 overflow-hidden shrink-0 border border-slate-100">
+                  <div className="w-14 h-14 bg-slate-100 rounded-2xl overflow-hidden shrink-0 border border-slate-200 shadow-sm">
                     {opponent?.avatar_url ? (
                       <img
                         src={opponent.avatar_url}
@@ -115,17 +110,17 @@ export const ChatPage = () => {
                         alt="avatar"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-400 font-black uppercase text-sm">
-                        {opponent?.full_name?.substring(0, 2) || "U"}
+                      <div className="w-full h-full flex items-center justify-center text-slate-300">
+                        <User size={24} />
                       </div>
                     )}
                   </div>
-                  <div className="flex-1 overflow-hidden text-left">
-                    <h4 className="font-black text-slate-800 uppercase tracking-tighter truncate">
-                      {opponent?.full_name || "User Pasarqu"}
+                  <div className="flex-1 overflow-hidden">
+                    <h4 className="font-black text-slate-800 text-sm truncate">
+                      {opponent?.full_name || "USER PASARQU"}
                     </h4>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">
-                      Lihat pesan terakhir
+                    <p className="text-[9px] text-slate-400 font-bold truncate mt-1">
+                      LIHAT DETAIL PERCAKAPAN
                     </p>
                   </div>
                 </div>
@@ -134,59 +129,80 @@ export const ChatPage = () => {
           </div>
         </div>
 
-        {/* --- KOLOM KANAN: RUANG CHAT --- */}
+        {/* --- KOLOM KANAN: RUANG CHAT (POSISI TENGAH & LUAS) --- */}
         <div
-          className={`flex-1 flex flex-col bg-slate-50 ${isMobileChatOpen ? "flex" : "hidden md:flex"}`}
+          className={`flex-1 flex flex-col bg-slate-50 relative ${isMobileChatOpen ? "flex" : "hidden md:flex"}`}
         >
           {activeRoomId ? (
             <>
-              {/* Header Chat */}
-              <div className="p-4 bg-white border-b border-slate-100 flex items-center gap-4 sticky top-0 z-10">
-                <button
-                  onClick={() => setIsMobileChatOpen(false)}
-                  className="md:hidden p-2 text-slate-500"
-                >
-                  <X size={20} />
-                </button>
-                <div className="w-10 h-10 bg-teal-50 flex items-center justify-center text-teal-600 font-black uppercase text-xs">
-                  ID
-                </div>
-                <h3 className="font-black text-slate-800 uppercase tracking-tighter">
-                  PERCAKAPAN AKTIF
-                </h3>
-              </div>
-
-              {/* Chat Content */}
-              <div className="flex-1 p-6 overflow-y-auto space-y-4">
-                <div className="flex justify-start">
-                  <div className="bg-white p-4 border border-slate-200 shadow-sm max-w-[85%] text-sm font-bold text-slate-700 leading-relaxed">
-                    Halo Juragan, ada yang bisa kami bantu mengenai pesanan ini?
+              {/* Header Chat Aktif */}
+              <div className="p-4 md:p-6 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-10">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setIsMobileChatOpen(false)}
+                    className="md:hidden p-2"
+                  >
+                    <X size={24} />
+                  </button>
+                  <div className="w-12 h-12 bg-teal-600 rounded-2xl flex items-center justify-center text-white font-black shadow-lg shadow-teal-100">
+                    <MessageSquareText size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-800 text-base leading-none">
+                      ADMIN SUPPORT
+                    </h3>
+                    <p className="text-[9px] text-teal-600 mt-1 tracking-widest">
+                      ONLINE SEKARANG
+                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* Input Box */}
-              <div className="p-4 bg-white border-t border-slate-100 flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Ketik pesan di sini..."
-                  className="flex-1 bg-slate-50 border border-slate-200 px-5 py-3 text-sm font-bold focus:border-teal-500 outline-none"
-                />
-                <button className="w-14 h-14 bg-teal-600 text-white flex items-center justify-center hover:bg-teal-700 transition-all shadow-md">
-                  <Send size={20} />
-                </button>
+              {/* Chat Content: Dibuat di Tengah & Luas */}
+              <div className="flex-1 p-4 md:p-10 overflow-y-auto space-y-6 flex flex-col items-center">
+                <div className="w-full max-w-[800px] flex flex-col gap-4">
+                  {/* BUBBLE CHAT TERIMA */}
+                  <div className="flex justify-start">
+                    <div className="bg-white p-5 rounded-[2rem] rounded-tl-none shadow-sm border border-slate-100 text-xs md:text-sm font-bold text-slate-700 leading-relaxed max-w-[90%] md:max-w-[70%]">
+                      HALO JURAGAN, ADA YANG BISA KAMI BANTU MENGENAI PESANAN
+                      ANDA? KAMI SIAP MELAYANI.
+                    </div>
+                  </div>
+                  {/* BUBBLE CHAT KIRIM */}
+                  <div className="flex justify-end">
+                    <div className="bg-teal-600 p-5 rounded-[2rem] rounded-tr-none shadow-xl text-white text-xs md:text-sm font-bold leading-relaxed max-w-[90%] md:max-w-[70%]">
+                      SAYA MAU TANYA STATUS BARANG SAYA, APAKAH SUDAH SELESAI
+                      DIKEMAS?
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Input Box: Melayang di Bawah */}
+              <div className="p-4 md:p-8 bg-transparent shrink-0">
+                <div className="max-w-[800px] mx-auto bg-white p-2 rounded-[2.5rem] shadow-2xl border border-slate-100 flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="KETIK PESAN JURAGAN..."
+                    className="flex-1 bg-transparent px-6 py-4 text-xs font-black outline-none"
+                  />
+                  <button className="w-14 h-14 bg-teal-600 text-white rounded-full flex items-center justify-center hover:bg-slate-900 transition-all shadow-lg active:scale-90">
+                    <Send size={20} />
+                  </button>
+                </div>
               </div>
             </>
           ) : (
+            /* TAMPILAN KOSONG - POSISI TENGAH */
             <div className="flex-1 flex flex-col items-center justify-center text-center p-10 bg-slate-50">
-              <div className="w-20 h-20 bg-white flex items-center justify-center text-slate-200 shadow-sm mb-4 border border-slate-100">
-                <MessageSquareText size={40} />
+              <div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center text-slate-200 shadow-xl mb-6 border border-slate-100">
+                <MessageSquareText size={48} />
               </div>
-              <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">
-                Pilih Percakapan
+              <h3 className="text-sm font-black text-slate-400 tracking-[0.3em]">
+                PILIH PERCAKAPAN
               </h3>
-              <p className="text-[10px] text-slate-300 font-bold uppercase mt-2 tracking-widest">
-                Silakan klik salah satu daftar chat di samping
+              <p className="text-[10px] text-slate-300 font-bold mt-3 tracking-widest max-w-[200px] leading-loose">
+                KLIK SALAH SATU DAFTAR CHAT UNTUK MEMULAI KONSULTASI
               </p>
             </div>
           )}

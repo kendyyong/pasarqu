@@ -32,7 +32,13 @@ import { LocalAdminDashboard } from "../pages/admin/local-admin/LocalAdminDashbo
 import { SuperAdminDashboard } from "../pages/admin/super-admin/SuperAdminDashboard";
 import { ShippingConfig } from "../pages/admin/super-admin/components/ShippingConfig";
 
-// ✅ IMPORT HALAMAN CHAT
+// ✅ IMPORT KOMPONEN CUSTOMER BARU
+import { AddressSettingsPage } from "../pages/customer/components/AddressSettingsPage";
+import { OrderHistoryPage } from "../pages/customer/components/OrderHistoryPage";
+
+// ✅ IMPORT HALAMAN CHECKOUT & LAINNYA
+import { CheckoutPaymentPage } from "../pages/checkout/CheckoutPaymentPage";
+import { OrderInvoice } from "../pages/Invoice/OrderInvoice";
 import { ChatPage } from "../pages/chat/ChatPage";
 import { ChatRoom } from "../pages/chat/ChatRoom";
 
@@ -68,22 +74,52 @@ export const AppRoutes = () => {
     "/merchant-promo",
     "/promo/kurir",
     "/select-market",
-    "/chat", // ✅ TAMBAHKAN INI AGAR TIDAK KEDIP
+    "/chat",
+    "/invoice",
+    "/checkout",
+    "/settings/address",
+    "/order-history", // ✅ Bypass agar bisa diakses tanpa paksaan pilih pasar ulang
   ];
 
   const isBypassRoute = bypassRoutes.some((route) =>
     location.pathname.startsWith(route),
   );
 
-  // Logika: Jika belum pilih pasar dan bukan jalur bypass, paksa ke halaman pilih pasar
-  if (!selectedMarket && !isBypassRoute) return <MarketSelectionPage />;
+  const isCheckoutPage = location.pathname === "/checkout";
+
+  if (!selectedMarket && !isBypassRoute && !isCheckoutPage) {
+    return <MarketSelectionPage />;
+  }
 
   return (
     <Routes>
+      {/* 1. RUTE UTAMA (DASHBOARD) */}
       <Route path="/" element={<RoleBasedRedirect />} />
       <Route path="/select-market" element={<MarketSelectionPage />} />
 
-      {/* --- ✅ RUTE CHAT (REALTIME) --- */}
+      {/* --- RUTE CHECKOUT --- */}
+      <Route
+        path="/checkout"
+        element={
+          <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN"]}>
+            <CheckoutPaymentPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* --- RUTE INVOICE --- */}
+      <Route
+        path="/invoice/:orderId"
+        element={
+          <ProtectedRoute
+            allowedRoles={["MERCHANT", "SUPER_ADMIN", "LOCAL_ADMIN"]}
+          >
+            <OrderInvoice />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* --- RUTE CHAT --- */}
       <Route
         path="/chat"
         element={
@@ -170,6 +206,27 @@ export const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
+
+      {/* --- ✅ RUTE PENGATURAN ALAMAT CUSTOMER --- */}
+      <Route
+        path="/settings/address"
+        element={
+          <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN"]}>
+            <AddressSettingsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* --- ✅ RUTE RIWAYAT PESANAN CUSTOMER --- */}
+      <Route
+        path="/order-history"
+        element={
+          <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN"]}>
+            <OrderHistoryPage />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/admin-wilayah"
         element={

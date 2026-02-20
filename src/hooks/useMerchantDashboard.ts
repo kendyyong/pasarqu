@@ -1,10 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-// PERBAIKAN 1: Jalur import disesuaikan (cukup mundur 1 folder dari src/hooks)
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 
-// --- LINK SUARA ALARM ---
 const ALARM_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
 export const useMerchantDashboard = () => {
@@ -17,74 +15,79 @@ export const useMerchantDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [incomingOrder, setIncomingOrder] = useState<any>(null);
   
-  // Audio Ref
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Init Audio
   useEffect(() => {
     audioRef.current = new Audio(ALARM_URL);
     audioRef.current.loop = true;
   }, []);
 
-  // Fetch Data Utama
   const fetchBaseData = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      // 1. Get Profile & Market Name
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("*, markets:managed_market_id(name)")
-        .eq("id", user.id)
-        .single();
-        
-      // 2. Get Merchant Data (jika ada)
-      let { data: merchantData } = await supabase
-        .from("merchants")
-        .select("*, markets(name)")
-        .or(`user_id.eq.${user.id},id.eq.${user.id}`)
-        .maybeSingle();
+      // 1. AMBIL DATA PROFIL & MERCHANT
+      const [resProfile, resMerchant] = await Promise.all([
+        supabase.from("profiles").select("*, markets:managed_market_id(name)").eq("id", user.id).maybeSingle(),
+        supabase.from("merchants").select("*, markets(name)").or(`user_id.eq.${user.id},id.eq.${user.id}`).maybeSingle()
+      ]);
 
-      if (profile?.is_verified) {
-        // Gabungkan data profil & merchant agar lengkap
+      const profile = resProfile.data;
+      const merchantData = resMerchant.data;
+
+      if (profile) {
+        // 2. LOGIKA GABUNGAN (SINKRONISASI LOKASI)
         const effectiveMerchant = {
           ...(merchantData || {}),
           id: merchantData?.id || user.id,
-          shop_name: merchantData?.shop_name || profile.shop_name || profile.name || "Toko Saya",
+          shop_name: merchantData?.shop_name || merchantData?.name || profile.shop_name || profile.name || "Toko Saya",
           market_id: merchantData?.market_id || profile.managed_market_id,
+          market_name: merchantData?.markets?.name || profile.markets?.name || "Muara Jawa",
+          is_shop_open: merchantData?.is_shop_open ?? true,
+          // FIX: Ambil koordinat dari profile jika di merchant masih kosong agar Sidebar update status
           latitude: merchantData?.latitude || profile.latitude,
           longitude: merchantData?.longitude || profile.longitude,
-          is_shop_open: merchantData?.is_shop_open ?? true,
-          market_name: merchantData?.markets?.name || profile.markets?.name || "Muara Jawa",
         };
 
         setMerchantProfile(effectiveMerchant);
 
-        // 3. Fetch Products & Orders Parallel
-        const [resProducts, resOrders] = await Promise.all([
-          supabase.from("products").select("*").eq("merchant_id", effectiveMerchant.id),
-          supabase.from("orders").select("*").eq("market_id", effectiveMerchant.market_id).order("created_at", { ascending: false }),
-        ]);
+        // 3. FETCH PRODUCTS & ORDERS
+        try {
+            const { data: prods } = await supabase.from("products").select("*").eq("merchant_id", effectiveMerchant.id);
+            setProducts(prods || []);
+            
+            const { data: ords, error: ordErr } = await supabase
+                .from("orders")
+                .select(`*, order_items!inner(*)`)
+                .eq("order_items.merchant_id", effectiveMerchant.id)
+                .order("created_at", { ascending: false });
+            
+            if (!ordErr) setOrders(ords || []);
+        } catch (subErr) {
+            console.warn("Gagal memuat rincian produk/order:", subErr);
+        }
 
-        setProducts(resProducts.data || []);
-        setOrders(resOrders.data || []);
       } else {
-        setMerchantProfile(null);
+        console.warn("⚠️ Profil tidak ditemukan di tabel profiles.");
       }
     } catch (err) {
-      console.error("Fetch Error:", err);
+      console.error("Dashboard Fetch Error:", err);
+      showToast("Gagal memuat data dashboard", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  // Toggle Status Toko (Buka/Tutup)
   const toggleShopStatus = async () => {
-    if (!merchantProfile) return;
+    if (!merchantProfile?.id) return;
     const newStatus = !merchantProfile.is_shop_open;
-
     try {
-      await supabase.from("merchants").update({ is_shop_open: newStatus }).eq("id", merchantProfile.id);
+      const { error } = await supabase.from("merchants").update({ is_shop_open: newStatus }).eq("id", merchantProfile.id);
+      if (error) throw error;
       setMerchantProfile((prev: any) => ({ ...prev, is_shop_open: newStatus }));
       showToast(newStatus ? "Toko BUKA" : "Toko TUTUP", "info");
     } catch {
@@ -92,7 +95,6 @@ export const useMerchantDashboard = () => {
     }
   };
 
-  // Alarm Control
   const triggerAlarm = (orderData: any) => {
     setIncomingOrder(orderData);
     audioRef.current?.play().catch((e) => console.log("Audio Blocked:", e));
@@ -106,22 +108,18 @@ export const useMerchantDashboard = () => {
     setIncomingOrder(null);
   };
 
-  // Realtime Listener
   useEffect(() => {
     fetchBaseData();
-    if (!user) return;
-  }, [user]);
+  }, [user?.id]);
 
-  // Listener Terpisah agar tidak re-subscribe terus
   useEffect(() => {
     if (!merchantProfile?.id) return;
 
     const channel = supabase
-      .channel("merchant_dashboard_realtime")
+      .channel(`merchant_sync_${merchantProfile.id}`)
       .on(
         "postgres_changes", 
         { event: "UPDATE", schema: "public", table: "merchants", filter: `id=eq.${merchantProfile.id}` }, 
-        // PERBAIKAN 2: Tambahkan tipe ': any' pada payload
         (payload: any) => {
            setMerchantProfile((prev: any) => ({ ...prev, is_shop_open: payload.new.is_shop_open }));
         }
@@ -129,9 +127,7 @@ export const useMerchantDashboard = () => {
       .on(
         "postgres_changes", 
         { event: "INSERT", schema: "public", table: "order_items", filter: `merchant_id=eq.${merchantProfile.id}` }, 
-        // PERBAIKAN 2: Tambahkan tipe ': any' pada payload
         (payload: any) => {
-           console.log("ALARM TRIGGERED!", payload);
            triggerAlarm(payload.new);
            fetchBaseData();
         }
@@ -145,13 +141,7 @@ export const useMerchantDashboard = () => {
   }, [merchantProfile?.id]); 
 
   return {
-    merchantProfile,
-    products,
-    orders,
-    loading,
-    incomingOrder,
-    fetchBaseData,
-    toggleShopStatus,
-    stopAlarm
+    merchantProfile, products, orders, loading, incomingOrder,
+    fetchBaseData, toggleShopStatus, stopAlarm
   };
 };
