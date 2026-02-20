@@ -15,7 +15,7 @@
     "@react-google-maps/api": "^2.20.8",
     "@supabase/supabase-js": "^2.39.7",
     "date-fns": "^4.1.0",
-    "jspdf": "^4.1.0",
+    "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.344.0",

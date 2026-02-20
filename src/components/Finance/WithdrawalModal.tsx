@@ -13,7 +13,7 @@ import {
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  profile: any; // Data profile kurir/merchant
+  profile: any;
   role: "COURIER" | "MERCHANT";
   onSuccess: () => void;
 }
@@ -28,12 +28,11 @@ export const WithdrawalModal: React.FC<Props> = ({
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    bank: "bca", // Default gunakan lowercase untuk Iris
+    bank: "bca",
     accNo: "",
     accName: "",
   });
 
-  // Tentukan Limit Berdasarkan Role
   const MIN_LIMIT = role === "MERCHANT" ? 50000 : 20000;
   const currentBalance = profile?.wallet_balance || 0;
   const isEligible = currentBalance >= MIN_LIMIT;
@@ -51,8 +50,7 @@ export const WithdrawalModal: React.FC<Props> = ({
     ) {
       setLoading(true);
       try {
-        // 1. Kirim Permintaan Payout (Antrian untuk Admin)
-        // Kabel ini akan dibaca oleh Edge Function midtrans-disbursement
+        // ✅ PROTEKSI: Tangkap error jika tabel payout_requests bermasalah
         const { error: payoutErr } = await supabase
           .from("payout_requests")
           .insert({
@@ -61,7 +59,7 @@ export const WithdrawalModal: React.FC<Props> = ({
                 ? profile.merchant_id || profile.id
                 : profile.id,
             amount: currentBalance,
-            bank_code: form.bank, // Disolder: Menggunakan bank_code agar cocok dengan Iris
+            bank_code: form.bank,
             account_number: form.accNo,
             account_name: form.accName,
             status: "REQUESTED",
@@ -70,7 +68,6 @@ export const WithdrawalModal: React.FC<Props> = ({
 
         if (payoutErr) throw payoutErr;
 
-        // 2. Potong Saldo (Escrow ke Sistem)
         const { error: balanceErr } = await supabase.rpc("decrement_wallet", {
           user_id: profile.id,
           amount: currentBalance,
@@ -78,23 +75,23 @@ export const WithdrawalModal: React.FC<Props> = ({
 
         if (balanceErr) throw balanceErr;
 
-        // 3. Catat Jurnal Jelas (History Keuangan)
         await supabase.from("wallet_logs").insert({
           profile_id: profile.id,
           amount: currentBalance,
           type: "WITHDRAWAL",
-          balance_after: 0, // Saldo jadi 0 karena semua ditarik
+          balance_after: 0,
           description: `Penarikan saldo ke ${form.bank.toUpperCase()} (${form.accNo})`,
         });
 
-        showToast(
-          "Permintaan terkirim! Dana sedang diproses Admin.",
-          "success",
-        );
+        showToast("Permintaan terkirim! Dana diproses Admin.", "success");
         onSuccess();
         onClose();
       } catch (err: any) {
-        showToast(err.message, "error");
+        console.error("Withdraw Error:", err);
+        showToast(
+          "Gagal memproses. Sistem database sedang disesuaikan.",
+          "error",
+        );
       } finally {
         setLoading(false);
       }
@@ -160,7 +157,7 @@ export const WithdrawalModal: React.FC<Props> = ({
             <div className="space-y-4">
               <div>
                 <label className="text-[9px] font-black uppercase text-slate-400 ml-2">
-                  Pilih Bank (Iris Compatible)
+                  Pilih Bank
                 </label>
                 <select
                   className="w-full p-4 mt-2 bg-slate-50 border border-slate-100 rounded-2xl font-black text-xs outline-none focus:ring-2 ring-teal-500"
@@ -179,14 +176,14 @@ export const WithdrawalModal: React.FC<Props> = ({
               </div>
               <input
                 type="text"
-                placeholder="Nomor Rekening / No. HP E-Wallet"
+                placeholder="Nomor Rekening / HP"
                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-xs outline-none focus:ring-2 ring-teal-500 uppercase"
                 value={form.accNo}
                 onChange={(e) => setForm({ ...form, accNo: e.target.value })}
               />
               <input
                 type="text"
-                placeholder="Nama Pemilik Rekening (Sesuai KTP)"
+                placeholder="Nama Pemilik (KTP)"
                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-xs outline-none focus:ring-2 ring-teal-500 uppercase"
                 value={form.accName}
                 onChange={(e) =>
@@ -204,16 +201,11 @@ export const WithdrawalModal: React.FC<Props> = ({
                 <Loader2 className="animate-spin" />
               ) : (
                 <CreditCard size={20} />
-              )}
+              )}{" "}
               KONFIRMASI PENARIKAN
             </button>
           </div>
         )}
-
-        <p className="text-center text-[8px] font-black text-slate-300 uppercase tracking-widest mt-6 leading-relaxed">
-          Sistem akan memverifikasi data Anda. <br />
-          Pencairan otomatis didukung oleh Midtrans Iris.
-        </p>
       </div>
     </div>
   );

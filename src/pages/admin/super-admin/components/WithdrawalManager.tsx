@@ -2,18 +2,17 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../../../../lib/supabaseClient";
 import {
   Banknote,
-  CheckCircle2,
   XCircle,
-  Clock,
   Loader2,
   User,
   RefreshCw,
   Zap,
   ArrowRightLeft,
   ShieldCheck,
+  X,
+  Sparkles,
 } from "lucide-react";
 import { useToast } from "../../../../contexts/ToastContext";
-import { createAuditLog } from "../../../../lib/auditHelper";
 
 export const WithdrawalManager = () => {
   const { showToast } = useToast();
@@ -22,28 +21,22 @@ export const WithdrawalManager = () => {
   const [filter, setFilter] = useState("PENDING");
   const [processingId, setProcessingId] = useState<string | null>(null);
 
+  const [rejectingItem, setRejectingItem] = useState<any>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
   const fetchWithdrawals = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from("withdrawals")
-        .select(
-          `
-          *,
-          profiles!profile_id (
-            name,
-            wallet_balance,
-            email
-          )
-        `,
-        )
+        .select(`*, profiles!profile_id (name, wallet_balance, email)`)
         .eq("status", filter)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       setRequests(data || []);
     } catch (err: any) {
-      showToast("Gagal memuat pengajuan: " + err.message, "error");
+      showToast("Gagal memuat pengajuan", "error");
     } finally {
       setLoading(false);
     }
@@ -53,17 +46,21 @@ export const WithdrawalManager = () => {
     fetchWithdrawals();
   }, [filter]);
 
-  // --- LOGIKA UTAMA: EKSEKUSI PEMBAYARAN OTOMATIS (MIDTRANS IRIS) ---
+  const generateAIReason = (type: "DATA" | "SECURITY") => {
+    const reasons = {
+      DATA: "NOMOR REKENING ATAU NAMA PEMILIK TIDAK VALID/SESUAI.",
+      SECURITY: "TERDETEKSI AKTIVITAS MENCURIGAKAN PADA AKUN MITRA.",
+    };
+    setRejectReason(reasons[type as keyof typeof reasons]);
+  };
+
   const handleAction = async (req: any, action: "APPROVE" | "REJECT") => {
     setProcessingId(req.id);
     try {
       if (action === "APPROVE") {
-        showToast("Menghubungkan ke API Midtrans...", "info");
-
-        // 1. PANGGIL EDGE FUNCTION (Server-side Midtrans Integration)
-        // Juragan perlu membuat edge function 'midtrans-payout' untuk keamanan API Key
-        const { data: midtransRes, error: midtransErr } =
-          await supabase.functions.invoke("midtrans-payout", {
+        const { error: midtransErr } = await supabase.functions.invoke(
+          "midtrans-payout",
+          {
             body: {
               withdrawalId: req.id,
               amount: req.amount,
@@ -71,11 +68,10 @@ export const WithdrawalManager = () => {
               accountNumber: req.account_number,
               accountName: req.account_name,
             },
-          });
-
+          },
+        );
         if (midtransErr) throw midtransErr;
 
-        // 2. UPDATE DATABASE (Status Sukses)
         await supabase
           .from("withdrawals")
           .update({
@@ -85,189 +81,199 @@ export const WithdrawalManager = () => {
           })
           .eq("id", req.id);
 
-        // 3. JURNAL TRANSAKSI KAS UTAMA
-        await supabase.from("transactions").insert([
-          {
-            type: "PAYOUT_DISBURSEMENT",
-            credit: req.amount,
-            debit: 0,
-            account_code: "1001-KAS",
-            description: `Auto-Payout Midtrans #${req.id.slice(0, 8)}`,
-          },
-        ]);
-
-        await createAuditLog(
-          "WITHDRAW_AUTO_APPROVED",
-          "FINANCE",
-          `Auto-send Rp ${req.amount.toLocaleString()} to ${req.account_name}`,
-        );
-        showToast("DANA BERHASIL DIKIRIM OTOMATIS!", "success");
+        showToast("DANA BERHASIL DIKIRIM!", "success");
       } else {
-        // --- LOGIKA TOLAK (KEMBALIKAN SALDO) ---
-        const reason = window.prompt(
-          "Alasan penolakan (dana akan dikembalikan ke dompet user):",
-        );
-        if (reason === null) return;
-
-        // 1. Kembalikan saldo ke user via RPC agar aman
-        const { error: refundErr } = await supabase.rpc("increment_wallet", {
+        await supabase.rpc("increment_wallet", {
           user_id: req.profile_id,
           amount: req.amount,
         });
-
-        if (refundErr) throw refundErr;
-
-        // 2. Update status request
         await supabase
           .from("withdrawals")
-          .update({
-            status: "REJECTED",
-            admin_note: reason,
-          })
+          .update({ status: "REJECTED", admin_note: rejectReason })
           .eq("id", req.id);
-
-        showToast("Penarikan ditolak, saldo dikembalikan.", "info");
+        showToast("Penarikan ditolak.", "info");
+        setRejectingItem(null);
       }
       fetchWithdrawals();
     } catch (err: any) {
-      showToast("Gagal: " + err.message, "error");
+      showToast("Proses Gagal", "error");
     } finally {
       setProcessingId(null);
     }
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700 text-left pb-20">
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tighter italic flex items-center gap-2">
-            <Zap className="text-yellow-500 fill-yellow-500" /> Auto{" "}
-            <span className="text-emerald-600">Disbursement</span>
-          </h2>
-          <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-widest leading-none">
-            Powered by Midtrans Iris • Real-time Payment Engine
-          </p>
-        </div>
-
-        <div className="flex bg-white p-1 rounded-2xl border border-slate-100 shadow-sm">
-          {["PENDING", "COMPLETED", "REJECTED"].map((status) => (
+    <div className="space-y-3 animate-in fade-in duration-500 text-left pb-10 font-black uppercase tracking-tighter">
+      {/* 🚩 HEADER & NAVIGATION (Sudut Tegas) */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-white p-3 rounded-md border border-slate-100 shadow-sm">
+        <h2 className="text-[18px] font-black text-slate-900 flex items-center gap-2">
+          <Zap className="text-[#FF6600] fill-[#FF6600]" size={20} /> PENCAIRAN{" "}
+          <span className="text-[#008080]">DANA</span>
+        </h2>
+        <div className="flex bg-slate-100 p-1 rounded-md border border-slate-100 w-full md:w-auto overflow-x-auto no-scrollbar">
+          {["PENDING", "COMPLETED", "REJECTED"].map((s) => (
             <button
-              key={status}
-              onClick={() => setFilter(status)}
-              className={`px-6 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all ${
-                filter === status
-                  ? "bg-slate-900 text-white shadow-lg"
-                  : "text-slate-400 hover:text-slate-600"
-              }`}
+              key={s}
+              onClick={() => setFilter(s)}
+              className={`flex-1 md:flex-none px-4 py-2 rounded-md font-black text-[10px] transition-all whitespace-nowrap ${filter === s ? "bg-[#008080] text-white shadow-md" : "text-slate-400"}`}
             >
-              {status === "PENDING" ? "Antrian Cair" : status}
+              {s === "PENDING" ? "ANTRIAN" : s}
             </button>
           ))}
         </div>
       </div>
 
-      {loading ? (
-        <div className="py-20 text-center">
-          <Loader2
-            className="animate-spin mx-auto text-emerald-600"
-            size={40}
-          />
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {requests.length === 0 ? (
-            <div className="p-20 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100 text-slate-300 font-bold uppercase text-xs tracking-widest">
-              Tidak ada antrian pencairan dana
-            </div>
-          ) : (
-            requests.map((req) => (
-              <div
-                key={req.id}
-                className="bg-white p-8 rounded-[2.5rem] border border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-8 hover:shadow-xl transition-all group relative overflow-hidden"
-              >
-                <div className="flex items-center gap-6 lg:w-1/3">
-                  <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 shadow-inner group-hover:scale-110 transition-transform">
-                    <Banknote size={28} />
+      {/* 🚩 LIST DATA (Struktur Card Baru - Pasti Muncul) */}
+      <div className="space-y-3">
+        {loading ? (
+          <div className="py-20 text-center">
+            <Loader2
+              className="animate-spin mx-auto text-[#008080]"
+              size={40}
+            />
+          </div>
+        ) : requests.length === 0 ? (
+          <div className="p-20 text-center bg-white rounded-md border-2 border-dashed border-slate-100 text-slate-300 text-[12px]">
+            TIDAK ADA ANTRIAN
+          </div>
+        ) : (
+          requests.map((req) => (
+            <div
+              key={req.id}
+              className="bg-white rounded-md border border-slate-100 flex flex-col transition-all border-l-4 border-l-[#008080] shadow-sm hover:shadow-md"
+            >
+              {/* BAGIAN ATAS: INFORMASI */}
+              <div className="p-4 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                {/* Nominal & User */}
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                  <div className="w-10 h-10 bg-teal-50 text-[#008080] rounded-md flex items-center justify-center shrink-0">
+                    <Banknote size={20} />
                   </div>
                   <div>
-                    <h4 className="font-black text-slate-800 text-lg leading-none">
-                      Rp {Number(req.amount).toLocaleString("id-ID")}
+                    <h4 className="text-[16px] font-black text-slate-900 leading-none">
+                      RP {Number(req.amount).toLocaleString()}
                     </h4>
-                    <p className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-1 mt-2">
-                      <User size={12} /> {req.profiles?.name || "Unknown"}
+                    <p className="text-[10px] text-slate-400 mt-1 truncate">
+                      <User size={10} className="inline mr-1" />{" "}
+                      {req.profiles?.name}
                     </p>
                   </div>
                 </div>
 
-                <div className="bg-slate-50 p-6 rounded-[2rem] flex-1 border border-slate-100 flex items-center gap-5">
-                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 border border-slate-200">
-                    <ArrowRightLeft size={18} />
-                  </div>
-                  <div>
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                      Target Rekening Mitra:
-                    </p>
-                    <p className="text-xs font-black text-slate-800 uppercase">
+                {/* Info Rekening */}
+                <div className="bg-slate-50 p-2.5 rounded-md border border-slate-100 flex items-center gap-3 w-full md:flex-1 md:max-w-md">
+                  <ArrowRightLeft
+                    className="text-slate-300 shrink-0"
+                    size={16}
+                  />
+                  <div className="truncate text-[12px]">
+                    <p className="font-black text-slate-800 uppercase leading-none mb-1">
                       {req.bank_name} - {req.account_number}
                     </p>
-                    <p className="text-[10px] font-bold text-emerald-600 uppercase">
+                    <p className="font-black text-[#008080] uppercase leading-none">
                       A/N {req.account_name}
                     </p>
                   </div>
                 </div>
 
-                {filter === "PENDING" && (
-                  <div className="flex gap-3 lg:w-1/4 justify-end">
-                    <button
-                      onClick={() => handleAction(req, "REJECT")}
-                      className="p-4 bg-red-50 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all shadow-sm"
-                    >
-                      <XCircle size={20} />
-                    </button>
-                    <button
-                      onClick={() => handleAction(req, "APPROVE")}
-                      disabled={processingId === req.id}
-                      className="flex-1 py-5 bg-slate-900 text-white rounded-[1.8rem] font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-3 border-b-4 border-slate-700"
-                    >
-                      {processingId === req.id ? (
-                        <RefreshCw className="animate-spin" size={16} />
-                      ) : (
-                        <Zap
-                          className="text-yellow-400 fill-yellow-400"
-                          size={16}
-                        />
-                      )}
-                      AUTO SEND
-                    </button>
+                {/* Status jika bukan pending */}
+                {filter !== "PENDING" && (
+                  <div
+                    className={`px-4 py-2 rounded-md text-[10px] font-black shrink-0 ${filter === "COMPLETED" ? "bg-teal-50 text-[#008080] border border-teal-100" : "bg-red-50 text-red-500 border border-red-100"}`}
+                  >
+                    STATUS: {filter}
                   </div>
                 )}
               </div>
-            ))
-          )}
+
+              {/* 🚩 BAGIAN BAWAH: TOMBOL AKSI (Hanya muncul jika PENDING) */}
+              {filter === "PENDING" && (
+                <div className="p-3 bg-slate-50 border-t border-slate-100 flex gap-2 justify-end">
+                  <button
+                    onClick={() => setRejectingItem(req)}
+                    className="px-4 py-2.5 bg-white text-red-500 rounded-md border border-red-200 hover:bg-red-500 hover:text-white transition-all shadow-sm flex items-center justify-center"
+                  >
+                    <XCircle size={18} />
+                  </button>
+                  <button
+                    onClick={() => handleAction(req, "APPROVE")}
+                    disabled={processingId === req.id}
+                    className="w-full md:w-auto md:px-8 py-2.5 bg-[#008080] text-white rounded-md font-black text-[12px] flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"
+                  >
+                    {processingId === req.id ? (
+                      <RefreshCw className="animate-spin" size={16} />
+                    ) : (
+                      <Zap
+                        size={16}
+                        fill="yellow"
+                        className="text-yellow-400"
+                      />
+                    )}
+                    AUTO SEND
+                  </button>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* 🚩 FOOTER WARNING (UKURAN 12) */}
+      <div className="p-4 bg-[#008080] rounded-md text-white flex items-center gap-4 border-l-8 border-l-[#FF6600] shadow-md">
+        <ShieldCheck size={32} className="shrink-0" />
+        <p className="text-[12px] font-black leading-tight normal-case">
+          Tombol AUTO SEND akan memicu transfer real-time via Midtrans Iris.
+          Pastikan saldo operasional mencukupi.
+        </p>
+      </div>
+
+      {/* MODAL REJECT */}
+      {rejectingItem && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-md shadow-2xl border-t-8 border-red-500 p-5">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-[12px] font-black">ALASAN PENOLAKAN</h3>
+              <button onClick={() => setRejectingItem(null)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="flex gap-1 mb-3">
+              <button
+                onClick={() => generateAIReason("DATA")}
+                className="flex-1 text-[9px] bg-slate-50 p-2 rounded-md border border-slate-200 font-black uppercase hover:bg-[#008080] hover:text-white transition-colors"
+              >
+                <Sparkles size={10} className="inline mr-1" /> AI DATA
+              </button>
+              <button
+                onClick={() => generateAIReason("SECURITY")}
+                className="flex-1 text-[9px] bg-slate-50 p-2 rounded-md border border-slate-200 font-black uppercase hover:bg-[#008080] hover:text-white transition-colors"
+              >
+                <Sparkles size={10} className="inline mr-1" /> AI SECURITY
+              </button>
+            </div>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              className="w-full bg-slate-50 border p-3 rounded-md text-[12px] font-bold min-h-[80px] mb-4 outline-none focus:border-red-500 normal-case"
+              placeholder="Tulis alasan..."
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => setRejectingItem(null)}
+                className="flex-1 py-3 bg-slate-100 rounded-md text-[11px] font-black hover:bg-slate-200"
+              >
+                BATAL
+              </button>
+              <button
+                onClick={() => handleAction(rejectingItem, "REJECT")}
+                className="flex-1 py-3 bg-red-600 text-white rounded-md text-[11px] font-black hover:bg-red-700"
+              >
+                KONFIRMASI
+              </button>
+            </div>
+          </div>
         </div>
       )}
-
-      {/* FOOTER INFO */}
-      <div className="p-8 bg-emerald-600 rounded-[3rem] text-white flex items-center gap-6 shadow-2xl relative overflow-hidden">
-        <ShieldCheck
-          className="text-white/20 absolute right-[-20px] bottom-[-20px]"
-          size={150}
-        />
-        <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center shrink-0 border border-white/10">
-          <Zap size={32} />
-        </div>
-        <div>
-          <h4 className="text-sm font-black uppercase tracking-[0.2em] mb-1 italic">
-            Sistem Pencairan Mandiri
-          </h4>
-          <p className="text-[10px] text-emerald-100 font-bold leading-relaxed uppercase max-w-2xl">
-            Tombol "AUTO SEND" akan memerintahkan Midtrans untuk mengirim uang
-            dari saldo akun Juragan langsung ke rekening mitra. Pastikan saldo
-            Midtrans Iris Juragan mencukupi.
-          </p>
-        </div>
-      </div>
     </div>
   );
 };

@@ -1,310 +1,163 @@
-import React, { useState } from "react";
+import React from "react";
 import {
-  LogOut,
-  MapPin,
-  DollarSign,
-  Flag,
-  Users,
+  LayoutDashboard,
   Store,
-  UserCheck,
-  Zap,
+  Users,
+  ShieldCheck,
+  Wallet,
   Settings,
-  Megaphone,
-  ShieldAlert,
-  Landmark,
-  BarChart3,
-  Image as ImageIcon,
-  LayoutGrid,
-  Wallet2,
-  Banknote,
-  Coins,
-  BookOpen,
-  Activity,
-  ChevronDown,
+  LogOut,
+  ChevronLeft,
   ChevronRight,
-  Cpu,
-  Globe,
-  Terminal,
-  Truck, // Pastikan ikon Truck sudah diimport
+  CheckSquare,
+  Truck,
+  Package,
+  List,
+  Radio,
+  History,
+  AlertTriangle,
+  Image as ImageIcon,
+  Receipt,
+  ArrowUpRight,
 } from "lucide-react";
-import { SidebarItem } from "../../../../components/ui/SharedUI";
-import { useNavigate } from "react-router-dom";
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  isSidebarOpen: boolean;
+  setIsSidebarOpen: (open: boolean) => void;
   onLogout: () => void;
-  theme: any;
-  counts: {
-    users: number;
-    candidates: number;
-    complaints: number;
-  };
-  setAuditMarket: (val: any) => void;
+  brand: any;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
+  isSidebarOpen,
+  setIsSidebarOpen,
   onLogout,
-  theme,
-  counts,
-  setAuditMarket,
+  brand,
 }) => {
-  const navigate = useNavigate();
-  const [openGroups, setOpenGroups] = useState<string[]>([
-    "finance",
-    "main",
-    "system",
-  ]);
-
-  const toggleGroup = (group: string) => {
-    setOpenGroups((prev) =>
-      prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group],
-    );
-  };
-
-  const handleTabChange = (tab: string, path?: string) => {
-    setActiveTab(tab);
-    // Jika path ada, pindah halaman. Jika tidak, ganti tab saja (SPA).
-    if (path) navigate(path);
-    if (setAuditMarket) setAuditMarket(null);
-  };
+  const menuGroups = [
+    {
+      group: "CORE MONITORING",
+      items: [
+        // ✅ JUDUL DIUBAH MENJADI DASHBOARD MONITORING
+        {
+          id: "dashboard",
+          label: "DASHBOARD MONITORING",
+          icon: LayoutDashboard,
+        },
+        { id: "markets", label: "KELOLA WILAYAH", icon: Store },
+        { id: "users", label: "DATABASE USER", icon: Users },
+      ],
+    },
+    {
+      group: "FINANCE & AUDIT",
+      items: [
+        { id: "finance-master", label: "FINANCE DASHBOARD", icon: Wallet },
+        { id: "ledger", label: "BUKU BESAR", icon: Receipt },
+        { id: "withdrawals", label: "PENCAIRAN DANA", icon: CheckSquare },
+        { id: "topup-requests", label: "PERMINTAAN TOPUP", icon: ArrowUpRight },
+      ],
+    },
+    {
+      group: "OPERATIONAL",
+      items: [
+        { id: "verification", label: "VERIFIKASI ADMIN", icon: ShieldCheck },
+        { id: "shipping-config", label: "LOGISTIK & ONGKIR", icon: Truck },
+        { id: "categories", label: "KATEGORI PRODUK", icon: List },
+        { id: "menus", label: "MANAJEMEN MENU", icon: Package },
+        { id: "disputes", label: "PUSAT RESOLUSI", icon: AlertTriangle },
+      ],
+    },
+    {
+      group: "MARKETING & SYSTEM",
+      items: [
+        { id: "manage-ads", label: "MANAJEMEN IKLAN", icon: ImageIcon },
+        { id: "broadcast", label: "BROADCAST NOTIF", icon: Radio },
+        { id: "logs", label: "LOG AKTIVITAS", icon: History },
+        { id: "settings", label: "PENGATURAN SISTEM", icon: Settings },
+      ],
+    },
+  ];
 
   return (
-    <aside className="hidden md:flex w-[260px] flex-col fixed h-full z-20 bg-[#0f172a] border-r border-white/5 text-left overflow-hidden shadow-2xl">
-      {/* 1. EXECUTIVE BRANDING - HIGH CONTRAST */}
+    <aside
+      className={`hidden md:flex flex-col bg-white border-r border-slate-200 transition-all duration-300 relative z-50 ${isSidebarOpen ? "w-72" : "w-20"}`}
+    >
+      {/* LOGO AREA */}
       <div
-        className="p-6 border-b border-white/5 flex items-center justify-between bg-slate-900/50 cursor-pointer group"
-        onClick={() => navigate("/super-admin")}
+        className={`h-20 flex items-center px-6 border-b border-slate-100 ${brand.bgTosca} shrink-0`}
       >
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-teal-500 rounded-lg flex items-center justify-center text-slate-900 shadow-[0_0_15px_rgba(20,184,166,0.4)] transition-all group-hover:scale-105">
-            <Cpu size={20} strokeWidth={2.5} />
+        <div className="flex items-center gap-3 text-white">
+          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shrink-0 shadow-sm">
+            <span className={`text-xl font-black ${brand.tosca}`}>P</span>
           </div>
-          <div>
-            <h2 className="font-black text-sm text-white uppercase tracking-tighter leading-none">
-              PASARQU <span className="text-teal-400">OS</span>
-            </h2>
-            <div className="flex items-center gap-1.5 mt-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></div>
-              <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">
-                System v2.0.26
+          {isSidebarOpen && (
+            <span className="text-xl tracking-tighter leading-none font-black uppercase">
+              PASARQU
+              <span className="text-orange-300 text-[9px] block opacity-80 font-bold">
+                SUPER ADMIN ENGINE
               </span>
-            </div>
-          </div>
+            </span>
+          )}
         </div>
       </div>
 
-      {/* 2. HIGH-DENSITY NAVIGATION - DARK MODE */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6 no-scrollbar">
-        {/* GROUP: FINANCIAL ENGINE */}
-        <div className="space-y-1">
-          <button
-            onClick={() => toggleGroup("finance")}
-            className="w-full flex items-center justify-between px-3 py-1.5 text-[9px] font-black text-slate-500 uppercase tracking-widest hover:text-teal-400 transition-colors"
-          >
-            <span className="flex items-center gap-2">
-              <DollarSign size={10} /> Financial Engine
-            </span>
-            {openGroups.includes("finance") ? (
-              <ChevronDown size={10} />
-            ) : (
-              <ChevronRight size={10} />
+      {/* NAVIGATION MENU */}
+      <nav className="flex-1 overflow-y-auto py-4 no-scrollbar space-y-4">
+        {menuGroups.map((group, idx) => (
+          <div key={idx} className="px-3">
+            {isSidebarOpen && (
+              <p className="text-[9px] text-slate-400 px-4 mb-2 tracking-[0.2em] font-black uppercase">
+                {group.group}
+              </p>
             )}
-          </button>
-
-          {openGroups.includes("finance") && (
-            <div className="space-y-[2px] animate-in fade-in duration-300">
-              <SidebarItem
-                icon={<Activity size={16} className="text-teal-400" />}
-                label="Finance Dashboard"
-                active={activeTab === "finance-master"}
-                onClick={() =>
-                  handleTabChange("finance-master", "/super-admin/finance")
-                }
-                theme="dark"
-              />
-              <SidebarItem
-                icon={<BookOpen size={16} className="text-indigo-400" />}
-                label="General Ledger"
-                active={activeTab === "ledger"}
-                onClick={() => handleTabChange("ledger")}
-                theme="dark"
-              />
-              <SidebarItem
-                icon={<Banknote size={16} className="text-emerald-400" />}
-                label="Payout Requests"
-                active={activeTab === "withdrawals"}
-                onClick={() => handleTabChange("withdrawals")}
-                theme="dark"
-              />
-              <SidebarItem
-                icon={<Coins size={16} className="text-amber-400" />}
-                label="Topup Queue"
-                active={activeTab === "topup-requests"}
-                onClick={() => handleTabChange("topup-requests")}
-                theme="dark"
-              />
-              <SidebarItem
-                icon={<Landmark size={16} className="text-blue-400" />}
-                label="Regional Analytics"
-                active={activeTab === "regional-finance"}
-                onClick={() => handleTabChange("regional-finance")}
-                theme="dark"
-              />
-              <SidebarItem
-                icon={<BarChart3 size={16} className="text-purple-400" />}
-                label="Profit Reports"
-                active={activeTab === "finance-report"}
-                onClick={() => handleTabChange("finance-report")}
-                theme="dark"
-              />
+            <div className="space-y-1">
+              {group.items.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`w-full flex items-center gap-4 p-3.5 rounded-xl transition-all ${
+                    activeTab === item.id
+                      ? `${brand.bgTosca} text-white shadow-lg shadow-teal-900/20`
+                      : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                  }`}
+                >
+                  <item.icon size={20} className="shrink-0" />
+                  {isSidebarOpen && (
+                    <span className="text-[11px] truncate font-black uppercase tracking-tighter">
+                      {item.label}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
-          )}
-        </div>
-
-        {/* GROUP: CORE OPERATIONS */}
-        <div className="space-y-1">
-          <button
-            onClick={() => toggleGroup("main")}
-            className="w-full flex items-center justify-between px-3 py-1.5 text-[9px] font-black text-slate-500 uppercase tracking-widest"
-          >
-            <span className="flex items-center gap-2">
-              <Globe size={10} /> Core Operations
-            </span>
-            {openGroups.includes("main") ? (
-              <ChevronDown size={10} />
-            ) : (
-              <ChevronRight size={10} />
-            )}
-          </button>
-
-          {openGroups.includes("main") && (
-            <div className="space-y-[2px] animate-in fade-in duration-300">
-              <SidebarItem
-                icon={<MapPin size={16} className="text-slate-400" />}
-                label="Market Mapping"
-                active={activeTab === "dashboard"}
-                onClick={() => handleTabChange("dashboard")}
-                theme="dark"
-              />
-              <SidebarItem
-                icon={<Users size={16} className="text-slate-400" />}
-                label="User Registry"
-                active={activeTab === "users"}
-                onClick={() => handleTabChange("users")}
-                theme="dark"
-                count={counts.users}
-              />
-              <SidebarItem
-                icon={<Store size={16} className="text-slate-400" />}
-                label="Merchant Master"
-                active={activeTab === "markets"}
-                onClick={() => handleTabChange("markets")}
-                theme="dark"
-              />
-              <SidebarItem
-                icon={<UserCheck size={16} className="text-slate-400" />}
-                label="Verification"
-                active={activeTab === "verification"}
-                onClick={() => handleTabChange("verification")}
-                theme="dark"
-                count={counts.candidates}
-                isAlert={counts.candidates > 0}
-              />
-
-              {/* ✅ LOGISTICS ENGINE (Updated) */}
-              <SidebarItem
-                icon={<Truck size={16} className="text-orange-400" />}
-                label="Logistics Engine"
-                active={activeTab === "shipping-config"}
-                // HAPUS PATH URL AGAR TETAP DI DASHBOARD (KOLOM KANAN)
-                onClick={() => handleTabChange("shipping-config")}
-                theme="dark"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* GROUP: INFRASTRUCTURE */}
-        <div className="space-y-1">
-          <button
-            onClick={() => toggleGroup("system")}
-            className="w-full flex items-center justify-between px-3 py-1.5 text-[9px] font-black text-slate-500 uppercase tracking-widest"
-          >
-            <span className="flex items-center gap-2">
-              <Terminal size={10} /> Infrastructure
-            </span>
-            {openGroups.includes("system") ? (
-              <ChevronDown size={10} />
-            ) : (
-              <ChevronRight size={10} />
-            )}
-          </button>
-
-          {openGroups.includes("system") && (
-            <div className="space-y-[2px] animate-in fade-in duration-300">
-              <SidebarItem
-                icon={<ImageIcon size={16} className="text-sky-400" />}
-                label="Ad Manager"
-                active={activeTab === "manage-ads"}
-                onClick={() => handleTabChange("manage-ads")}
-                theme="dark"
-              />
-              <SidebarItem
-                icon={<LayoutGrid size={16} className="text-teal-400" />}
-                label="Global Categories"
-                active={activeTab === "categories"}
-                onClick={() => handleTabChange("categories")}
-                theme="dark"
-              />
-              <SidebarItem
-                icon={<Megaphone size={16} className="text-blue-400" />}
-                label="Broadcast Node"
-                active={activeTab === "broadcast"}
-                onClick={() => handleTabChange("broadcast")}
-                theme="dark"
-              />
-              <SidebarItem
-                icon={<Flag size={16} className="text-red-400" />}
-                label="Dispute Center"
-                active={activeTab === "disputes"}
-                onClick={() => handleTabChange("disputes")}
-                theme="dark"
-                count={counts.complaints}
-                isAlert={counts.complaints > 0}
-              />
-              <SidebarItem
-                icon={<ShieldAlert size={16} className="text-slate-400" />}
-                label="Audit Ledger"
-                active={activeTab === "logs"}
-                onClick={() => handleTabChange("logs")}
-                theme="dark"
-              />
-            </div>
-          )}
-        </div>
+          </div>
+        ))}
       </nav>
 
-      {/* 3. SYSTEM FOOTER */}
-      <div className="p-4 bg-slate-900/80 border-t border-white/5 space-y-2">
-        <button
-          onClick={() => handleTabChange("settings")}
-          className={`w-full flex items-center justify-between px-4 py-2 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-all ${activeTab === "settings" ? "bg-teal-500 text-slate-900 shadow-lg" : "text-slate-400 hover:text-white hover:bg-white/5"}`}
-        >
-          <span className="flex items-center gap-3">
-            <Settings size={14} /> Config
-          </span>
-          <ChevronRight size={10} />
-        </button>
+      {/* LOGOUT BUTTON */}
+      <div className="p-4 border-t border-slate-100">
         <button
           onClick={onLogout}
-          className="w-full py-2.5 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all active:scale-95"
+          className="w-full flex items-center gap-4 p-4 text-red-500 hover:bg-red-50 rounded-2xl transition-all font-black uppercase"
         >
-          <LogOut size={14} /> Terminate
+          <LogOut size={20} />
+          {isSidebarOpen && (
+            <span className="text-[11px] tracking-tighter">KELUAR SISTEM</span>
+          )}
         </button>
       </div>
+
+      {/* SIDEBAR TOGGLE (DESKTOP) */}
+      <button
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        className="absolute -right-3 top-24 bg-white border border-slate-200 rounded-full p-1 text-slate-400 hover:text-teal-600 shadow-sm z-50 transition-transform active:scale-90"
+      >
+        {isSidebarOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+      </button>
     </aside>
   );
 };

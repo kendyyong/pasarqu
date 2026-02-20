@@ -9,14 +9,18 @@ import {
   ShoppingBag,
   ChevronRight,
   Package,
-  Store,
   CheckCircle2,
   Clock,
   Wallet,
   MapPin,
-  Download, // ✅ Tambah Ikon Download
+  Download,
+  ShieldAlert,
+  HeadphonesIcon,
+  X,
 } from "lucide-react";
 import { OrderChatRoom } from "../../features/chat/OrderChatRoom";
+import { ComplaintTrigger } from "../../components/shared/ComplaintTrigger";
+import { ComplaintForm } from "../../components/shared/ComplaintForm"; // 🚩 Tambah Import
 
 const mapContainerStyle = { width: "100%", height: "100%" };
 
@@ -24,16 +28,13 @@ export const OrderTrackingPage = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
   const [order, setOrder] = useState<any>(null);
-  const [market, setMarket] = useState<any>(null);
   const [courier, setCourier] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showChat, setShowChat] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false); // 🚩 State untuk Modal Bantuan
   const [chatType, setChatType] = useState<
     "merchant_customer" | "courier_customer"
   >("merchant_customer");
-  const [selectedMerchantId, setSelectedMerchantId] = useState<string | null>(
-    null,
-  );
   const [orderItems, setOrderItems] = useState<any[]>([]);
 
   const { isLoaded } = useJsApiLoader({
@@ -92,14 +93,6 @@ export const OrderTrackingPage = () => {
           );
         }
 
-        if (orderData.market_id) {
-          const { data: mData } = await supabase
-            .from("markets")
-            .select("*")
-            .eq("id", orderData.market_id)
-            .maybeSingle();
-          setMarket(mData);
-        }
         if (orderData.courier_id) {
           const { data: cData } = await supabase
             .from("couriers")
@@ -114,31 +107,9 @@ export const OrderTrackingPage = () => {
         setLoading(false);
       }
     };
-
     fetchFullData();
-
-    const channel = supabase
-      .channel(`order-${orderId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "orders",
-          filter: `id=eq.${orderId}`,
-        },
-        (payload) => {
-          setOrder((prev: any) => ({ ...prev, ...payload.new }));
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, [orderId]);
 
-  // ✅ FUNGSI CETAK NOTA (Mengarahkan ke halaman Invoice yang sudah ada)
   const handleDownloadInvoice = () => {
     window.open(`/invoice/${orderId}`, "_blank");
   };
@@ -146,46 +117,39 @@ export const OrderTrackingPage = () => {
   if (loading)
     return (
       <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-[100] gap-4 font-black">
-        <Loader2 className="animate-spin text-teal-600" size={32} />
-        <p className="text-[12px] tracking-widest uppercase text-slate-400">
-          SINGKRONISASI DATA...
+        <Loader2 className="animate-spin text-[#008080]" size={32} />
+        <p className="text-[12px] tracking-widest uppercase text-slate-400 font-black">
+          SINGKRONISASI RADAR...
         </p>
       </div>
     );
 
-  if (!order)
-    return (
-      <div className="p-10 text-center font-black uppercase text-[12px]">
-        PESANAN TIDAK DITEMUKAN
-      </div>
-    );
-
   return (
-    <div className="h-screen bg-slate-50 flex flex-col font-sans text-left uppercase overflow-hidden tracking-tighter">
-      <header className="bg-white border-b border-slate-100 sticky top-0 z-50 shrink-0 h-12 flex items-center px-4 shadow-sm">
+    <div className="h-screen bg-slate-50 flex flex-col font-black text-left uppercase overflow-hidden tracking-tighter">
+      <header className="bg-white border-b border-slate-100 sticky top-0 z-50 shrink-0 h-14 flex items-center px-4 shadow-sm">
         <div className="w-full max-w-6xl mx-auto flex items-center justify-between font-black">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate("/")}
-              className="p-1 hover:bg-slate-100 rounded-lg text-slate-400"
+              className="p-2 hover:bg-slate-100 rounded-md text-slate-400"
             >
               <ArrowLeft size={22} />
             </button>
-            <div className="text-xl leading-none">
-              <span className="text-teal-600">PASAR</span>
+            <div className="text-xl leading-none font-black">
+              <span className="text-[#008080]">PASAR</span>
               <span className="text-[#FF6600]">QU</span>
             </div>
           </div>
-          <div className="text-[12px] text-teal-600 border border-teal-100 px-2 py-0.5 rounded bg-teal-50 uppercase">
-            RADAR AKTIF
+          <div className="text-[10px] text-[#008080] border-2 border-[#008080] px-2 py-1 rounded-md bg-teal-50 font-black animate-pulse">
+            LIVE TRACKING
           </div>
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col md:flex-row overflow-hidden w-full max-w-6xl mx-auto font-black uppercase">
+      <main className="flex-1 flex flex-col md:flex-row overflow-hidden w-full max-w-6xl mx-auto">
         {/* PETA */}
-        <div className="w-full md:w-5/12 h-[220px] md:h-full relative p-2 md:p-4 shrink-0">
-          <div className="w-full h-full bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden relative">
+        <div className="w-full md:w-[45%] h-[160px] md:h-auto md:max-h-[350px] relative p-2 md:p-4 shrink-0 mx-auto">
+          <div className="w-full h-full bg-white rounded-md border-2 border-slate-100 shadow-sm overflow-hidden relative">
             {isLoaded ? (
               <GoogleMap
                 mapContainerStyle={mapContainerStyle}
@@ -206,7 +170,7 @@ export const OrderTrackingPage = () => {
                       lat: order.delivery_lat,
                       lng: order.delivery_lng,
                     }}
-                    label="RUMAH"
+                    label="TUJUAN"
                   />
                 )}
                 {courier?.current_lat && (
@@ -223,24 +187,18 @@ export const OrderTrackingPage = () => {
                 )}
               </GoogleMap>
             ) : (
-              <div className="w-full h-full bg-slate-100 flex items-center justify-center text-[12px]">
-                MEMUAT PETA...
+              <div className="w-full h-full bg-slate-50 flex items-center justify-center text-[10px] font-black">
+                MEMUAT RADAR...
               </div>
             )}
           </div>
         </div>
 
         {/* DETAIL */}
-        <div className="w-full md:w-7/12 flex flex-col overflow-y-auto p-2 space-y-2 pb-24 no-scrollbar">
+        <div className="flex-1 flex flex-col overflow-y-auto p-2 space-y-2 pb-24 no-scrollbar">
           {/* TIMELINE */}
-          <section className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm font-black">
-            <div className="flex items-center gap-2 mb-4 border-b border-slate-50 pb-2 uppercase">
-              <Clock size={16} className="text-teal-600" />
-              <h4 className="text-[10px] text-slate-400 tracking-widest uppercase">
-                STATUS PESANAN #{orderId?.slice(0, 8)}
-              </h4>
-            </div>
-            <div className="flex justify-between items-center relative px-2">
+          <section className="bg-white p-4 rounded-md border border-slate-100 shadow-sm">
+            <div className="flex justify-between items-center relative px-2 py-2">
               <div className="absolute top-[18px] left-8 right-8 h-[2px] bg-slate-100 -z-0" />
               {steps.map((step, idx) => {
                 const isActive = idx <= getCurrentStep();
@@ -250,12 +208,12 @@ export const OrderTrackingPage = () => {
                     className="relative z-10 flex flex-col items-center w-1/4"
                   >
                     <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all ${isActive ? "bg-teal-600 border-teal-600 text-white shadow-md" : "bg-white border-slate-100 text-slate-200"}`}
+                      className={`w-8 h-8 rounded-md flex items-center justify-center border-2 transition-all ${isActive ? "bg-[#008080] border-[#008080] text-white shadow-md" : "bg-white border-slate-100 text-slate-200"}`}
                     >
-                      <step.icon size={16} />
+                      <step.icon size={14} />
                     </div>
                     <span
-                      className={`text-[12px] mt-2 font-black leading-none ${isActive ? "text-teal-600" : "text-slate-300"}`}
+                      className={`text-[9px] mt-2 font-black leading-none ${isActive ? "text-[#008080]" : "text-slate-300"}`}
                     >
                       {step.label}
                     </span>
@@ -265,116 +223,137 @@ export const OrderTrackingPage = () => {
             </div>
           </section>
 
-          {/* ✅ TOMBOL DOWNLOAD NOTA (Hanya muncul jika Selesai) */}
-          {order.shipping_status === "COMPLETED" && (
-            <button
-              onClick={handleDownloadInvoice}
-              className="w-full bg-white border-2 border-teal-600 text-teal-600 p-4 rounded-2xl flex items-center justify-center gap-3 shadow-sm active:scale-95 transition-all font-black"
-            >
-              <Download size={20} />
-              <span className="text-[12px] tracking-widest uppercase">
-                DOWNLOAD NOTA BELANJA
-              </span>
-            </button>
-          )}
-
-          {/* INFO ALAMAT */}
-          <section className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm font-black uppercase">
-            <div className="flex items-center gap-2 mb-2">
-              <MapPin size={14} className="text-red-500" />
+          {/* ITEM BELANJA */}
+          <section className="bg-white p-4 rounded-md border border-slate-100 shadow-sm">
+            <div className="flex items-center gap-2 border-b border-slate-50 pb-2 mb-3 font-black">
+              <ShoppingBag size={14} className="text-[#008080]" />
               <h4 className="text-[10px] text-slate-400 tracking-widest uppercase">
-                ALAMAT PENGIRIMAN
+                RINGKASAN BELANJA
               </h4>
             </div>
-            <p className="text-[12px] text-slate-800 leading-tight font-sans lowercase">
-              {order.address}
-            </p>
-          </section>
-
-          {/* DAFTAR BELANJA */}
-          <section className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-3 font-black uppercase">
-            <div className="flex items-center gap-2 border-b border-slate-50 pb-2">
-              <ShoppingBag size={14} className="text-teal-600" />
-              <h4 className="text-[10px] text-slate-400 tracking-widest uppercase">
-                DAFTAR BELANJA
-              </h4>
-            </div>
-            <div className="space-y-2 uppercase">
+            <div className="space-y-2 font-black">
               {orderItems.map((item, idx) => (
                 <div
                   key={idx}
-                  className="flex justify-between text-[12px] font-black"
+                  className="flex justify-between text-[11px] font-black"
                 >
                   <span className="text-slate-700 truncate pr-4">
-                    {item.display_name} x{item.quantity}
+                    {item.display_name} X{item.quantity}
                   </span>
-                  <span className="font-sans flex-shrink-0 text-slate-900">
+                  <span className="text-slate-900 font-black">
                     {(item.quantity * item.price_at_purchase).toLocaleString()}
                   </span>
                 </div>
               ))}
               <div className="pt-2 border-t border-dashed border-slate-200 flex justify-between items-center">
-                <span className="text-[12px] text-slate-400">
+                <span className="text-[11px] text-slate-400 font-black uppercase">
                   TOTAL TAGIHAN
                 </span>
-                <span className="text-[18px] text-[#FF6600] font-sans">
+                <span className="text-[18px] text-[#FF6600] font-black tracking-tighter">
                   RP {order.total_price.toLocaleString()}
                 </span>
               </div>
             </div>
           </section>
 
-          {/* TOMBOL CHAT (Hanya jika belum selesai) */}
-          {order?.courier_id && order.shipping_status !== "COMPLETED" && (
-            <button
-              onClick={() => {
-                setChatType("courier_customer");
-                setShowChat(true);
-              }}
-              className="w-full bg-slate-900 text-white p-4 rounded-2xl flex items-center justify-between shadow-xl active:scale-95 transition-all font-black uppercase"
-            >
-              <div className="flex items-center gap-3">
-                <Bike size={20} className="text-[#FF6600]" />
-                <span className="text-[12px] tracking-widest">
-                  HUBUNGI KURIR
-                </span>
-              </div>
-              <ChevronRight size={18} className="text-slate-500" />
-            </button>
-          )}
+          {/* 🚩 PUSAT RESOLUSI */}
+          <section className="bg-white p-4 rounded-md border border-slate-100 shadow-sm border-l-8 border-l-[#FF6600] space-y-3 font-black">
+            <div className="flex items-center gap-2">
+              <ShieldAlert size={16} className="text-[#FF6600]" />
+              <h4 className="text-[10px] text-slate-400 tracking-widest uppercase">
+                PUSAT RESOLUSI
+              </h4>
+            </div>
+
+            <ComplaintTrigger
+              orderId={orderId!}
+              orderStatus={order.shipping_status || order.status}
+            />
+
+            <p className="text-[10px] text-slate-400 normal-case font-bold leading-tight">
+              GUNAKAN LAYANAN INI JIKA PESANAN RUSAK ATAU KURIR BERMASALAH
+              SEBELUM MENYELESAIKAN PESANAN.
+            </p>
+          </section>
+
+          {/* 🚩 TOMBOL BANTUAN (DIPERBAIKI: Membuka Modal, Bukan Beranda) */}
+          <button
+            onClick={() => setShowSupportModal(true)}
+            className="w-full bg-slate-100 text-slate-600 p-4 rounded-md flex items-center justify-center gap-2 font-black text-[12px] uppercase shadow-sm active:scale-95 transition-all"
+          >
+            <HeadphonesIcon size={18} /> BANTUAN
+          </button>
+
+          {/* TOMBOL CHAT & DOWNLOAD (DINAMIS) */}
+          <div className="grid grid-cols-2 gap-2 font-black">
+            {order?.courier_id && order.shipping_status !== "COMPLETED" && (
+              <button
+                onClick={() => {
+                  setChatType("courier_customer");
+                  setShowChat(true);
+                }}
+                className="bg-slate-900 text-white p-3 rounded-md flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all font-black text-[11px]"
+              >
+                <Bike size={16} className="text-[#FF6600]" /> CHAT KURIR
+              </button>
+            )}
+            {order.shipping_status === "COMPLETED" && (
+              <button
+                onClick={handleDownloadInvoice}
+                className="bg-white border-2 border-[#008080] text-[#008080] p-3 rounded-md flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all font-black text-[11px]"
+              >
+                <Download size={16} /> DOWNLOAD NOTA
+              </button>
+            )}
+          </div>
         </div>
       </main>
 
+      {/* 🚩 MODAL BANTUAN UMUM */}
+      {showSupportModal && (
+        <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-black">
+          <div className="relative w-full max-w-lg animate-in zoom-in duration-300">
+            <button
+              onClick={() => setShowSupportModal(false)}
+              className="absolute -top-10 right-0 flex items-center gap-2 text-white font-black text-[11px] uppercase"
+            >
+              <X size={18} /> TUTUP
+            </button>
+            <ComplaintForm
+              orderId={orderId}
+              onSuccess={() =>
+                setTimeout(() => setShowSupportModal(false), 2000)
+              }
+            />
+          </div>
+        </div>
+      )}
+
       {/* CHAT OVERLAY */}
       {showChat && (
-        <div className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-md flex items-center justify-center p-2 font-black uppercase">
-          <div className="w-full max-w-md h-[85vh] bg-white rounded-[2rem] flex flex-col shadow-2xl overflow-hidden border-4 border-white">
-            <div className="p-4 border-b flex justify-between items-center bg-white shrink-0">
-              <div className="flex flex-col">
-                <h3 className="text-[12px] text-teal-600 font-black">
+        <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 font-black">
+          <div className="w-full max-w-md h-[80vh] bg-white rounded-md flex flex-col shadow-2xl overflow-hidden border-2 border-slate-100">
+            <div className="p-4 border-b flex justify-between items-center bg-white font-black">
+              <div className="text-left">
+                <h3 className="text-[10px] text-[#008080] font-black tracking-widest">
                   OBROLAN LIVE
                 </h3>
-                <p className="text-[12px] text-slate-800">
-                  {chatType === "courier_customer" ? "KURIR" : "TOKO"}
+                <p className="text-[14px] font-black text-slate-800 leading-none mt-1 uppercase">
+                  KONTAK KURIR
                 </p>
               </div>
               <button
                 onClick={() => setShowChat(false)}
-                className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center font-black"
+                className="w-10 h-10 bg-slate-50 rounded-md font-black"
               >
                 ✕
               </button>
             </div>
-            <div className="flex-1 overflow-hidden bg-slate-50 uppercase">
+            <div className="flex-1 bg-slate-50 font-black">
               <OrderChatRoom
                 orderId={orderId!}
                 chatType={chatType}
-                merchantId={selectedMerchantId}
-                receiverName={
-                  chatType === "merchant_customer"
-                    ? "PEDAGANG"
-                    : courier?.full_name
-                }
+                receiverName={"KURIR PASARQU"}
               />
             </div>
           </div>

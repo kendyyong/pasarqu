@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
 import { useJsApiLoader } from "@react-google-maps/api";
-
-// --- PERBAIKAN: Jalur import disesuaikan (Cukup mundur 1 folder) ---
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -10,7 +8,6 @@ const libraries: "places"[] = ["places"];
 export const useSuperAdminDashboard = () => {
   const { user } = useAuth();
   
-  // --- THEME LOGIC ---
   const [isDark, setIsDark] = useState(() => localStorage.getItem("admin-theme") === "dark");
 
   const toggleTheme = () => {
@@ -39,14 +36,13 @@ export const useSuperAdminDashboard = () => {
         sidebar: "bg-white",
       };
 
-  // --- GOOGLE MAPS ---
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
     libraries,
   });
 
-  // --- DATA STATES ---
+  // ✅ KEMBALI NORMAL: Default selalu ke dashboard saat pertama dimuat
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [auditMarket, setAuditMarket] = useState<any>(null);
   const [markets, setMarkets] = useState<any[]>([]);
@@ -55,7 +51,6 @@ export const useSuperAdminDashboard = () => {
   const [complaintsCount, setComplaintsCount] = useState(0);
   const [finance, setFinance] = useState({ revenue: 0, orders: 0, active_markets: 0 });
 
-  // --- FETCH DATA ---
   const fetchData = async () => {
     if (!user) return;
     try {
@@ -82,19 +77,8 @@ export const useSuperAdminDashboard = () => {
   }, [user]);
 
   return {
-    isDark,
-    toggleTheme,
-    currentTheme,
-    isLoaded,
-    activeTab,
-    setActiveTab,
-    auditMarket,
-    setAuditMarket,
-    markets,
-    allUsers,
-    candidates,
-    complaintsCount,
-    finance,
-    fetchData
+    isDark, toggleTheme, currentTheme, isLoaded,
+    activeTab, setActiveTab, auditMarket, setAuditMarket,
+    markets, allUsers, candidates, complaintsCount, finance, fetchData
   };
 };
