@@ -13,7 +13,6 @@ import {
   ReceiptText,
   ShoppingBag,
   Store,
-  CreditCard,
   ShieldCheck,
 } from "lucide-react";
 
@@ -26,7 +25,6 @@ export const CheckoutPaymentPage = () => {
   const [loading, setLoading] = useState(false);
   const [shippingDetails, setShippingDetails] = useState<any>(null);
   const [manualAddress, setManualAddress] = useState("");
-  const [orderNotes, setOrderNotes] = useState("");
   const [deliveryCoords, setDeliveryCoords] = useState({
     lat: -6.2,
     lng: 106.8,
@@ -66,7 +64,6 @@ export const CheckoutPaymentPage = () => {
             (distance - Number(r.base_distance_km)) * Number(r.price_per_km);
         }
 
-        // ✅ WAJIB DIBULATKAN (Math.round)
         const totalLayanan = Math.round(
           Number(r.buyer_service_fee || 0) +
             extraCount * Number(r.surge_fee || 0),
@@ -117,23 +114,24 @@ export const CheckoutPaymentPage = () => {
   const handlePayment = async () => {
     if (!user || !selectedMarket || !shippingDetails) return;
     setLoading(true);
+
     try {
       const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-
-      // ✅ Pembulatan admin fee agar tidak desimal
       const adminFee = Math.round(
         subtotal * (shippingDetails.seller_admin_percent / 100),
       );
+      const totalBayar = Math.round(subtotal + shippingDetails.grand_total);
 
+      // 1. Simpan Pesanan (Status UNPAID)
       const { data: newOrder, error: orderErr } = await supabase
         .from("orders")
         .insert({
           customer_id: user.id,
           market_id: selectedMarket.id,
-          total_price: Math.round(subtotal + shippingDetails.grand_total),
+          total_price: totalBayar,
           shipping_cost: Math.round(shippingDetails.base_fare),
           service_fee: Math.round(shippingDetails.combined_service_fee),
-          status: "PAID",
+          status: "UNPAID",
           address: manualAddress.trim(),
           extra_store_fee: Math.round(shippingDetails.total_extra_fee),
           merchant_earning_total: Math.round(subtotal - adminFee),
@@ -141,13 +139,14 @@ export const CheckoutPaymentPage = () => {
             shippingDetails.courier_pure + shippingDetails.total_extra_fee,
           ),
           app_earning_total: Math.round(shippingDetails.app_profit + adminFee),
-          shipping_status: "PACKING",
+          shipping_status: "PENDING",
         })
         .select()
         .single();
 
       if (orderErr) throw orderErr;
 
+      // 2. Simpan Item
       await supabase.from("order_items").insert(
         cart.map((i) => ({
           order_id: newOrder.id,
@@ -158,11 +157,57 @@ export const CheckoutPaymentPage = () => {
         })),
       );
 
-      clearCart();
-      showToast("PEMBAYARAN BERHASIL!", "success");
-      navigate(`/track-order/${newOrder.id}`);
+      // 3. PANGGIL EDGE FUNCTION (create-midtrans-token)
+      const { data: payData, error: payError } =
+        await supabase.functions.invoke("create-midtrans-token", {
+          body: {
+            order_id: newOrder.id,
+            amount: totalBayar,
+            customer_name: profile?.full_name || user.email,
+            customer_email: user.email,
+          },
+        });
+
+      // Log untuk debug di console browser
+      console.log("Response Token:", payData);
+
+      if (payError || !payData?.token) {
+        throw new Error(
+          payData?.error ||
+            "Gagal mendapatkan token pembayaran. Cek log Supabase.",
+        );
+      }
+
+      // 4. Jalankan Snap Midtrans
+      if ((window as any).snap) {
+        (window as any).snap.pay(payData.token, {
+          onSuccess: function (result: any) {
+            clearCart();
+            showToast("PEMBAYARAN BERHASIL!", "success");
+            navigate(`/track-order/${newOrder.id}`);
+          },
+          onPending: function (result: any) {
+            clearCart();
+            showToast("SILAHKAN SELESAIKAN PEMBAYARAN", "info");
+            navigate(`/track-order/${newOrder.id}`);
+          },
+          onError: function (result: any) {
+            console.error("Snap Error:", result);
+            showToast("PEMBAYARAN GAGAL ATAU DITOLAK", "error");
+            setLoading(false);
+          },
+          onClose: function () {
+            showToast("PEMBAYARAN DITUNDA / DIBATALKAN", "info");
+            setLoading(false);
+          },
+        });
+      } else {
+        throw new Error(
+          "Sistem pembayaran (Snap.js) tidak termuat. Periksa index.html atau koneksi internet.",
+        );
+      }
     } catch (err: any) {
-      console.error("DETAIL ERROR:", err);
+      console.error("CHECKOUT ERROR:", err);
       showToast(`GAGAL: ${err.message}`, "error");
       setLoading(false);
     }
@@ -170,7 +215,7 @@ export const CheckoutPaymentPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-black uppercase tracking-tighter pb-10">
-      <header className="bg-white border-b h-12 flex items-center px-4 justify-between sticky top-0 z-[100] font-black">
+      <header className="bg-white border-b h-12 flex items-center px-4 justify-between sticky top-0 z-[100] font-black text-left">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate("/")} className="p-1 text-slate-400">
             <ArrowLeft size={22} />
@@ -316,3 +361,5 @@ export const CheckoutPaymentPage = () => {
     </div>
   );
 };
+
+export default CheckoutPaymentPage;
