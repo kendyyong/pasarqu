@@ -48,10 +48,17 @@ const ShippingConfig = lazy(() =>
   import("./ShippingConfig").then((m) => ({ default: m.ShippingConfig })),
 );
 
-// 🚀 MODUL BARU: MANAJEMEN MITRA & LENCANA
+// 🚀 MODUL: MANAJEMEN MITRA & LENCANA
 const AdminMerchantManager = lazy(() =>
   import("./AdminMerchantManager").then((m) => ({
     default: m.AdminMerchantManager,
+  })),
+);
+
+// 🚀 MODUL BARU: LIVE CHAT ADMIN (PUSAT PESAN)
+const AdminChatManager = lazy(() =>
+  import("./AdminChatManager").then((m) => ({
+    default: m.AdminChatManager,
   })),
 );
 
@@ -108,8 +115,11 @@ export const SuperAdminContent: React.FC<Props> = ({
     ),
     users: <UserManager allUsers={data.allUsers} theme={theme} />,
 
-    // 🚀 INTEGRASI KE TAB CONTENT
+    // 🚀 INTEGRASI MANAJEMEN MITRA
     "merchant-manager": <AdminMerchantManager />,
+
+    // 🚀 INTEGRASI LIVE CHAT ADMIN
+    "live-chat": <AdminChatManager />,
 
     // 🚩 FINANCE SYSTEM (MANDIRI)
     "finance-master": <FinanceDashboard theme={theme} />,

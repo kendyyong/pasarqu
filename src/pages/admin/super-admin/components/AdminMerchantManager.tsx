@@ -13,7 +13,10 @@ import {
   User,
   AlertTriangle,
   RefreshCw,
-  Database,
+  Calendar,
+  Bell,
+  BellRing,
+  Clock,
 } from "lucide-react";
 
 interface MerchantProfile {
@@ -23,6 +26,8 @@ interface MerchantProfile {
   shop_name: string | null;
   merchant_badge: string | null;
   is_shop_open: boolean | null;
+  badge_start_date: string | null;
+  badge_expiry_date: string | null;
 }
 
 export const AdminMerchantManager = () => {
@@ -31,16 +36,17 @@ export const AdminMerchantManager = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [dbError, setDbError] = useState<string | null>(null);
 
   const fetchMerchants = async () => {
     setLoading(true);
-    setDbError(null);
     try {
+      // 🚀 Jalankan fungsi pembersihan expired dulu di level database
+      await supabase.rpc("handle_expired_merchant_badges");
+
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, full_name, phone_number, shop_name, merchant_badge, is_shop_open",
+          "id, full_name, phone_number, shop_name, merchant_badge, is_shop_open, badge_start_date, badge_expiry_date",
         )
         .not("shop_name", "is", null)
         .order("shop_name", { ascending: true });
@@ -48,8 +54,7 @@ export const AdminMerchantManager = () => {
       if (error) throw error;
       setMerchants(data || []);
     } catch (err: any) {
-      setDbError(err.message || "Gagal sinkronisasi database.");
-      showToast("Data gagal dimuat", "error");
+      showToast("Gagal menyinkronkan data", "error");
     } finally {
       setLoading(false);
     }
@@ -59,21 +64,17 @@ export const AdminMerchantManager = () => {
     fetchMerchants();
   }, []);
 
-  const handleUpdateBadge = async (merchantId: string, newBadge: string) => {
+  const handleUpdateBadge = async (merchantId: string, updates: any) => {
     setUpdatingId(merchantId);
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ merchant_badge: newBadge })
+        .update(updates)
         .eq("id", merchantId);
 
       if (error) throw error;
-      showToast(`Badge diperbarui ke ${newBadge}`, "success");
-      setMerchants((prev) =>
-        prev.map((m) =>
-          m.id === merchantId ? { ...m, merchant_badge: newBadge } : m,
-        ),
-      );
+      showToast(`Data toko berhasil diperbarui`, "success");
+      fetchMerchants(); // Refresh data
     } catch (err: any) {
       showToast(`Gagal update: ${err.message}`, "error");
     } finally {
@@ -86,6 +87,15 @@ export const AdminMerchantManager = () => {
       m.shop_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       m.full_name?.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+
+  // LOGIKA ALARM: Cek apakah hari ini sudah melewati tanggal berakhir
+  const checkIsExpired = (expiryDate: string | null) => {
+    if (!expiryDate) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const exp = new Date(expiryDate);
+    return exp < today;
+  };
 
   const BadgePill = ({ type }: { type: string }) => {
     switch (type) {
@@ -117,7 +127,7 @@ export const AdminMerchantManager = () => {
   };
 
   return (
-    <div className="w-full space-y-6 animate-in fade-in duration-500">
+    <div className="w-full space-y-6 animate-in fade-in duration-500 pb-20">
       {/* TOOLBAR */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
         <div className="relative w-full md:w-96">
@@ -130,103 +140,150 @@ export const AdminMerchantManager = () => {
             placeholder="CARI NAMA TOKO / PEMILIK..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border-none rounded-xl font-bold text-[11px] outline-none focus:ring-2 focus:ring-[#008080]/20 transition-all uppercase"
+            className="w-full pl-10 pr-4 py-3 bg-slate-50 border-none rounded-xl font-bold text-[11px] outline-none focus:ring-2 focus:ring-[#008080]/20 transition-all uppercase"
           />
         </div>
         <button
           onClick={fetchMerchants}
-          className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-[#008080] text-white rounded-xl text-[10px] font-black tracking-widest hover:bg-slate-900 transition-all"
+          className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-[#008080] text-white rounded-xl text-[10px] font-black tracking-widest hover:bg-slate-900 transition-all"
         >
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />{" "}
-          REFRESH DATA
+          REFRESH DATABASE
         </button>
       </div>
-
-      {dbError && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl flex items-center gap-3 text-red-600 font-black text-[10px]">
-          <AlertTriangle size={18} /> ERROR: {dbError}
-        </div>
-      )}
 
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center gap-4 bg-white rounded-[2rem] border border-slate-100 shadow-sm">
           <Loader2 className="animate-spin text-[#008080]" size={40} />
           <p className="text-[10px] font-black text-slate-400 tracking-[0.3em]">
-            MENYINKRONKAN DATABASE...
+            MENGANALISA MASA AKTIF TOKO...
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3">
-          {filteredMerchants.length === 0 ? (
-            <div className="text-center py-20 bg-white rounded-[2rem] border border-dashed border-slate-200">
-              <p className="text-[11px] font-black text-slate-300 tracking-widest">
-                TIDAK ADA DATA MITRA TOKO
-              </p>
-            </div>
-          ) : (
-            filteredMerchants.map((merchant) => (
+        <div className="grid grid-cols-1 gap-4">
+          {filteredMerchants.map((merchant) => {
+            const isExpired = checkIsExpired(merchant.badge_expiry_date);
+
+            return (
               <div
                 key={merchant.id}
-                className="bg-white border border-slate-100 rounded-2xl p-4 flex flex-col md:flex-row justify-between items-center gap-4 hover:border-[#008080] transition-all group shadow-sm"
+                className={`bg-white border-2 rounded-[1.5rem] p-5 flex flex-col gap-5 transition-all shadow-sm ${isExpired ? "border-red-200 bg-red-50/30" : "border-slate-100"}`}
               >
-                <div className="flex items-center gap-4 w-full md:w-auto">
-                  <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center shrink-0 border border-slate-100 group-hover:bg-teal-50">
-                    <Store
-                      size={22}
-                      className="text-slate-300 group-hover:text-[#008080]"
-                    />
+                {/* BARIS ATAS: INFO TOKO */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div className="flex items-center gap-4">
+                    <div
+                      className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border ${isExpired ? "bg-red-100 border-red-200 text-red-500" : "bg-teal-50 border-teal-100 text-[#008080]"}`}
+                    >
+                      <Store size={24} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-[15px] font-black text-slate-900 uppercase leading-none">
+                          {merchant.shop_name}
+                        </h3>
+                        <BadgePill
+                          type={merchant.merchant_badge || "REGULAR"}
+                        />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-[10px] font-bold text-slate-400 tracking-widest">
+                        <span className="flex items-center gap-1">
+                          <User size={12} /> {merchant.full_name || "N/A"}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Phone size={12} /> {merchant.phone_number || "N/A"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-[13px] font-black text-slate-900 truncate uppercase">
-                        {merchant.shop_name}
-                      </h3>
-                      <BadgePill type={merchant.merchant_badge || "REGULAR"} />
-                    </div>
-                    <div className="flex items-center gap-3 text-[9px] font-bold text-slate-400 tracking-widest">
-                      <span className="flex items-center gap-1">
-                        <User size={10} /> {merchant.full_name || "N/A"}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Phone size={10} /> {merchant.phone_number || "N/A"}
-                      </span>
-                      <span
-                        className={
-                          merchant.is_shop_open
-                            ? "text-teal-600"
-                            : "text-red-400"
-                        }
-                      >
-                        ● {merchant.is_shop_open ? "BUKA" : "TUTUP"}
-                      </span>
-                    </div>
+
+                  {/* STATUS BADGE SELECTOR */}
+                  <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-100 w-full md:w-auto shadow-sm">
+                    <span className="text-[9px] font-black text-slate-400 pl-2">
+                      STATUS:
+                    </span>
+                    <select
+                      value={merchant.merchant_badge || "REGULAR"}
+                      disabled={updatingId === merchant.id}
+                      onChange={(e) =>
+                        handleUpdateBadge(merchant.id, {
+                          merchant_badge: e.target.value,
+                        })
+                      }
+                      className="bg-slate-50 border-none text-[10px] font-black p-2 rounded-lg min-w-[140px] uppercase outline-none focus:ring-2 focus:ring-[#008080]/20"
+                    >
+                      <option value="REGULAR">⬜ REGULAR</option>
+                      <option value="VERIFIED">🟦 VERIFIED</option>
+                      <option value="STAR">🟧 STAR SELLER</option>
+                      <option value="OFFICIAL">🟪 OFFICIAL</option>
+                    </select>
                   </div>
                 </div>
 
-                <div className="w-full md:w-auto flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                  <select
-                    value={merchant.merchant_badge || "REGULAR"}
-                    disabled={updatingId === merchant.id}
-                    onChange={(e) =>
-                      handleUpdateBadge(merchant.id, e.target.value)
-                    }
-                    className="bg-white border border-slate-200 text-[10px] font-black p-2 rounded-lg outline-none focus:border-[#008080] cursor-pointer min-w-[140px] uppercase"
-                  >
-                    <option value="REGULAR">⬜ REGULAR</option>
-                    <option value="VERIFIED">🟦 VERIFIED</option>
-                    <option value="STAR">🟧 STAR SELLER</option>
-                    <option value="OFFICIAL">🟪 OFFICIAL</option>
-                  </select>
-                  {updatingId === merchant.id && (
-                    <Loader2
-                      className="animate-spin text-[#008080]"
-                      size={16}
+                {/* BARIS BAWAH: PENGATURAN TANGGAL & ALARM */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-100">
+                  {/* TANGGAL MULAI */}
+                  <div className="space-y-1.5">
+                    <label className="text-[8px] font-black text-slate-400 tracking-widest flex items-center gap-1">
+                      <Calendar size={10} /> TANGGAL MULAI KONTRAK
+                    </label>
+                    <input
+                      type="date"
+                      value={merchant.badge_start_date || ""}
+                      onChange={(e) =>
+                        handleUpdateBadge(merchant.id, {
+                          badge_start_date: e.target.value,
+                        })
+                      }
+                      className="w-full bg-white border border-slate-200 p-2.5 rounded-xl text-[11px] font-black outline-none focus:border-[#008080]"
                     />
-                  )}
+                  </div>
+
+                  {/* TANGGAL BERAKHIR */}
+                  <div className="space-y-1.5">
+                    <label className="text-[8px] font-black text-slate-400 tracking-widest flex items-center gap-1">
+                      <Clock size={10} /> TANGGAL BERAKHIR KONTRAK
+                    </label>
+                    <input
+                      type="date"
+                      value={merchant.badge_expiry_date || ""}
+                      onChange={(e) =>
+                        handleUpdateBadge(merchant.id, {
+                          badge_expiry_date: e.target.value,
+                        })
+                      }
+                      className={`w-full border p-2.5 rounded-xl text-[11px] font-black outline-none transition-all ${isExpired ? "bg-red-50 border-red-500 text-red-600" : "bg-white border-slate-200 focus:border-[#008080]"}`}
+                    />
+                  </div>
+
+                  {/* KOLOM ALARM */}
+                  <div className="flex items-end">
+                    {isExpired ? (
+                      <div className="w-full bg-red-600 text-white p-2.5 rounded-xl flex items-center justify-center gap-3 animate-pulse shadow-lg shadow-red-900/20">
+                        <BellRing size={16} />
+                        <span className="text-[10px] font-black tracking-widest uppercase">
+                          MASA AKTIF HABIS!
+                        </span>
+                      </div>
+                    ) : merchant.badge_expiry_date ? (
+                      <div className="w-full bg-teal-50 text-[#008080] p-2.5 rounded-xl flex items-center justify-center gap-3 border border-teal-100">
+                        <Bell size={16} />
+                        <span className="text-[10px] font-black tracking-widest uppercase">
+                          STATUS AKTIF
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="w-full bg-slate-50 text-slate-400 p-2.5 rounded-xl flex items-center justify-center gap-3 border border-dashed border-slate-200">
+                        <span className="text-[10px] font-black tracking-widest uppercase italic">
+                          TANGGAL BELUM DISET
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            ))
-          )}
+            );
+          })}
         </div>
       )}
     </div>

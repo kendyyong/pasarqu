@@ -26,6 +26,7 @@ import {
   Receipt,
   ArrowUpRight,
   Crown,
+  MessageSquare, // 🚀 Tambahan icon untuk Chat
 } from "lucide-react";
 
 import { useSuperAdminDashboard } from "../../../hooks/useSuperAdminDashboard";
@@ -37,7 +38,7 @@ import { SuperAdminContent } from "./components/SuperAdminContent";
 import { PageLoader } from "../../../components/ui/PageLoader";
 
 export const SuperAdminDashboard: React.FC = () => {
-  const { logout, profile } = useAuth();
+  const { logout, profile } = useAuth() as any;
   const navigate = useNavigate();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -85,7 +86,6 @@ export const SuperAdminDashboard: React.FC = () => {
         },
         { id: "markets", label: "KELOLA WILAYAH", icon: Store },
         { id: "users", label: "DATABASE USER", icon: Users },
-        // 🚀 PERBAIKAN: Sekarang id 'merchant-manager' menjadi tab internal
         {
           id: "merchant-manager",
           label: "MANAJEMEN MITRA TOKO",
@@ -116,7 +116,8 @@ export const SuperAdminDashboard: React.FC = () => {
       group: "MARKETING & SYSTEM",
       items: [
         { id: "manage-ads", label: "MANAJEMEN IKLAN", icon: ImageIcon },
-        { id: "broadcast", label: "BROADCAST NOTIF", icon: Radio },
+        // 🚀 UPDATE: Mengubah Broadcast menjadi Live Chat
+        { id: "live-chat", label: "LIVE CHAT ADMIN", icon: MessageSquare },
         { id: "logs", label: "LOG AKTIVITAS", icon: History },
         { id: "settings", label: "PENGATURAN SISTEM", icon: Settings },
       ],
@@ -219,7 +220,6 @@ export const SuperAdminDashboard: React.FC = () => {
                     <button
                       key={item.id}
                       onClick={() => {
-                        // 🚀 Sekarang semua menu ID di sini akan mengganti tab internal
                         setActiveTab(item.id);
                       }}
                       className={`w-full flex items-center gap-4 p-3.5 rounded-xl transition-all ${
