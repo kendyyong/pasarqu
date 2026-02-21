@@ -14,6 +14,8 @@ import {
   ShoppingBag,
   Store,
   ShieldCheck,
+  Ticket,
+  CheckCircle2,
 } from "lucide-react";
 
 export const CheckoutPaymentPage = () => {
@@ -29,6 +31,12 @@ export const CheckoutPaymentPage = () => {
     lat: -6.2,
     lng: 106.8,
   });
+
+  // 🚀 STATE UNTUK PROMO
+  const [promoCode, setPromoCode] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+  const [isCheckingPromo, setIsCheckingPromo] = useState(false);
+  const [promoError, setPromoError] = useState("");
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
@@ -111,35 +119,109 @@ export const CheckoutPaymentPage = () => {
     }
   }, [selectedMarket, profile, updateLogistics]);
 
+  // 🚀 LOGIKA CEK KODE PROMO
+  const handleApplyPromo = async () => {
+    if (!promoCode) return;
+    setIsCheckingPromo(true);
+    setPromoError("");
+
+    try {
+      const { data, error } = await supabase
+        .from("promos")
+        .select("*")
+        .eq("code", promoCode.toUpperCase())
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (error || !data)
+        throw new Error("Kode voucher tidak ditemukan atau tidak aktif.");
+
+      const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+
+      // Validasi Syarat Promo
+      if (data.min_purchase && subtotal < data.min_purchase) {
+        throw new Error(
+          `Minimal belanja Rp ${data.min_purchase.toLocaleString()} untuk promo ini.`,
+        );
+      }
+      if (data.usage_limit && data.used_count >= data.usage_limit) {
+        throw new Error("Kuota voucher sudah habis digunakan.");
+      }
+      if (data.valid_until && new Date(data.valid_until) < new Date()) {
+        throw new Error("Masa berlaku kode voucher sudah habis.");
+      }
+
+      setAppliedPromo(data);
+      showToast("Voucher berhasil digunakan!", "success");
+    } catch (err: any) {
+      setPromoError(err.message);
+      setAppliedPromo(null);
+    } finally {
+      setIsCheckingPromo(false);
+    }
+  };
+
+  // 🚀 LOGIKA HITUNG DISKON
+  const subtotalCart = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  let discountAmount = 0;
+
+  if (appliedPromo) {
+    if (appliedPromo.type === "DISCOUNT_NOMINAL") {
+      discountAmount = appliedPromo.value;
+    } else if (appliedPromo.type === "DISCOUNT_PERCENT") {
+      discountAmount = (subtotalCart * appliedPromo.value) / 100;
+      if (
+        appliedPromo.max_discount &&
+        discountAmount > appliedPromo.max_discount
+      ) {
+        discountAmount = appliedPromo.max_discount;
+      }
+    } else if (appliedPromo.type === "FREE_SHIPPING") {
+      discountAmount = shippingDetails?.base_fare || 0;
+      if (
+        appliedPromo.max_discount &&
+        discountAmount > appliedPromo.max_discount
+      ) {
+        discountAmount = appliedPromo.max_discount;
+      }
+    }
+  }
+
+  // Mencegah total menjadi minus jika diskon lebih besar dari harga
+  const grandTotalAkhir = Math.max(
+    0,
+    subtotalCart + (shippingDetails?.grand_total || 0) - discountAmount,
+  );
+
   const handlePayment = async () => {
     if (!user || !selectedMarket || !shippingDetails) return;
     setLoading(true);
 
     try {
-      const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
       const adminFee = Math.round(
-        subtotal * (shippingDetails.seller_admin_percent / 100),
+        subtotalCart * (shippingDetails.seller_admin_percent / 100),
       );
-      const totalBayar = Math.round(subtotal + shippingDetails.grand_total);
 
-      // 1. Simpan Pesanan (Status UNPAID)
+      // 1. Simpan Pesanan (Dengan data promo)
       const { data: newOrder, error: orderErr } = await supabase
         .from("orders")
         .insert({
           customer_id: user.id,
           market_id: selectedMarket.id,
-          total_price: totalBayar,
+          total_price: grandTotalAkhir,
           shipping_cost: Math.round(shippingDetails.base_fare),
           service_fee: Math.round(shippingDetails.combined_service_fee),
           status: "UNPAID",
           address: manualAddress.trim(),
           extra_store_fee: Math.round(shippingDetails.total_extra_fee),
-          merchant_earning_total: Math.round(subtotal - adminFee),
+          merchant_earning_total: Math.round(subtotalCart - adminFee),
           courier_earning_total: Math.round(
             shippingDetails.courier_pure + shippingDetails.total_extra_fee,
           ),
           app_earning_total: Math.round(shippingDetails.app_profit + adminFee),
           shipping_status: "PENDING",
+          promo_code: appliedPromo ? appliedPromo.code : null,
+          discount_amount: Math.round(discountAmount),
         })
         .select()
         .single();
@@ -157,42 +239,48 @@ export const CheckoutPaymentPage = () => {
         })),
       );
 
-      // 3. PANGGIL EDGE FUNCTION (create-midtrans-token)
+      // 3. Tambah count penggunaan promo jika ada (DIPERBAIKI)
+      if (appliedPromo) {
+        const { error: promoErr } = await supabase.rpc(
+          "increment_promo_usage",
+          { p_code: appliedPromo.code },
+        );
+        if (promoErr) {
+          console.error("Gagal update kuota promo:", promoErr);
+        }
+      }
+
+      // 4. PANGGIL EDGE FUNCTION MIDTRANS (Kirim harga yg sudah didiskon)
       const { data: payData, error: payError } =
         await supabase.functions.invoke("create-midtrans-token", {
           body: {
             order_id: newOrder.id,
-            amount: totalBayar,
+            amount: grandTotalAkhir,
             customer_name: profile?.full_name || user.email,
             customer_email: user.email,
           },
         });
 
-      // Log untuk debug di console browser
-      console.log("Response Token:", payData);
-
       if (payError || !payData?.token) {
         throw new Error(
-          payData?.error ||
-            "Gagal mendapatkan token pembayaran. Cek log Supabase.",
+          payData?.error || "Gagal mendapatkan token pembayaran dari server.",
         );
       }
 
-      // 4. Jalankan Snap Midtrans
+      // 5. Jalankan Snap Midtrans
       if ((window as any).snap) {
         (window as any).snap.pay(payData.token, {
-          onSuccess: function (result: any) {
+          onSuccess: function () {
             clearCart();
             showToast("PEMBAYARAN BERHASIL!", "success");
             navigate(`/track-order/${newOrder.id}`);
           },
-          onPending: function (result: any) {
+          onPending: function () {
             clearCart();
-            showToast("SILAHKAN SELESAIKAN PEMBAYARAN", "info");
+            showToast("SILAKAN SELESAIKAN PEMBAYARAN", "info");
             navigate(`/track-order/${newOrder.id}`);
           },
-          onError: function (result: any) {
-            console.error("Snap Error:", result);
+          onError: function () {
             showToast("PEMBAYARAN GAGAL ATAU DITOLAK", "error");
             setLoading(false);
           },
@@ -202,9 +290,7 @@ export const CheckoutPaymentPage = () => {
           },
         });
       } else {
-        throw new Error(
-          "Sistem pembayaran (Snap.js) tidak termuat. Periksa index.html atau koneksi internet.",
-        );
+        throw new Error("Sistem pembayaran (Snap.js) tidak termuat.");
       }
     } catch (err: any) {
       console.error("CHECKOUT ERROR:", err);
@@ -214,8 +300,8 @@ export const CheckoutPaymentPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-black uppercase tracking-tighter pb-10">
-      <header className="bg-white border-b h-12 flex items-center px-4 justify-between sticky top-0 z-[100] font-black text-left">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-black uppercase tracking-tighter pb-10 text-left">
+      <header className="bg-white border-b h-12 flex items-center px-4 justify-between sticky top-0 z-[100] font-black">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate("/")} className="p-1 text-slate-400">
             <ArrowLeft size={22} />
@@ -230,8 +316,9 @@ export const CheckoutPaymentPage = () => {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto flex flex-col md:flex-row gap-2 p-2 mt-2 font-black uppercase text-left">
+      <main className="max-w-6xl mx-auto flex flex-col md:flex-row gap-2 p-2 mt-2 font-black uppercase">
         <div className="flex-1 space-y-2">
+          {/* LOKASI */}
           <section className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
             <div className="flex items-center gap-2 mb-4 font-black">
               <MapPin size={18} className="text-red-500" />
@@ -269,6 +356,7 @@ export const CheckoutPaymentPage = () => {
             />
           </section>
 
+          {/* KERANJANG */}
           <section className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm font-black">
             <div className="flex items-center gap-2 mb-4 border-b border-slate-50 pb-2">
               <ShoppingBag size={18} className="text-teal-600" />
@@ -290,8 +378,61 @@ export const CheckoutPaymentPage = () => {
           </section>
         </div>
 
+        {/* SIDEBAR PEMBAYARAN & PROMO */}
         <div className="w-full md:w-[360px]">
           <div className="space-y-2 sticky top-16">
+            {/* 🚀 KOTAK PROMO */}
+            <section className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm font-black">
+              <div className="flex items-center gap-2 mb-3">
+                <Ticket size={18} className="text-teal-600" />
+                <h2 className="text-[12px] text-slate-800">PAKAI VOUCHER</h2>
+              </div>
+              <div className="flex gap-2 relative">
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                  placeholder="KODE PROMO"
+                  className="flex-1 bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-xs font-black outline-none focus:border-teal-500 uppercase transition-all"
+                  disabled={!!appliedPromo}
+                />
+                {!appliedPromo ? (
+                  <button
+                    onClick={handleApplyPromo}
+                    disabled={!promoCode || isCheckingPromo}
+                    className="bg-slate-900 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50 active:scale-95 transition-all"
+                  >
+                    {isCheckingPromo ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      "PAKAI"
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setAppliedPromo(null);
+                      setPromoCode("");
+                    }}
+                    className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                  >
+                    BATAL
+                  </button>
+                )}
+              </div>
+              {promoError && (
+                <p className="text-[9px] text-red-500 font-bold mt-2 ml-1">
+                  {promoError}
+                </p>
+              )}
+              {appliedPromo && (
+                <div className="flex items-center gap-1.5 text-[9px] text-teal-600 font-black mt-2 ml-1 bg-teal-50 px-2 py-1.5 rounded-lg border border-teal-100">
+                  <CheckCircle2 size={12} /> VOUCHER BERHASIL DITERAPKAN!
+                </div>
+              )}
+            </section>
+
+            {/* RINCIAN HARGA */}
             <section className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl border-b-[8px] border-teal-600 font-black">
               <div className="flex items-center gap-2 mb-6 font-black">
                 <ReceiptText size={20} className="text-[#FF6600]" />
@@ -301,9 +442,7 @@ export const CheckoutPaymentPage = () => {
                 <div className="flex justify-between text-[12px] text-slate-500 uppercase">
                   <span>PRODUK</span>
                   <span className="font-sans text-slate-900 font-black">
-                    {cart
-                      .reduce((s, i) => s + i.price * i.quantity, 0)
-                      .toLocaleString()}
+                    {subtotalCart.toLocaleString()}
                   </span>
                 </div>
                 <div className="flex justify-between text-[12px] text-slate-500 uppercase">
@@ -320,7 +459,7 @@ export const CheckoutPaymentPage = () => {
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between text-[12px] text-teal-600 border-t pt-2 uppercase">
+                <div className="flex justify-between text-[12px] text-teal-600 uppercase">
                   <span>
                     <ShieldCheck size={14} className="inline mr-1" /> Layanan
                   </span>
@@ -330,16 +469,23 @@ export const CheckoutPaymentPage = () => {
                       0}
                   </span>
                 </div>
-                <div className="pt-6 border-t-2 border-dashed mt-4 font-black uppercase">
+
+                {/* 🚀 BARIS DISKON (MUNCUL JIKA ADA PROMO) */}
+                {appliedPromo && (
+                  <div className="flex justify-between text-[12px] text-red-500 font-black border-t border-dashed pt-2 mt-2">
+                    <span>DISKON PROMO</span>
+                    <span className="font-sans font-black">
+                      - {Math.round(discountAmount).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+
+                <div className="pt-4 border-t-2 border-slate-100 mt-4 font-black uppercase">
                   <p className="text-[10px] text-slate-400 mb-1 tracking-widest uppercase font-black">
                     TOTAL PEMBAYARAN
                   </p>
                   <p className="text-4xl font-black text-[#FF6600] font-sans tracking-tighter leading-none italic">
-                    RP{" "}
-                    {(
-                      cart.reduce((s, i) => s + i.price * i.quantity, 0) +
-                      (shippingDetails?.grand_total || 0)
-                    ).toLocaleString()}
+                    RP {grandTotalAkhir.toLocaleString()}
                   </p>
                 </div>
               </div>

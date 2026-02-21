@@ -25,6 +25,7 @@ import {
   Image as ImageIcon,
   Receipt,
   ArrowUpRight,
+  Crown,
 } from "lucide-react";
 
 import { useSuperAdminDashboard } from "../../../hooks/useSuperAdminDashboard";
@@ -84,6 +85,12 @@ export const SuperAdminDashboard: React.FC = () => {
         },
         { id: "markets", label: "KELOLA WILAYAH", icon: Store },
         { id: "users", label: "DATABASE USER", icon: Users },
+        // 🚀 PERBAIKAN: Sekarang id 'merchant-manager' menjadi tab internal
+        {
+          id: "merchant-manager",
+          label: "MANAJEMEN MITRA TOKO",
+          icon: Crown,
+        },
       ],
     },
     {
@@ -117,11 +124,10 @@ export const SuperAdminDashboard: React.FC = () => {
   ];
 
   return (
-    // ✅ PERUBAHAN UTAMA: Layout responsif flex-col (HP) ke flex-row (PC)
     <div
       className={`h-screen flex flex-col md:flex-row text-left overflow-hidden font-black uppercase tracking-tighter transition-colors duration-500 ${isDark ? "bg-slate-950 text-white" : "bg-[#F8FAFC] text-slate-900"}`}
     >
-      {/* --- 📱 MOBILE HEADER (KHUSUS HP) --- */}
+      {/* --- 📱 MOBILE HEADER --- */}
       <div
         className={`md:hidden flex items-center justify-between px-4 py-4 shrink-0 border-b z-30 ${isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}
       >
@@ -150,7 +156,7 @@ export const SuperAdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* --- 📱 MOBILE OVERLAY GELAP (KHUSUS HP) --- */}
+      {/* --- 📱 MOBILE OVERLAY GELAP --- */}
       {isMobileMenuOpen && (
         <div
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 md:hidden"
@@ -158,7 +164,7 @@ export const SuperAdminDashboard: React.FC = () => {
         />
       )}
 
-      {/* --- 🖥️📱 SIDEBAR (GABUNGAN PC & HP) --- */}
+      {/* --- 🖥️📱 SIDEBAR --- */}
       <aside
         className={`fixed md:relative flex flex-col transition-all duration-300 z-50 h-screen w-72 
           ${isSidebarOpen ? "md:w-72" : "md:w-20"} 
@@ -175,7 +181,6 @@ export const SuperAdminDashboard: React.FC = () => {
             >
               <span className="text-xl font-black">P</span>
             </div>
-            {/* Teks dimunculkan di HP atau saat sidebar PC terbuka */}
             {(isSidebarOpen || isMobileMenuOpen) && (
               <span className="text-xl tracking-tighter leading-none">
                 PASARQU{" "}
@@ -188,7 +193,6 @@ export const SuperAdminDashboard: React.FC = () => {
             )}
           </div>
 
-          {/* Tombol Tutup Khusus HP */}
           <button
             onClick={() => setIsMobileMenuOpen(false)}
             className="md:hidden text-white/70 hover:text-white active:scale-90 transition-all p-1"
@@ -210,10 +214,14 @@ export const SuperAdminDashboard: React.FC = () => {
               <div className="space-y-1">
                 {group.items.map((item) => {
                   const isActive = activeTab === item.id;
+
                   return (
                     <button
                       key={item.id}
-                      onClick={() => setActiveTab(item.id)}
+                      onClick={() => {
+                        // 🚀 Sekarang semua menu ID di sini akan mengganti tab internal
+                        setActiveTab(item.id);
+                      }}
                       className={`w-full flex items-center gap-4 p-3.5 rounded-xl transition-all ${
                         isActive
                           ? isDark
@@ -255,7 +263,6 @@ export const SuperAdminDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* 🖥️ TOMBOL TOGGLE SIDEBAR (KHUSUS PC) */}
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           className={`hidden md:flex absolute -right-3 top-24 border rounded-full p-1 shadow-sm z-50 transition-transform active:scale-90 ${isDark ? "bg-slate-800 border-slate-700 text-slate-400 hover:text-teal-400" : "bg-white border-slate-200 text-slate-400 hover:text-teal-600"}`}
@@ -268,11 +275,11 @@ export const SuperAdminDashboard: React.FC = () => {
         </button>
       </aside>
 
-      {/* --- CONTENT AREA --- */}
+      {/* --- CONTENT AREA (KOLOM KANAN) --- */}
       <div
         className={`flex-1 flex flex-col h-full overflow-hidden relative border-l ${isDark ? "border-slate-800" : "border-slate-100"}`}
       >
-        {/* 🖥️ HEADER KONTEN (KHUSUS PC) */}
+        {/* 🖥️ HEADER KONTEN */}
         <header
           className={`hidden md:flex h-20 items-center justify-between px-8 z-40 shrink-0 border-b transition-colors duration-500 ${isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}
         >
@@ -293,7 +300,7 @@ export const SuperAdminDashboard: React.FC = () => {
               <span
                 className={`text-[12px] font-black uppercase ${isDark ? "text-white" : "text-slate-800"}`}
               >
-                {profile?.name || "SUPER ADMIN"}
+                {profile?.full_name || "SUPER ADMIN"}
               </span>
               <span
                 className={`text-[10px] font-bold uppercase ${isDark ? "text-orange-400" : brand.orange}`}

@@ -6,6 +6,7 @@ import {
   Loader2,
   MoreVertical,
   Home,
+  Star,
 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import { useMarket } from "../../contexts/MarketContext";
@@ -18,7 +19,8 @@ import { ProductInfo } from "./components/ProductInfo";
 import { MerchantCard } from "./components/MerchantCard";
 import { ProductDescription } from "./components/ProductDescription";
 import { ProductActionBar } from "./components/ProductActionBar";
-import { ProductReviews } from "./components/ProductReviews";
+// Import komponen review terbaru kita
+import { StoreReviews } from "../../components/reviews/StoreReviews";
 
 export const ProductDetail = () => {
   const { productId } = useParams();
@@ -28,7 +30,6 @@ export const ProductDetail = () => {
   const { user } = useAuth();
 
   const [product, setProduct] = useState<any>(null);
-  const [reviews, setReviews] = useState<any[]>([]);
   const [soldCount, setSoldCount] = useState(0);
   const [averageRating, setAverageRating] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -100,11 +101,11 @@ export const ProductDetail = () => {
               .select("*")
               .eq("id", p.category_id)
               .maybeSingle(),
+            // 🚀 PERBAIKAN: Ambil rating rata-rata dari tabel 'reviews' yang baru
             supabase
-              .from("product_reviews")
-              .select("*, profiles(*)")
-              .eq("product_id", id)
-              .order("created_at", { ascending: false }),
+              .from("reviews")
+              .select("rating")
+              .eq("merchant_id", p.merchant_id),
             supabase
               .from("order_items")
               .select("quantity, orders!inner(status)")
@@ -123,7 +124,6 @@ export const ProductDetail = () => {
             s.data?.reduce((acc, item) => acc + (item.quantity || 0), 0) || 0;
 
           setProduct({ ...p, merchants: m.data, categories: c.data });
-          setReviews(reviewData);
           setAverageRating(Number(avg.toFixed(1)));
           setSoldCount(totalSold);
         }
@@ -240,7 +240,6 @@ export const ProductDetail = () => {
           chatLoading={chatLoading}
         />
 
-        {/* ✅ WILAYAH SEKARANG DINAMIS BERDASARKAN MERCHANT */}
         <ProductDescription
           category={product.categories?.name}
           city={
@@ -252,7 +251,14 @@ export const ProductDetail = () => {
           description={product.description}
         />
 
-        <ProductReviews reviews={reviews} soldCount={soldCount} />
+        {/* 🚀 BAGIAN ULASAN BARU */}
+        <div className="mt-4 bg-white p-4 md:p-0">
+          <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter mb-2 flex items-center gap-2 px-2 md:px-0 mt-4 md:mt-8">
+            <Star className="text-yellow-400" fill="currentColor" size={18} />{" "}
+            Penilaian Toko
+          </h3>
+          <StoreReviews merchantId={product.merchant_id} />
+        </div>
       </main>
 
       <ProductActionBar

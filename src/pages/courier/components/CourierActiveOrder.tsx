@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../../lib/supabaseClient";
+import { useAuth } from "../../../contexts/AuthContext";
 import { useToast } from "../../../contexts/ToastContext";
 import {
   MapPin,
@@ -24,11 +25,14 @@ interface Props {
 }
 
 export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
+  const { user } = useAuth(); // Perlu auth untuk update lokasi kurir
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [showChat, setShowChat] = useState(false);
 
-  // State untuk menentukan siapa yang diajak chat
+  // State untuk GPS Tracker
+  const [locationInterval, setLocationInterval] = useState<any>(null);
+
   const [chatTarget, setChatTarget] = useState<{
     type: "courier_customer" | "courier_merchant";
     name: string;
@@ -37,6 +41,37 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
   const isCompleted =
     order?.status === "COMPLETED" || order?.shipping_status === "COMPLETED";
 
+  // 🚀 FITUR PRO: LIVE GPS TRACKER KURIR
+  // Memancarkan lokasi HP Kurir ke Supabase setiap 5 detik saat status "SHIPPING"
+  useEffect(() => {
+    if (order?.shipping_status === "SHIPPING" && user?.id) {
+      const interval = setInterval(() => {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const { latitude, longitude } = position.coords;
+            // Update tabel couriers agar Radar pembeli bergerak
+            await supabase
+              .from("couriers")
+              .update({
+                current_lat: latitude,
+                current_lng: longitude,
+              })
+              .eq("id", user.id);
+            console.log("GPS Dikirim:", latitude, longitude);
+          },
+          (error) => console.error("GPS Error:", error),
+          { enableHighAccuracy: true, maximumAge: 0 },
+        );
+      }, 5000); // 5000ms = 5 detik
+
+      setLocationInterval(interval);
+      return () => clearInterval(interval);
+    } else {
+      // Jika status bukan SHIPPING, hentikan kirim GPS agar hemat baterai
+      if (locationInterval) clearInterval(locationInterval);
+    }
+  }, [order?.shipping_status, user?.id]);
+
   // --- LOGIKA UTAMA: UPDATE STATUS & MONEY SPLIT ---
   const handleStatusUpdate = async () => {
     setLoading(true);
@@ -44,22 +79,25 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
       let nextStatus = "";
       let isFinalStep = false;
 
-      // Alur Status: COURIER_ASSIGNED -> PICKING_UP -> DELIVERING -> COMPLETED
+      // 🚀 PERBAIKAN LOGIKA STATUS AGAR SINKRON DENGAN RADAR PEMBELI
+      // Alur: PACKING -> SHIPPING -> COMPLETED
       if (
-        order.shipping_status === "COURIER_ASSIGNED" ||
-        order.shipping_status === "PAID"
+        order.shipping_status === "SEARCHING_COURIER" ||
+        order.shipping_status === "PACKING"
       ) {
-        nextStatus = "PICKING_UP";
-      } else if (order.shipping_status === "PICKING_UP") {
-        nextStatus = "DELIVERING";
-      } else if (order.shipping_status === "DELIVERING") {
+        nextStatus = "SHIPPING"; // Radar pembeli akan maju ke "DIKIRIM"
+      } else if (
+        order.shipping_status === "SHIPPING" ||
+        order.shipping_status === "DELIVERING"
+      ) {
         nextStatus = "COMPLETED";
         isFinalStep = true;
+      } else {
+        nextStatus = "SHIPPING"; // Fallback aman
       }
 
       if (isFinalStep) {
         // 1. JALANKAN PROSEDUR SELESAI & CAIRKAN DANA (RPC)
-        // Memastikan saldo bertambah dan status berubah dalam satu transaksi
         const { error: rpcError } = await supabase.rpc(
           "complete_order_and_pay_courier",
           {
@@ -70,9 +108,13 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
         );
 
         if (rpcError) throw rpcError;
+
+        // Bersihkan GPS interval
+        if (locationInterval) clearInterval(locationInterval);
+
         showToast("Pesanan Selesai! Saldo masuk ke dompet Anda.", "success");
       } else {
-        // 2. UPDATE STATUS PERJALANAN BIASA
+        // 2. UPDATE STATUS PERJALANAN (Motor Jalan)
         const { error } = await supabase
           .from("orders")
           .update({ shipping_status: nextStatus })
@@ -95,7 +137,6 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
     }
   };
 
-  // Fungsi buka chat
   const openChat = (
     type: "courier_customer" | "courier_merchant",
     name: string,
@@ -252,9 +293,10 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           ) : (
             <CheckCircle size={24} />
           )}
-          {order.shipping_status === "DELIVERING"
+          {order.shipping_status === "SHIPPING" ||
+          order.shipping_status === "DELIVERING"
             ? "KONFIRMASI TIBA & TERIMA GAJI"
-            : "UPDATE STATUS TUGAS"}
+            : "AMBIL ORDER & MULAI KIRIM"}
         </button>
       )}
     </div>

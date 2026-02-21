@@ -2,40 +2,52 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { GoogleMap, useJsApiLoader, MarkerF } from "@react-google-maps/api";
 import { supabase } from "../../lib/supabaseClient";
+import { useAuth } from "../../contexts/AuthContext";
+import { useToast } from "../../contexts/ToastContext";
 import {
   ArrowLeft,
   Loader2,
   Bike,
   ShoppingBag,
-  ChevronRight,
   Package,
   CheckCircle2,
-  Clock,
   Wallet,
   MapPin,
   Download,
   ShieldAlert,
   HeadphonesIcon,
   X,
+  Star,
 } from "lucide-react";
 import { OrderChatRoom } from "../../features/chat/OrderChatRoom";
 import { ComplaintTrigger } from "../../components/shared/ComplaintTrigger";
-import { ComplaintForm } from "../../components/shared/ComplaintForm"; // 🚩 Tambah Import
+import { ComplaintForm } from "../../components/shared/ComplaintForm";
 
 const mapContainerStyle = { width: "100%", height: "100%" };
 
 export const OrderTrackingPage = () => {
+  const { user } = useAuth();
+  const { showToast } = useToast();
   const { orderId } = useParams();
   const navigate = useNavigate();
+
   const [order, setOrder] = useState<any>(null);
   const [courier, setCourier] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showChat, setShowChat] = useState(false);
-  const [showSupportModal, setShowSupportModal] = useState(false); // 🚩 State untuk Modal Bantuan
+  const [showSupportModal, setShowSupportModal] = useState(false);
   const [chatType, setChatType] = useState<
     "merchant_customer" | "courier_customer"
   >("merchant_customer");
   const [orderItems, setOrderItems] = useState<any[]>([]);
+
+  // 🚀 STATE UNTUK REVIEW / ULASAN
+  const [hasReviewed, setHasReviewed] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
@@ -52,8 +64,16 @@ export const OrderTrackingPage = () => {
   const getCurrentStep = () => {
     if (!order) return -1;
     if (order.shipping_status === "COMPLETED") return 3;
-    if (order.shipping_status === "SHIPPING") return 2;
-    if (order.shipping_status === "PACKING") return 1;
+    if (
+      order.shipping_status === "SHIPPING" ||
+      order.shipping_status === "DELIVERING"
+    )
+      return 2;
+    if (
+      order.shipping_status === "PACKING" ||
+      order.shipping_status === "SEARCHING_COURIER"
+    )
+      return 1;
     if (order.status === "PAID") return 0;
     return -1;
   };
@@ -101,6 +121,15 @@ export const OrderTrackingPage = () => {
             .maybeSingle();
           setCourier(cData);
         }
+
+        // Cek apakah order ini sudah di-review sebelumnya
+        const { data: reviewData } = await supabase
+          .from("reviews")
+          .select("id")
+          .eq("order_id", orderId)
+          .maybeSingle();
+
+        if (reviewData) setHasReviewed(true);
       } catch (err) {
         console.error(err);
       } finally {
@@ -109,6 +138,78 @@ export const OrderTrackingPage = () => {
     };
     fetchFullData();
   }, [orderId]);
+
+  // LIVE UPDATE STATUS PESANAN
+  useEffect(() => {
+    if (!orderId) return;
+    const orderSubscription = supabase
+      .channel(`live-order-${orderId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "orders",
+          filter: `id=eq.${orderId}`,
+        },
+        (payload) => {
+          setOrder(payload.new);
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(orderSubscription);
+    };
+  }, [orderId]);
+
+  // LIVE UPDATE KURIR GPS
+  useEffect(() => {
+    if (!order?.courier_id) return;
+    const courierSubscription = supabase
+      .channel(`live-courier-${order.courier_id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "couriers",
+          filter: `id=eq.${order.courier_id}`,
+        },
+        (payload) => {
+          setCourier(payload.new);
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(courierSubscription);
+    };
+  }, [order?.courier_id]);
+
+  // 🚀 FUNGSI KIRIM ULASAN BINTANG
+  const handleSubmitReview = async () => {
+    if (rating === 0)
+      return showToast("Pilih jumlah bintang terlebih dahulu!", "error");
+    setIsSubmittingReview(true);
+    try {
+      const { error } = await supabase.from("reviews").insert({
+        order_id: order.id,
+        merchant_id: order.market_id, // Atur ke market atau merchant spesifik
+        customer_id: user?.id,
+        rating: rating,
+        comment: reviewComment,
+      });
+
+      if (error) throw error;
+
+      showToast("Terima kasih atas ulasan Anda!", "success");
+      setHasReviewed(true);
+      setShowReviewModal(false);
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
 
   const handleDownloadInvoice = () => {
     window.open(`/invoice/${orderId}`, "_blank");
@@ -256,7 +357,7 @@ export const OrderTrackingPage = () => {
             </div>
           </section>
 
-          {/* 🚩 PUSAT RESOLUSI */}
+          {/* PUSAT RESOLUSI */}
           <section className="bg-white p-4 rounded-md border border-slate-100 shadow-sm border-l-8 border-l-[#FF6600] space-y-3 font-black">
             <div className="flex items-center gap-2">
               <ShieldAlert size={16} className="text-[#FF6600]" />
@@ -264,19 +365,27 @@ export const OrderTrackingPage = () => {
                 PUSAT RESOLUSI
               </h4>
             </div>
-
             <ComplaintTrigger
               orderId={orderId!}
               orderStatus={order.shipping_status || order.status}
             />
-
             <p className="text-[10px] text-slate-400 normal-case font-bold leading-tight">
-              GUNAKAN LAYANAN INI JIKA PESANAN RUSAK ATAU KURIR BERMASALAH
-              SEBELUM MENYELESAIKAN PESANAN.
+              Gunakan layanan ini jika pesanan rusak atau kurir bermasalah
+              sebelum menyelesaikan pesanan.
             </p>
           </section>
 
-          {/* 🚩 TOMBOL BANTUAN (DIPERBAIKI: Membuka Modal, Bukan Beranda) */}
+          {/* 🚀 TOMBOL REVIEW (HANYA MUNCUL JIKA SELESAI DAN BELUM DIREVIEW) */}
+          {order.shipping_status === "COMPLETED" && !hasReviewed && (
+            <button
+              onClick={() => setShowReviewModal(true)}
+              className="w-full bg-yellow-400 text-slate-900 p-4 rounded-md flex items-center justify-center gap-2 font-black text-[12px] uppercase shadow-md active:scale-95 transition-all animate-bounce"
+            >
+              <Star fill="currentColor" size={18} /> NILAI PESANAN INI
+            </button>
+          )}
+
+          {/* TOMBOL BANTUAN */}
           <button
             onClick={() => setShowSupportModal(true)}
             className="w-full bg-slate-100 text-slate-600 p-4 rounded-md flex items-center justify-center gap-2 font-black text-[12px] uppercase shadow-sm active:scale-95 transition-all"
@@ -284,7 +393,7 @@ export const OrderTrackingPage = () => {
             <HeadphonesIcon size={18} /> BANTUAN
           </button>
 
-          {/* TOMBOL CHAT & DOWNLOAD (DINAMIS) */}
+          {/* TOMBOL CHAT & DOWNLOAD */}
           <div className="grid grid-cols-2 gap-2 font-black">
             {order?.courier_id && order.shipping_status !== "COMPLETED" && (
               <button
@@ -309,7 +418,75 @@ export const OrderTrackingPage = () => {
         </div>
       </main>
 
-      {/* 🚩 MODAL BANTUAN UMUM */}
+      {/* 🚀 MODAL RATING & REVIEW */}
+      {showReviewModal && (
+        <div className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans text-center animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl relative animate-in zoom-in-95 duration-300">
+            <button
+              onClick={() => setShowReviewModal(false)}
+              className="absolute top-4 right-4 text-slate-400 bg-slate-100 rounded-full p-2"
+            >
+              <X size={16} />
+            </button>
+
+            <div className="w-16 h-16 bg-yellow-100 text-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Star size={32} fill="currentColor" />
+            </div>
+
+            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter mb-1">
+              Bagaimana Pesanan Anda?
+            </h2>
+            <p className="text-[12px] font-bold text-slate-400 mb-6 uppercase tracking-widest">
+              Beri nilai untuk Toko
+            </p>
+
+            <div className="flex justify-center gap-2 mb-6">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onMouseEnter={() => setHoverRating(star)}
+                  onMouseLeave={() => setHoverRating(0)}
+                  onClick={() => setRating(star)}
+                  className={`transition-all duration-200 hover:scale-125 ${
+                    (hoverRating || rating) >= star
+                      ? "text-yellow-400"
+                      : "text-slate-200"
+                  }`}
+                >
+                  <Star
+                    size={40}
+                    fill={
+                      (hoverRating || rating) >= star ? "currentColor" : "none"
+                    }
+                    strokeWidth={1.5}
+                  />
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              placeholder="Tulis pendapat Anda tentang makanan/barang ini (Opsional)..."
+              value={reviewComment}
+              onChange={(e) => setReviewComment(e.target.value)}
+              className="w-full h-24 bg-slate-50 border border-slate-200 rounded-xl p-4 text-[12px] font-bold text-slate-700 outline-none focus:border-teal-500 focus:bg-white resize-none mb-6"
+            />
+
+            <button
+              onClick={handleSubmitReview}
+              disabled={rating === 0 || isSubmittingReview}
+              className="w-full py-4 bg-[#008080] text-white rounded-xl font-black text-[12px] uppercase tracking-widest shadow-lg shadow-teal-900/20 active:scale-95 disabled:opacity-50 flex justify-center gap-2"
+            >
+              {isSubmittingReview ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                "KIRIM ULASAN"
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL BANTUAN */}
       {showSupportModal && (
         <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-black">
           <div className="relative w-full max-w-lg animate-in zoom-in duration-300">

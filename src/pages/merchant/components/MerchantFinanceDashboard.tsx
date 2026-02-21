@@ -5,22 +5,47 @@ import { useToast } from "../../../contexts/ToastContext";
 import {
   Wallet,
   ArrowUpRight,
-  ArrowDownLeft,
   History,
   TrendingUp,
-  Store,
   CheckCircle2,
   Loader2,
   RefreshCw,
   Banknote,
   BadgePercent,
-  Info,
   X,
   Building,
   CreditCard,
-  ChevronRight,
   ArrowRight,
 } from "lucide-react";
+
+// SUB-KOMPONEN STATS ITEM (Dipindah ke atas agar tidak error "Cannot find name")
+const StatItem = ({ label, value, icon, color, bg, isMinus }: any) => (
+  <div
+    className={`${bg} border border-slate-200 p-6 rounded-[1.5rem] shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow group`}
+  >
+    <div className="flex items-center justify-between mb-4">
+      <p
+        className={`text-[10px] font-bold tracking-widest uppercase ${
+          color.includes("white") ? "text-teal-100" : "text-slate-400"
+        }`}
+      >
+        {label}
+      </p>
+      <div
+        className={`${
+          color.includes("white")
+            ? "text-white"
+            : "text-slate-300 group-hover:text-[#008080]"
+        } transition-colors`}
+      >
+        {icon}
+      </div>
+    </div>
+    <p className={`text-xl font-bold tracking-tighter ${color}`}>
+      {isMinus ? "- " : ""}RP {value.toLocaleString()}
+    </p>
+  </div>
+);
 
 export const MerchantFinanceDashboard: React.FC<any> = () => {
   const { user } = useAuth();
@@ -37,7 +62,7 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
 
   // STATE MODAL WITHDRAWAL
   const [showWDModal, setShowWDModal] = useState(false);
-  const [wdAmount, setWdAmount] = useState<number>(0);
+  const [wdAmount, setWdAmount] = useState<number | "">("");
   const [wdLoading, setWdLoading] = useState(false);
   const [wdForm, setWdForm] = useState({
     bank: "BCA",
@@ -65,7 +90,6 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
       }
 
       setMerchantData(profile);
-      setWdAmount(profile.wallet_balance || 0);
 
       if (!profile.merchant_id) {
         setStats({
@@ -116,7 +140,7 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
         });
       }
 
-      // Ambil History
+      // Ambil History Order
       const { data: history } = await supabase
         .from("order_items")
         .select(
@@ -139,31 +163,48 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
   }, [user]);
 
   const handleRequestWD = async () => {
+    const amountToWithdraw = Number(wdAmount);
+
+    if (amountToWithdraw < MIN_WITHDRAWAL) {
+      showToast(
+        `MINIMAL PENARIKAN RP ${MIN_WITHDRAWAL.toLocaleString()}`,
+        "error",
+      );
+      return;
+    }
+    if (amountToWithdraw > (merchantData?.wallet_balance || 0)) {
+      showToast("SALDO TIDAK MENCUKUPI!", "error");
+      return;
+    }
     if (!wdForm.accNo || !wdForm.accName) {
       showToast("LENGKAPI DATA REKENING!", "error");
       return;
     }
+
     setWdLoading(true);
     try {
+      // 1. Simpan request pencairan
       const { error: wdErr } = await supabase.from("payout_requests").insert({
         merchant_id: merchantData.merchant_id,
-        amount: wdAmount,
+        amount: amountToWithdraw,
         bank_name: wdForm.bank,
         account_number: wdForm.accNo,
-        account_name: wdForm.accName,
+        account_name: wdForm.accName.toUpperCase(),
         status: "REQUESTED",
       });
       if (wdErr) throw wdErr;
 
+      // 2. Potong saldo melalui RPC
       const { error: balanceErr } = await supabase.rpc("decrement_wallet", {
         user_id: user?.id,
-        amount: wdAmount,
+        amount: amountToWithdraw,
       });
       if (balanceErr) throw balanceErr;
 
       showToast("PENCAIRAN DANA SEDANG DIPROSES!", "success");
       setShowWDModal(false);
-      fetchData();
+      setWdAmount(""); // Reset input
+      fetchData(); // Refresh data saldo terbaru
     } catch (err: any) {
       showToast(err.message, "error");
     } finally {
@@ -171,7 +212,7 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
     }
   };
 
-  if (loading)
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4 font-sans uppercase">
         <Loader2 className="animate-spin text-[#008080]" size={40} />
@@ -180,6 +221,7 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
         </p>
       </div>
     );
+  }
 
   return (
     <div className="w-full space-y-8 animate-in fade-in duration-500 pb-20 text-left font-sans">
@@ -202,16 +244,7 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
             </h2>
             <div className="mt-8 flex flex-wrap gap-3">
               <button
-                onClick={() => {
-                  if ((merchantData?.wallet_balance || 0) < MIN_WITHDRAWAL) {
-                    showToast(
-                      `MINIMAL PENARIKAN RP ${MIN_WITHDRAWAL.toLocaleString()}`,
-                      "info",
-                    );
-                    return;
-                  }
-                  setShowWDModal(true);
-                }}
+                onClick={() => setShowWDModal(true)}
                 className="px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95 flex items-center gap-2"
               >
                 <ArrowUpRight size={16} /> Tarik Dana
@@ -240,7 +273,7 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
                 Data Rekening
               </h4>
               <p className="text-[11px] font-medium text-slate-400 mt-2 uppercase">
-                Belum Diatur
+                Siap Dicairkan
               </p>
             </div>
           </div>
@@ -265,7 +298,7 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
           icon={<BadgePercent size={20} />}
           color="text-orange-600"
           bg="bg-white"
-          isMinus
+          isMinus={true}
         />
         <StatItem
           label="Pendapatan Bersih"
@@ -364,12 +397,44 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
               </h2>
               <div className="mt-2 inline-block px-4 py-1 bg-teal-50 rounded-full">
                 <p className="text-[12px] font-bold text-[#008080] tracking-widest">
-                  DOMPET: RP {wdAmount.toLocaleString()}
+                  SALDO: RP{" "}
+                  {(merchantData?.wallet_balance || 0).toLocaleString()}
                 </p>
               </div>
             </div>
 
             <div className="space-y-5">
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-end">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
+                    Nominal Penarikan
+                  </label>
+                  <button
+                    onClick={() =>
+                      setWdAmount(merchantData?.wallet_balance || 0)
+                    }
+                    className="text-[9px] font-bold text-orange-500 hover:text-orange-600 uppercase"
+                  >
+                    Tarik Semua
+                  </button>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400">
+                    Rp
+                  </span>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#008080] text-[16px] font-black transition-all"
+                    value={wdAmount}
+                    onChange={(e) => setWdAmount(Number(e.target.value))}
+                  />
+                </div>
+                <p className="text-[9px] font-medium text-slate-400 ml-1">
+                  Min. penarikan Rp {MIN_WITHDRAWAL.toLocaleString()}
+                </p>
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
                   Pilih Bank / E-Wallet
@@ -388,6 +453,7 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
                   <option>DANA</option>
                 </select>
               </div>
+
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
                   Nomor Rekening / HP
@@ -402,6 +468,7 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
                   }
                 />
               </div>
+
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
                   Nama Pemilik
@@ -409,16 +476,21 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
                 <input
                   type="text"
                   placeholder="Sesuai Buku Tabungan..."
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#008080] text-[13px] font-bold transition-all"
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#008080] text-[13px] font-bold transition-all uppercase"
                   value={wdForm.accName}
                   onChange={(e) =>
-                    setWdForm({ ...wdForm, accName: e.target.value })
+                    setWdForm({
+                      ...wdForm,
+                      accName: e.target.value.toUpperCase(),
+                    })
                   }
                 />
               </div>
 
               <button
-                disabled={wdLoading}
+                disabled={
+                  wdLoading || !wdAmount || Number(wdAmount) < MIN_WITHDRAWAL
+                }
                 onClick={handleRequestWD}
                 className="w-full py-5 mt-4 bg-[#008080] text-white text-[13px] font-bold uppercase tracking-widest rounded-2xl hover:bg-slate-900 transition-all shadow-xl shadow-teal-900/10 flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
               >
@@ -436,26 +508,3 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
     </div>
   );
 };
-
-// SUB-KOMPONEN STATS ITEM
-const StatItem = ({ label, value, icon, color, bg, isMinus }: any) => (
-  <div
-    className={`${bg} border border-slate-200 p-6 rounded-[1.5rem] shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow group`}
-  >
-    <div className="flex items-center justify-between mb-4">
-      <p
-        className={`text-[10px] font-bold tracking-widest uppercase ${color.includes("white") ? "text-teal-100" : "text-slate-400"}`}
-      >
-        {label}
-      </p>
-      <div
-        className={`${color.includes("white") ? "text-white" : "text-slate-300 group-hover:text-[#008080]"} transition-colors`}
-      >
-        {icon}
-      </div>
-    </div>
-    <p className={`text-xl font-bold tracking-tighter ${color}`}>
-      {isMinus ? "- " : ""}RP {value.toLocaleString()}
-    </p>
-  </div>
-);

@@ -37,7 +37,6 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
       if (!isSilent) setLoading(true);
 
       try {
-        // STEP 1: Ambil items
         const { data: items, error: itemsError } = await supabase
           .from("order_items")
           .select(
@@ -136,19 +135,21 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
     };
   }, [fetchOrders, user?.id]);
 
+  // 🚀 PERBAIKAN: Selaraskan Status agar "Radar" Pelanggan Merespons
   const handleProcessOrder = async (orderId: string) => {
     setIsUpdating(orderId);
     try {
       const { error } = await supabase
         .from("orders")
         .update({
-          status: "READY_FOR_PICKUP",
+          // Ubah status ke PACKING agar progress bar di HP pembeli maju ke "DIKEMAS"
+          status: "PACKING",
           shipping_status: "SEARCHING_COURIER",
         })
         .eq("id", orderId);
 
       if (error) throw error;
-      showToast("MENCARI KURIR TERDEKAT...", "success");
+      showToast("PESANAN DITERIMA. MENCARI KURIR...", "success");
       fetchOrders(true);
     } catch (err: any) {
       showToast(err.message, "error");
@@ -161,11 +162,16 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
     window.open(`/invoice/${order.id}`, "_blank");
   };
 
+  // Sesuaikan filter dengan status baru
   const filteredOrders = orders.filter((o) => {
     if (statusFilter === "pending")
       return o.status === "PAID" || o.status === "PENDING";
     if (statusFilter === "shipping")
-      return ["READY_FOR_PICKUP", "ON_DELIVERY"].includes(o.status);
+      return (
+        ["PACKING", "READY_FOR_PICKUP", "ON_DELIVERY", "SHIPPING"].includes(
+          o.status,
+        ) || ["SEARCHING_COURIER"].includes(o.shipping_status)
+      );
     if (statusFilter === "completed") return o.status === "COMPLETED";
     return true;
   });
@@ -293,7 +299,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                 ))}
               </div>
 
-              {/* FEE BREAKDOWN (MINIMALIST) */}
+              {/* FEE BREAKDOWN */}
               <div className="px-5 py-4 bg-slate-50/30 border-t border-slate-50 space-y-2">
                 <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                   <span>Biaya Admin</span>
@@ -341,7 +347,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                     </p>
                   </div>
 
-                  {order.status === "PAID" && (
+                  {order.status === "PAID" ? (
                     <button
                       disabled={isUpdating === order.id}
                       onClick={() => handleProcessOrder(order.id)}
@@ -352,8 +358,13 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                       ) : (
                         <Send size={18} />
                       )}
-                      PANGGIL KURIR
+                      TERIMA & PANGGIL KURIR
                     </button>
+                  ) : (
+                    <div className="px-6 py-3 bg-slate-100 text-slate-500 font-bold text-[11px] uppercase tracking-widest rounded-xl flex items-center gap-2">
+                      <Loader2 size={14} className="animate-spin" />
+                      MENUNGGU KURIR
+                    </div>
                   )}
                 </div>
               </div>

@@ -48,6 +48,13 @@ const ShippingConfig = lazy(() =>
   import("./ShippingConfig").then((m) => ({ default: m.ShippingConfig })),
 );
 
+// 🚀 MODUL BARU: MANAJEMEN MITRA & LENCANA
+const AdminMerchantManager = lazy(() =>
+  import("./AdminMerchantManager").then((m) => ({
+    default: m.AdminMerchantManager,
+  })),
+);
+
 // ✅ KOMPONEN FINANCE MANDIRI (FOLDER: components)
 const FinanceDashboard = lazy(() =>
   import("./FinanceDashboard").then((m) => ({ default: m.FinanceDashboard })),
@@ -100,6 +107,9 @@ export const SuperAdminContent: React.FC<Props> = ({
       />
     ),
     users: <UserManager allUsers={data.allUsers} theme={theme} />,
+
+    // 🚀 INTEGRASI KE TAB CONTENT
+    "merchant-manager": <AdminMerchantManager />,
 
     // 🚩 FINANCE SYSTEM (MANDIRI)
     "finance-master": <FinanceDashboard theme={theme} />,

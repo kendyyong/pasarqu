@@ -74,7 +74,7 @@ export const AppRoutes = () => {
     "/portal",
     "/super-admin",
     "/admin",
-    "/admin-wilayah", // ✅ Sinkron dengan Admin Lokal
+    "/admin-wilayah",
     "/waiting-approval",
     "/track-order",
     "/merchant-promo",
@@ -243,7 +243,7 @@ export const AppRoutes = () => {
         }
       />
 
-      {/* --- SUPER ADMIN --- */}
+      {/* --- SUPER ADMIN DASHBOARD (Pusat Segala Tab) --- */}
       <Route
         path="/super-admin/*"
         element={

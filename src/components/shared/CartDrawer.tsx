@@ -25,7 +25,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const navigate = useNavigate();
   const [mounted, setMounted] = useState(false);
 
-  // Mengambil data dari hook selection
   const {
     selectedIds,
     toggleSelection,
@@ -41,8 +40,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   if (!mounted || !isOpen) return null;
 
-  // Total sementara: Harga Produk + Ekstra Toko (N-1)
-  // Catatan: courierSurgeFee harus sudah dihitung (N-1) di dalam hook useCartSelection
   const subTotalCart = totalPrice + courierSurgeFee;
 
   return (
@@ -71,7 +68,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         </div>
 
         {/* BODY - LIST ITEM */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-48">
+        {/* pb-60 ditambahkan agar scroll tidak terhalang footer yang lebih tinggi */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-60">
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-50">
               <p className="font-black uppercase text-xs tracking-widest">
@@ -97,15 +95,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         </div>
 
         {/* FOOTER - RINGKASAN BIAYA */}
+        {/* PERBAIKAN: pb-10 dan padding-bottom safe area untuk mobile */}
         {cart.length > 0 && (
-          <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-5 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] z-20">
+          <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-5 pb-10 md:pb-5 shadow-[0_-10px_30px_rgba(0,0,0,0.1)] z-20">
             <div className="space-y-2 mb-5">
               <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase tracking-tight">
                 <span>Subtotal Produk</span>
                 <span>Rp{totalPrice.toLocaleString()}</span>
               </div>
 
-              {/* LOGIK REVISI: Tampilkan (N-1) dan hanya jika merchant > 1 */}
               {merchantCount > 1 && (
                 <div className="flex justify-between text-[11px] font-black text-orange-600 uppercase tracking-tight">
                   <span>Ekstra Toko ({merchantCount - 1})</span>
@@ -115,7 +113,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             </div>
 
             {/* TOTAL AKHIR & ACTION */}
-            <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+            {/* Perbaikan: Menambahkan margin bottom tambahan khusus mobile agar tidak tertutup nav bar */}
+            <div className="flex items-center justify-between border-t border-slate-100 pt-4 mb-4 md:mb-0">
               <div className="text-left">
                 <p className="text-[9px] font-black text-slate-400 uppercase leading-none mb-1">
                   Total Sementara
@@ -128,7 +127,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <button
                 onClick={onCheckout}
                 disabled={selectedIds.size === 0}
-                className={`px-8 py-3 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 transition-all shadow-lg active:scale-95 ${
+                className={`px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-2 transition-all shadow-lg active:scale-95 ${
                   selectedIds.size === 0
                     ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
                     : "bg-teal-700 text-white hover:bg-teal-800"
@@ -137,6 +136,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 Checkout <ArrowRight size={16} />
               </button>
             </div>
+
+            {/* Ganjalan tambahan untuk browser mobile tertentu */}
+            <div className="h-4 md:hidden"></div>
           </div>
         )}
       </div>
