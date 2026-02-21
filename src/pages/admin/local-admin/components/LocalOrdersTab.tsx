@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../../../../lib/supabaseClient";
 import {
   ShoppingBag,
@@ -15,7 +15,6 @@ import {
   Wallet,
   MessageCircle,
   Clock,
-  ChevronRight,
   Activity,
 } from "lucide-react";
 import { useToast } from "../../../../contexts/ToastContext";
@@ -31,17 +30,17 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
   const [filter, setFilter] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     if (!marketId) return;
     setLoading(true);
     try {
+      // 1. Ambil data Orders & Customer
       let query = supabase
         .from("orders")
         .select(
           `
           *,
-          customer:profiles!customer_id(name, phone),
-          courier:couriers!courier_id(full_name, phone_number)
+          customer:profiles!customer_id(name, phone_number)
         `,
         )
         .eq("market_id", marketId);
@@ -52,34 +51,58 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
         query = query.eq("shipping_status", filter);
       }
 
-      const { data, error } = await query.order("created_at", {
-        ascending: false,
-      });
+      const { data: ordersData, error: ordersError } = await query.order(
+        "created_at",
+        {
+          ascending: false,
+        },
+      );
 
-      if (error) {
-        const { data: fallbackData } = await supabase
-          .from("orders")
-          .select(`*, customer:profiles!customer_id(name, phone)`)
-          .eq("market_id", marketId)
-          .order("created_at", { ascending: false });
+      if (ordersError) throw ordersError;
 
-        const manualFiltered =
-          filter === "ALL"
-            ? fallbackData
-            : filter === "PENDING"
-              ? fallbackData?.filter((o) => o.status === "UNPAID")
-              : fallbackData?.filter((o) => o.shipping_status === filter);
+      if (ordersData && ordersData.length > 0) {
+        // ✅ 2. SAFE CHECK: Buang nilai null/kosong dari array merchant_id
+        const merchantIds = [
+          ...new Set(ordersData.map((o) => o.merchant_id).filter(Boolean)),
+        ];
 
-        setOrders(manualFiltered || []);
+        let merchantsData: any[] = [];
+
+        // ✅ 3. Hanya jalankan query ke tabel merchants JIKA ada ID yang valid
+        if (merchantIds.length > 0) {
+          const { data } = await supabase
+            .from("merchants")
+            .select("id, shop_name")
+            .in("id", merchantIds);
+
+          if (data) merchantsData = data;
+        }
+
+        // 4. GABUNGKAN DATA DI FRONTEND
+        const finalData = ordersData.map((order) => ({
+          ...order,
+          merchant: merchantsData.find((m) => m.id === order.merchant_id) || {
+            shop_name: "TOKO PASARQU",
+          },
+        }));
+
+        setOrders(finalData);
       } else {
-        setOrders(data || []);
+        setOrders([]);
       }
     } catch (err: any) {
-      showToast("GAGAL LOAD DATA PESANAN", "error");
+      console.error("System Error:", err.message);
+      // Fallback
+      const { data: fallback } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("market_id", marketId)
+        .order("created_at", { ascending: false });
+      setOrders(fallback || []);
     } finally {
       setLoading(false);
     }
-  };
+  }, [marketId, filter]);
 
   useEffect(() => {
     fetchOrders();
@@ -99,7 +122,7 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [filter, marketId]);
+  }, [fetchOrders, marketId]);
 
   const filteredOrders = orders.filter(
     (o) =>
@@ -211,7 +234,7 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
                       {order.customer?.name || "PEMBELI"}
                     </h4>
                     <p className="text-[9px] text-[#008080] font-black flex items-center gap-1 mt-1">
-                      <Store size={10} /> MITRA LOKAL
+                      <Store size={10} /> {order.merchant?.shop_name}
                     </p>
                   </div>
                   <div className="flex items-start gap-1.5 text-slate-500 bg-slate-50 p-2 rounded-md border border-slate-100">
@@ -271,7 +294,7 @@ export const LocalOrdersTab: React.FC<Props> = ({ marketId }) => {
                     <button
                       onClick={() =>
                         window.open(
-                          `https://wa.me/${order.customer?.phone?.replace(/^0/, "62")}`,
+                          `https://wa.me/${order.customer?.phone_number?.replace(/^0/, "62") || ""}`,
                           "_blank",
                         )
                       }

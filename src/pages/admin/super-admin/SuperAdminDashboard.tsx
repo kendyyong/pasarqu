@@ -57,11 +57,13 @@ export const SuperAdminDashboard: React.FC = () => {
     fetchData,
   } = useSuperAdminDashboard();
 
+  // Otomatis tutup menu mobile jika tab/menu diklik
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [activeTab]);
 
-  if (!isLoaded) return <PageLoader bgClass="bg-slate-50" />;
+  if (!isLoaded)
+    return <PageLoader bgClass={isDark ? "bg-slate-950" : "bg-slate-50"} />;
 
   const brand = {
     tosca: "text-[#008080]",
@@ -88,7 +90,7 @@ export const SuperAdminDashboard: React.FC = () => {
       group: "FINANCE & AUDIT",
       items: [
         { id: "finance-master", label: "FINANCE DASHBOARD", icon: Wallet },
-        { id: "ledger", label: "BUKU BESAR", icon: Receipt }, // ✅ TERHUBUNG KE FinancialLedger.tsx
+        { id: "ledger", label: "BUKU BESAR", icon: Receipt },
         { id: "withdrawals", label: "PENCAIRAN DANA", icon: CheckSquare },
         { id: "topup-requests", label: "PERMINTAAN TOPUP", icon: ArrowUpRight },
       ],
@@ -115,70 +117,148 @@ export const SuperAdminDashboard: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex text-left overflow-hidden font-black uppercase tracking-tighter">
-      {/* --- SIDEBAR DESKTOP --- */}
+    // ✅ PERUBAHAN UTAMA: Layout responsif flex-col (HP) ke flex-row (PC)
+    <div
+      className={`h-screen flex flex-col md:flex-row text-left overflow-hidden font-black uppercase tracking-tighter transition-colors duration-500 ${isDark ? "bg-slate-950 text-white" : "bg-[#F8FAFC] text-slate-900"}`}
+    >
+      {/* --- 📱 MOBILE HEADER (KHUSUS HP) --- */}
+      <div
+        className={`md:hidden flex items-center justify-between px-4 py-4 shrink-0 border-b z-30 ${isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}
+      >
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className={`p-1.5 rounded-lg active:scale-95 transition-all ${isDark ? "bg-slate-800 text-teal-400" : "bg-slate-100 text-slate-900"}`}
+          >
+            <Menu size={22} />
+          </button>
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isDark ? "bg-slate-800 text-teal-400" : "bg-teal-600 text-white"}`}
+            >
+              <span className="text-sm font-black">P</span>
+            </div>
+            <span className="text-sm tracking-tighter leading-none">
+              PASARQU{" "}
+              <span
+                className={`text-[8px] block opacity-80 uppercase mt-0.5 ${isDark ? "text-slate-400" : "text-orange-600"}`}
+              >
+                SUPER ADMIN
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* --- 📱 MOBILE OVERLAY GELAP (KHUSUS HP) --- */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* --- 🖥️📱 SIDEBAR (GABUNGAN PC & HP) --- */}
       <aside
-        className={`hidden md:flex flex-col bg-white border-r border-slate-200 transition-all duration-300 relative z-50 ${isSidebarOpen ? "w-72" : "w-20"}`}
+        className={`fixed md:relative flex flex-col transition-all duration-300 z-50 h-screen w-72 
+          ${isSidebarOpen ? "md:w-72" : "md:w-20"} 
+          ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0
+          ${isDark ? "bg-slate-900 border-r border-slate-800 shadow-2xl md:shadow-none" : "bg-white border-r border-slate-200 shadow-2xl md:shadow-none"}
+        `}
       >
         <div
-          className={`h-20 flex items-center px-6 border-b border-slate-100 ${brand.bgTosca} shrink-0`}
+          className={`h-20 flex items-center justify-between px-6 shrink-0 ${isDark ? "bg-slate-950 border-b border-slate-800" : `${brand.bgTosca} border-b border-slate-100`}`}
         >
           <div className="flex items-center gap-3 text-white">
-            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shrink-0">
-              <span className={`text-xl font-black ${brand.tosca}`}>P</span>
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDark ? "bg-slate-800 text-teal-400" : "bg-white text-teal-600"}`}
+            >
+              <span className="text-xl font-black">P</span>
             </div>
-            {isSidebarOpen && (
+            {/* Teks dimunculkan di HP atau saat sidebar PC terbuka */}
+            {(isSidebarOpen || isMobileMenuOpen) && (
               <span className="text-xl tracking-tighter leading-none">
                 PASARQU{" "}
-                <span className="text-orange-300 text-[9px] block opacity-80 uppercase">
+                <span
+                  className={`text-[9px] block opacity-80 uppercase ${isDark ? "text-slate-400" : "text-orange-300"}`}
+                >
                   SUPER ADMIN ENGINE
                 </span>
               </span>
             )}
           </div>
+
+          {/* Tombol Tutup Khusus HP */}
+          <button
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="md:hidden text-white/70 hover:text-white active:scale-90 transition-all p-1"
+          >
+            <X size={24} />
+          </button>
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 no-scrollbar space-y-4">
           {menuGroups.map((group, idx) => (
             <div key={idx} className="px-3">
-              {isSidebarOpen && (
-                <p className="text-[9px] text-slate-400 px-4 mb-2 tracking-[0.2em]">
+              {(isSidebarOpen || isMobileMenuOpen) && (
+                <p
+                  className={`text-[9px] px-4 mb-2 tracking-[0.2em] ${isDark ? "text-slate-500" : "text-slate-900 font-black"}`}
+                >
                   {group.group}
                 </p>
               )}
               <div className="space-y-1">
-                {group.items.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveTab(item.id)}
-                    className={`w-full flex items-center gap-4 p-3.5 rounded-xl transition-all ${activeTab === item.id ? `${brand.bgTosca} text-white shadow-lg shadow-teal-900/20` : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}
-                  >
-                    <item.icon size={20} className="shrink-0" />
-                    {isSidebarOpen && (
-                      <span className="text-[12px] truncate">{item.label}</span>
-                    )}
-                  </button>
-                ))}
+                {group.items.map((item) => {
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      className={`w-full flex items-center gap-4 p-3.5 rounded-xl transition-all ${
+                        isActive
+                          ? isDark
+                            ? "bg-[#008080]/20 text-[#008080] border border-[#008080]/30 shadow-lg shadow-teal-900/10"
+                            : `${brand.bgTosca} text-white shadow-lg shadow-teal-900/20`
+                          : isDark
+                            ? "text-slate-400 hover:bg-slate-800 hover:text-white"
+                            : "text-black hover:bg-slate-100"
+                      }`}
+                    >
+                      <item.icon
+                        size={20}
+                        className={`shrink-0 ${isActive && !isDark ? "text-white" : ""}`}
+                      />
+                      {(isSidebarOpen || isMobileMenuOpen) && (
+                        <span className="text-[12px] truncate">
+                          {item.label}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-100">
+        <div
+          className={`p-4 border-t ${isDark ? "border-slate-800" : "border-slate-100"}`}
+        >
           <button
             onClick={() => logout().then(() => navigate("/"))}
-            className="w-full flex items-center gap-4 p-4 text-red-500 hover:bg-red-50 rounded-2xl transition-all"
+            className={`w-full flex items-center gap-4 p-4 text-red-500 rounded-2xl transition-all ${isDark ? "hover:bg-red-500/10" : "hover:bg-red-50"}`}
           >
             <LogOut size={20} />
-            {isSidebarOpen && (
+            {(isSidebarOpen || isMobileMenuOpen) && (
               <span className="text-[12px]">KELUAR SISTEM</span>
             )}
           </button>
         </div>
 
+        {/* 🖥️ TOMBOL TOGGLE SIDEBAR (KHUSUS PC) */}
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute -right-3 top-24 bg-white border border-slate-200 rounded-full p-1 text-slate-400 hover:text-teal-600 shadow-sm z-50 transition-transform active:scale-90"
+          className={`hidden md:flex absolute -right-3 top-24 border rounded-full p-1 shadow-sm z-50 transition-transform active:scale-90 ${isDark ? "bg-slate-800 border-slate-700 text-slate-400 hover:text-teal-400" : "bg-white border-slate-200 text-slate-400 hover:text-teal-600"}`}
         >
           {isSidebarOpen ? (
             <ChevronLeft size={14} />
@@ -189,42 +269,56 @@ export const SuperAdminDashboard: React.FC = () => {
       </aside>
 
       {/* --- CONTENT AREA --- */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden relative border-l border-slate-100">
-        <header className="hidden md:flex h-20 bg-white border-b border-slate-200 items-center justify-between px-8 z-40 shrink-0">
+      <div
+        className={`flex-1 flex flex-col h-full overflow-hidden relative border-l ${isDark ? "border-slate-800" : "border-slate-100"}`}
+      >
+        {/* 🖥️ HEADER KONTEN (KHUSUS PC) */}
+        <header
+          className={`hidden md:flex h-20 items-center justify-between px-8 z-40 shrink-0 border-b transition-colors duration-500 ${isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}
+        >
           <div className="flex items-center gap-4">
-            <div className="bg-slate-100 p-2 rounded-xl text-slate-400">
+            <div
+              className={`p-2 rounded-xl ${isDark ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-400"}`}
+            >
               <LayoutDashboard size={18} />
             </div>
-            <h1 className="text-[16px] font-black text-slate-800 tracking-tighter uppercase">
+            <h1
+              className={`text-[16px] font-black tracking-tighter uppercase ${isDark ? "text-white" : "text-slate-800"}`}
+            >
               {activeTab.replace("-", " ")}
             </h1>
           </div>
           <div className="flex items-center gap-6">
             <div className="flex flex-col text-right">
-              <span className="text-[12px] font-black text-slate-800 uppercase">
+              <span
+                className={`text-[12px] font-black uppercase ${isDark ? "text-white" : "text-slate-800"}`}
+              >
                 {profile?.name || "SUPER ADMIN"}
               </span>
               <span
-                className={`text-[10px] font-bold ${brand.orange} uppercase`}
+                className={`text-[10px] font-bold uppercase ${isDark ? "text-orange-400" : brand.orange}`}
               >
                 PASARQU MANAGEMENT
               </span>
             </div>
             <div
-              className={`w-12 h-12 ${brand.bgOrange} rounded-2xl flex items-center justify-center text-white shadow-lg shadow-orange-500/20 active:scale-95 transition-transform`}
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg active:scale-95 transition-transform ${isDark ? "bg-orange-600 shadow-orange-900/30" : `${brand.bgOrange} shadow-orange-500/20`}`}
             >
               <Smartphone size={24} />
             </div>
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto no-scrollbar p-4 md:p-8 bg-slate-50">
-          <div className="max-w-7xl mx-auto">
+        {/* MAIN KONTEN (SCROLLABLE) */}
+        <main
+          className={`flex-1 overflow-y-auto no-scrollbar p-4 md:p-8 transition-colors duration-500 ${isDark ? "bg-slate-950" : "bg-slate-50"}`}
+        >
+          <div className="max-w-7xl mx-auto pb-20 md:pb-0">
             {auditMarket ? (
               <div className="animate-in fade-in zoom-in-95">
                 <button
                   onClick={() => setAuditMarket(null)}
-                  className={`mb-6 flex items-center gap-2 ${brand.tosca} font-black text-[11px] hover:translate-x-[-4px] transition-all uppercase tracking-widest`}
+                  className={`mb-6 flex items-center gap-2 font-black text-[11px] hover:translate-x-[-4px] transition-all uppercase tracking-widest ${isDark ? "text-teal-400" : brand.tosca}`}
                 >
                   <ChevronLeft size={16} /> KEMBALI KE PETA
                 </button>

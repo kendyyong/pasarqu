@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Coins, Loader2 } from "lucide-react";
-import { supabase } from "../../../lib/supabaseClient";
-import { useToast } from "../../../contexts/ToastContext";
+import { supabase } from "../../../../lib/supabaseClient";
+import { useToast } from "../../../../contexts/ToastContext";
 
 interface Props {
   marketId: string;

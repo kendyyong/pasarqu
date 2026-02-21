@@ -1,9 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
-
-const ALARM_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
 export const useMerchantDashboard = () => {
   const { user } = useAuth();
@@ -14,13 +12,6 @@ export const useMerchantDashboard = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [incomingOrder, setIncomingOrder] = useState<any>(null);
-  
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  useEffect(() => {
-    audioRef.current = new Audio(ALARM_URL);
-    audioRef.current.loop = true;
-  }, []);
 
   const fetchBaseData = async () => {
     if (!user?.id) {
@@ -36,21 +27,47 @@ export const useMerchantDashboard = () => {
         supabase.from("merchants").select("*, markets(name)").or(`user_id.eq.${user.id},id.eq.${user.id}`).maybeSingle()
       ]);
 
-      const profile = resProfile.data;
-      const merchantData = resMerchant.data;
+      let profile = resProfile.data;
+      let merchantData = resMerchant.data;
 
-      if (profile) {
+      // 🚀 ========================================================
+      // FITUR PENAMBAL OTOMATIS: AUTO-BIND MARKET ID
+      // ========================================================
+      const savedMarketId = localStorage.getItem("selected_market_id");
+      
+      // Jika di tabel merchants market_id-nya KOSONG, tapi di HP ada memori pilihan pasar
+      if (merchantData && !merchantData.market_id && savedMarketId) {
+        console.log("Menambal market_id otomatis dari memori HP ke Supabase...");
+        
+        // 1. Update ke Supabase secara diam-diam
+        await supabase
+          .from("merchants")
+          .update({ market_id: savedMarketId })
+          .eq("id", merchantData.id);
+          
+        // 2. Update state lokal agar tidak perlu refresh
+        merchantData.market_id = savedMarketId;
+        
+        // 3. Tarik nama pasarnya sekalian
+        const { data: marketDb } = await supabase.from("markets").select("name").eq("id", savedMarketId).maybeSingle();
+        if (marketDb) {
+           merchantData.markets = { name: marketDb.name };
+        }
+      }
+      // ========================================================
+
+      if (profile || merchantData) {
         // 2. LOGIKA GABUNGAN (SINKRONISASI LOKASI)
         const effectiveMerchant = {
           ...(merchantData || {}),
           id: merchantData?.id || user.id,
-          shop_name: merchantData?.shop_name || merchantData?.name || profile.shop_name || profile.name || "Toko Saya",
-          market_id: merchantData?.market_id || profile.managed_market_id,
-          market_name: merchantData?.markets?.name || profile.markets?.name || "Muara Jawa",
+          shop_name: merchantData?.shop_name || merchantData?.name || profile?.shop_name || profile?.name || "Toko Saya",
+          market_id: merchantData?.market_id || profile?.managed_market_id,
+          market_name: merchantData?.markets?.name || profile?.markets?.name || "Muara Jawa",
           is_shop_open: merchantData?.is_shop_open ?? true,
           // FIX: Ambil koordinat dari profile jika di merchant masih kosong agar Sidebar update status
-          latitude: merchantData?.latitude || profile.latitude,
-          longitude: merchantData?.longitude || profile.longitude,
+          latitude: merchantData?.latitude || profile?.latitude,
+          longitude: merchantData?.longitude || profile?.longitude,
         };
 
         setMerchantProfile(effectiveMerchant);
@@ -96,15 +113,11 @@ export const useMerchantDashboard = () => {
   };
 
   const triggerAlarm = (orderData: any) => {
+    // Audio otomatis di-handle oleh komponen MerchantAlarmModal
     setIncomingOrder(orderData);
-    audioRef.current?.play().catch((e) => console.log("Audio Blocked:", e));
   };
 
   const stopAlarm = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
     setIncomingOrder(null);
   };
 

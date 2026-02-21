@@ -6,12 +6,13 @@ import {
   Smartphone,
   MapPin,
   MessageCircle,
-  AlertTriangle,
   Loader2,
   Sparkles,
   ShieldCheck,
   RefreshCw,
   Zap,
+  Lock,
+  Globe,
 } from "lucide-react";
 import { useToast } from "../../../../contexts/ToastContext";
 import { createAuditLog } from "../../../../lib/auditHelper";
@@ -26,20 +27,24 @@ export const GlobalConfig = () => {
   // State untuk AI Auditor
   const [aiWarning, setAiWarning] = useState<string | null>(null);
 
-  // State Bersih
+  // ✅ 1. State Lengkap dengan penampung Midtrans
   const [formData, setFormData] = useState({
     max_distance_km: 0,
     min_app_version: "",
     is_maintenance: false,
     cs_whatsapp: "",
+    midtrans_client_key: "",
+    midtrans_server_key: "",
+    midtrans_is_production: false,
   });
 
   const fetchSettings = async () => {
     setLoading(true);
     try {
+      // ✅ 2. Gunakan select("*") agar kolom baru Midtrans ikut terbaca
       const { data, error } = await supabase
         .from("app_settings")
-        .select("max_distance_km, min_app_version, is_maintenance, cs_whatsapp")
+        .select("*")
         .eq("id", 1)
         .single();
 
@@ -50,6 +55,9 @@ export const GlobalConfig = () => {
           min_app_version: data.min_app_version || "",
           is_maintenance: data.is_maintenance || false,
           cs_whatsapp: data.cs_whatsapp || "",
+          midtrans_client_key: data.midtrans_client_key || "",
+          midtrans_server_key: data.midtrans_server_key || "",
+          midtrans_is_production: data.midtrans_is_production || false,
         });
       }
     } catch (err: any) {
@@ -70,6 +78,10 @@ export const GlobalConfig = () => {
         setAiWarning("AI ALERT: RADIUS > 50KM BERISIKO BAGI KESEGARAN BARANG.");
       } else if (formData.is_maintenance) {
         setAiWarning("AI INFO: MODE PEMELIHARAAN AKTIF. AKSES PUBLIK DITUTUP.");
+      } else if (formData.midtrans_is_production) {
+        setAiWarning(
+          "AI WARNING: MODE PRODUKSI AKTIF. TRANSAKSI MENGGUNAKAN UANG ASLI!",
+        );
       } else {
         setAiWarning(null);
       }
@@ -90,7 +102,7 @@ export const GlobalConfig = () => {
       await createAuditLog(
         "UPDATE_GLOBAL_SETTINGS",
         "SYSTEM",
-        `Mengubah sistem (Radius: ${formData.max_distance_km}KM, Maint: ${formData.is_maintenance})`,
+        `Mengubah sistem (Radius: ${formData.max_distance_km}KM, Maint: ${formData.is_maintenance}, Midtrans: ${formData.midtrans_is_production ? "LIVE" : "SANDBOX"})`,
       );
 
       showToast("KONFIGURASI BERHASIL DIPERBARUI", "success");
@@ -120,7 +132,7 @@ export const GlobalConfig = () => {
     );
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-500 font-black uppercase tracking-tighter text-left">
+    <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-500 font-black uppercase tracking-tighter text-left pb-10">
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b-4 border-slate-900 pb-4">
         <div>
@@ -146,7 +158,7 @@ export const GlobalConfig = () => {
         </button>
       </div>
 
-      {/* AI AUDITOR BANNER - SUDUT TEGAS */}
+      {/* AI AUDITOR BANNER */}
       {aiWarning && (
         <div className="bg-slate-900 border-l-8 border-orange-500 p-4 rounded-md flex items-center gap-4 shadow-xl">
           <div className="w-10 h-10 bg-orange-500 rounded-md flex items-center justify-center text-white shrink-0 shadow-lg">
@@ -203,8 +215,79 @@ export const GlobalConfig = () => {
           </div>
         </section>
 
-        {/* 2. PEMELIHARAAN SISTEM */}
+        {/* ✅ 2. MIDTRANS GATEWAY (SEKSI BARU) */}
         <section className="bg-white p-6 rounded-md border border-slate-200 shadow-sm relative overflow-hidden group">
+          <div className="absolute -top-2 -right-2 text-slate-50 group-hover:text-blue-50 transition-colors">
+            <Zap size={80} />
+          </div>
+          <h3 className="text-[12px] font-black mb-6 flex items-center gap-2 relative z-10 border-b border-slate-100 pb-3">
+            <Zap size={18} className="text-blue-600" /> MIDTRANS PAYMENT
+          </h3>
+
+          <div className="space-y-4 relative z-10">
+            <div className="space-y-1.5">
+              <label className="text-[9px] text-slate-400 tracking-widest">
+                MIDTRANS CLIENT KEY (PUBLIC)
+              </label>
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-md px-4 focus-within:border-blue-600">
+                <Globe size={16} className="text-slate-400" />
+                <input
+                  type="text"
+                  name="midtrans_client_key"
+                  value={formData.midtrans_client_key}
+                  onChange={handleChange}
+                  className="w-full bg-transparent py-3 font-black text-[11px] outline-none"
+                  placeholder="SB-Mid-client-..."
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[9px] text-slate-400 tracking-widest">
+                MIDTRANS SERVER KEY (SECRET)
+              </label>
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-md px-4 focus-within:border-red-600">
+                <Lock size={16} className="text-red-600" />
+                <input
+                  type="password" // Agar kunci rahasia tidak terlihat
+                  name="midtrans_server_key"
+                  value={formData.midtrans_server_key}
+                  onChange={handleChange}
+                  className="w-full bg-transparent py-3 font-black text-[11px] outline-none"
+                  placeholder="SB-Mid-server-..."
+                />
+              </div>
+            </div>
+
+            <div
+              className={`p-3 rounded-md border-2 transition-all flex items-center justify-between ${formData.midtrans_is_production ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-100"}`}
+            >
+              <div>
+                <h4
+                  className={`text-[10px] font-black ${formData.midtrans_is_production ? "text-blue-700" : "text-slate-600"}`}
+                >
+                  PRODUCTION MODE
+                </h4>
+                <p className="text-[8px] font-bold text-slate-400 tracking-widest">
+                  OFF = SANDBOX (TESTING)
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="midtrans_is_production"
+                  checked={formData.midtrans_is_production}
+                  onChange={handleChange}
+                  className="sr-only peer"
+                />
+                <div className="w-10 h-5 bg-slate-300 rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        {/* 3. PEMELIHARAAN SISTEM */}
+        <section className="bg-white p-6 rounded-md border border-slate-200 shadow-sm relative overflow-hidden group md:col-span-2">
           <div className="absolute -top-2 -right-2 text-slate-50 group-hover:text-red-50 transition-colors">
             <Server size={80} />
           </div>
@@ -212,7 +295,7 @@ export const GlobalConfig = () => {
             <Server size={18} className="text-red-600" /> STATUS APLIKASI
           </h3>
 
-          <div className="space-y-6 relative z-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
             <div className="space-y-1.5">
               <label className="text-[9px] text-slate-400 tracking-widest">
                 VERSI MINIMUM (FORCE UPDATE)

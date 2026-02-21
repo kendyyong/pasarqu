@@ -11,17 +11,22 @@ export const useCourierMonitor = (managedMarketId: string | undefined) => {
   const fetchData = async () => {
     if (!managedMarketId) return;
     setLoading(true);
+    
     try {
-      // 1. Fetch Couriers with Order Count
+      // 🚀 PENYEBAB DATA HILANG: Filter yang terlalu ketat.
+      // Kita ambil semua kurir yang memiliki jejak di pasar ini.
       const { data: courierData, error: courierError } = await supabase
         .from("profiles")
-        .select(`*, orders:orders!courier_id(count)`)
+        .select(`
+          *,
+          orders:orders!courier_id(count)
+        `)
         .eq("role", "COURIER")
-        .eq("managed_market_id", managedMarketId);
+        .or(`market_id.eq.${managedMarketId},managed_market_id.eq.${managedMarketId}`);
 
       if (courierError) throw courierError;
 
-      // 2. Fetch Active Complaints
+      // Ambil Aduan Terbuka
       try {
         const { data: compData } = await supabase
           .from("complaints")
@@ -30,26 +35,37 @@ export const useCourierMonitor = (managedMarketId: string | undefined) => {
           .eq("status", "OPEN");
         setComplaints(compData || []);
       } catch (e) {
-        console.log("Tabel complaints belum tersedia.");
+        console.log("TABEL ADUAN BELUM AKTIF");
       }
 
-      // Transform & Sort
-      const formatted = (courierData || [])
-        .map((c: any) => ({
-          ...c,
-          total_orders: c.orders?.[0]?.count || 0,
-        }))
-        .sort((a, b) => b.total_orders - a.total_orders);
+      // Format data agar kurir yang sudah diverifikasi tetap terbaca
+      const formatted = (courierData || []).map((c: any) => ({
+        ...c,
+        total_orders: c.orders?.[0]?.count || 0,
+        // Pastikan status default jika null adalah PENDING, agar tidak hilang dari UI
+        status: c.status || (c.is_verified ? "ACTIVE" : "PENDING")
+      }))
+      .sort((a, b) => b.total_orders - a.total_orders);
 
       setCouriers(formatted);
+
+      // 🔍 DEBUG UNTUK BAPAK: Cek di Console F12
+      if (formatted.length === 0) {
+        console.warn("⚠️ PERHATIAN PAK KENDY: Data kurir kosong di Supabase untuk ID Pasar:", managedMarketId);
+      } else {
+        console.log("✅ DATA BERHASIL DITARIK:", formatted);
+      }
+
     } catch (err: any) {
-      showToast("Gagal memuat data personil", "error");
+      showToast("SINKRONISASI GAGAL", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchData(); }, [managedMarketId]);
+  useEffect(() => { 
+    fetchData(); 
+  }, [managedMarketId]);
 
   return { couriers, complaints, loading, fetchData };
 };

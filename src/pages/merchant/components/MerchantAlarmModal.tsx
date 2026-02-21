@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { BellRing, CheckCircle, Volume2 } from "lucide-react";
 
 interface Props {
@@ -12,10 +12,20 @@ export const MerchantAlarmModal: React.FC<Props> = ({
   onProcess,
   onMute,
 }) => {
+  // ✅ ANTI-CACHE BYPASS: Tambahkan timestamp agar browser mengira ini file baru terus
+  // Ini akan menyelesaikan masalah net::ERR_CACHE_OPERATION_NOT_SUPPORTED
+  const audioUrl = useMemo(() => {
+    return `https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3?nocache=${Date.now()}`;
+  }, []);
+
   if (!incomingOrder) return null;
 
   return (
     <div className="fixed inset-0 z-[9999] bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-in zoom-in duration-300">
+      {/* ✅ AUDIO PLAYER TERSEMBUNYI */}
+      {/* Otomatis berbunyi (autoPlay) dan mengulang (loop) selama modal ini tampil */}
+      <audio src={audioUrl} autoPlay loop className="hidden" />
+
       <div className="bg-white w-full max-w-sm rounded-none border-4 border-red-500 shadow-2xl p-8 text-center relative overflow-hidden">
         {/* Ping Effect */}
         <div className="absolute top-4 right-4">

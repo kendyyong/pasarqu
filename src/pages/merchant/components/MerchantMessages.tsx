@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../contexts/AuthContext";
 import {
@@ -9,9 +9,10 @@ import {
   ShieldAlert,
   Bike,
   ArrowLeft,
+  Search,
+  MessageCircle,
 } from "lucide-react";
 import { OrderChatRoom } from "../../../features/chat/OrderChatRoom";
-import { useToast } from "../../../contexts/ToastContext";
 
 export const MerchantMessages = () => {
   const { user } = useAuth();
@@ -19,8 +20,9 @@ export const MerchantMessages = () => {
   const [loading, setLoading] = useState(true);
   const [selectedChat, setSelectedChat] = useState<any>(null);
   const [isShopOpen, setIsShopOpen] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // ✅ MONITOR STATUS TOKO SECARA REALTIME
+  // 1. MONITOR STATUS TOKO REALTIME
   useEffect(() => {
     if (!user?.id) return;
 
@@ -29,7 +31,7 @@ export const MerchantMessages = () => {
         .from("merchants")
         .select("is_shop_open")
         .eq("id", user.id)
-        .maybeSingle(); // FIX: Menggunakan maybeSingle agar tidak Error 406
+        .maybeSingle();
 
       if (data) setIsShopOpen(data.is_shop_open);
     };
@@ -57,17 +59,12 @@ export const MerchantMessages = () => {
     };
   }, [user]);
 
-  // AMBIL DAFTAR PERCAKAPAN
-  useEffect(() => {
-    if (user && isShopOpen) fetchConversations();
-  }, [user, isShopOpen]);
-
-  const fetchConversations = async () => {
+  // 2. AMBIL DAFTAR PERCAKAPAN
+  const fetchConversations = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          // FIX: Menggunakan 'name' bukan 'full_name' sesuai tabel database Anda
           `id, status, created_at, profiles:customer_id (name), couriers:courier_id (name)`,
         )
         .eq("merchant_id", user?.id)
@@ -80,34 +77,42 @@ export const MerchantMessages = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user && isShopOpen) fetchConversations();
+  }, [user, isShopOpen, fetchConversations]);
 
   if (loading)
     return (
-      <div className="p-10 text-center flex flex-col items-center gap-3">
-        <Loader2 className="animate-spin text-slate-900" size={24} />
+      <div className="py-20 text-center flex flex-col items-center gap-4">
+        <Loader2 className="animate-spin text-[#008080]" size={32} />
+        <p className="font-bold text-[10px] text-slate-400 uppercase tracking-widest">
+          Memuat Percakapan...
+        </p>
       </div>
     );
 
-  // ✅ TAMPILAN JIKA TOKO TUTUP (TIDAK ADA INDIKATOR STATUS LAGI)
+  // VIEW: TOKO TUTUP
   if (!isShopOpen) {
     return (
-      <div className="animate-in fade-in duration-500">
-        <div className="bg-white p-4 md:p-6 border border-slate-200 mb-4">
-          <h1 className="text-lg md:text-xl font-black text-slate-900 uppercase tracking-tighter leading-none text-left">
-            Layanan <span className="text-teal-600">Chat</span>
+      <div className="w-full animate-in fade-in duration-500 text-left font-sans">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 mb-6">
+          <h1 className="text-xl font-bold text-slate-800 uppercase tracking-tight">
+            Layanan <span className="text-[#008080]">Chat</span>
           </h1>
-          <p className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 text-left">
+          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mt-1">
             Koordinasi Pelanggan & Driver
           </p>
         </div>
-
-        <div className="py-24 text-center bg-slate-50 border border-slate-200 flex flex-col items-center">
-          <ShieldAlert size={48} className="text-slate-200 mb-4" />
-          <h3 className="text-sm font-black text-slate-800 uppercase tracking-tighter">
+        <div className="py-24 text-center bg-white border border-dashed border-slate-200 rounded-[2rem] flex flex-col items-center">
+          <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mb-4">
+            <ShieldAlert size={32} className="text-orange-500" />
+          </div>
+          <h3 className="text-[14px] font-bold text-slate-800 uppercase tracking-widest">
             Layanan Chat Non-Aktif
           </h3>
-          <p className="text-[9px] text-slate-400 font-bold uppercase mt-2 max-w-[220px] leading-tight">
+          <p className="text-[11px] text-slate-400 font-medium uppercase mt-2 max-w-[250px] leading-relaxed">
             Toko sedang tutup. Harap buka status toko Anda untuk kembali
             melayani pelanggan.
           </p>
@@ -117,26 +122,52 @@ export const MerchantMessages = () => {
   }
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-300 text-left">
-      {/* HEADER INTERNAL - BERSIH TANPA STATUS */}
-      <div className="bg-white p-4 md:p-6 border border-slate-200">
-        <h1 className="text-lg md:text-xl font-black text-slate-900 uppercase tracking-tighter leading-none">
-          Layanan <span className="text-teal-600">Chat</span>
-        </h1>
-        <p className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-          Koordinasi Pelanggan & Driver
-        </p>
-      </div>
+    <div className="w-full animate-in fade-in duration-500 text-left font-sans pb-20">
+      {/* HEADER & SEARCH */}
+      {!selectedChat && (
+        <div className="space-y-6 mb-6">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
+            <div>
+              <h1 className="text-xl font-bold text-slate-800 uppercase tracking-tight">
+                Layanan <span className="text-[#008080]">Chat</span>
+              </h1>
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mt-1">
+                Koordinasi Pelanggan & Driver
+              </p>
+            </div>
+            <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center text-[#008080]">
+              <MessageCircle size={20} />
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl p-2 flex items-center gap-3 shadow-sm focus-within:border-[#008080] transition-all">
+            <div className="pl-3 text-slate-400">
+              <Search size={18} />
+            </div>
+            <input
+              type="text"
+              placeholder="CARI BERDASARKAN NAMA ATAU ID ORDER..."
+              className="flex-1 bg-transparent border-none outline-none py-2 text-[12px] font-bold text-slate-700 placeholder:text-slate-300 uppercase"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
+      )}
 
       {selectedChat ? (
-        <div className="space-y-3">
+        <div className="space-y-4 animate-in slide-in-from-right duration-300">
           <button
             onClick={() => setSelectedChat(null)}
-            className="text-[9px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2 bg-slate-100 px-4 py-2 border border-slate-200"
+            className="group flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-bold text-slate-600 uppercase tracking-widest hover:text-[#008080] hover:border-[#008080] transition-all shadow-sm"
           >
-            <ArrowLeft size={14} /> Kembali
+            <ArrowLeft
+              size={16}
+              className="group-hover:-translate-x-1 transition-transform"
+            />{" "}
+            Kembali ke Daftar
           </button>
-          <div className="h-[550px] border border-slate-200 bg-white">
+          <div className="h-[600px] border border-slate-200 bg-white rounded-[2rem] overflow-hidden shadow-xl">
             <OrderChatRoom
               orderId={selectedChat.orderId}
               receiverName={selectedChat.name}
@@ -145,89 +176,108 @@ export const MerchantMessages = () => {
           </div>
         </div>
       ) : (
-        <div className="grid gap-2">
+        <div className="grid gap-4">
           {conversations.length > 0 ? (
-            conversations.map((order) => (
-              <div key={order.id} className="bg-white border border-slate-200">
-                <div className="px-4 py-2 border-b border-slate-100 bg-slate-50">
-                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest text-left">
-                    Order #{order.id.slice(0, 8)}
-                  </p>
-                </div>
+            conversations
+              .filter(
+                (o) =>
+                  o.profiles?.name
+                    ?.toLowerCase()
+                    .includes(searchQuery.toLowerCase()) ||
+                  o.id.includes(searchQuery),
+              )
+              .map((order) => (
+                <div
+                  key={order.id}
+                  className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:border-[#008080] transition-all"
+                >
+                  <div className="px-5 py-3 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+                    <span className="text-[10px] font-black text-slate-400 font-mono">
+                      ORD#{order.id.slice(0, 8).toUpperCase()}
+                    </span>
+                    <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">
+                      {new Date(order.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2">
-                  <button
-                    onClick={() =>
-                      setSelectedChat({
-                        orderId: order.id,
-                        name: order.profiles?.name || "Pelanggan", // FIX: Menggunakan name
-                        type: "merchant_customer",
-                      })
-                    }
-                    className="p-4 hover:bg-slate-900 hover:text-white transition-all flex items-center justify-between group border-b md:border-b-0 md:border-r border-slate-100"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-slate-100 rounded-none flex items-center justify-center text-slate-900 group-hover:bg-teal-600 group-hover:text-white">
-                        <Headset size={18} />
-                      </div>
-                      <div className="text-left">
-                        <h4 className="font-black text-[10px] uppercase truncate max-w-[120px]">
-                          {order.profiles?.name || "Pelanggan"}{" "}
-                          {/* FIX: Menggunakan name */}
-                        </h4>
-                        <p className="text-[7px] font-bold uppercase opacity-50">
-                          Buyer (Layanan CS)
-                        </p>
-                      </div>
-                    </div>
-                    <ChevronRight
-                      size={14}
-                      className="opacity-20 group-hover:opacity-100"
-                    />
-                  </button>
-
-                  {order.couriers ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+                    {/* CHAT DENGAN PEMBELI */}
                     <button
                       onClick={() =>
                         setSelectedChat({
                           orderId: order.id,
-                          name: order.couriers?.name || "Kurir", // FIX: Menggunakan name
-                          type: "courier_merchant",
+                          name: order.profiles?.name || "Pelanggan",
+                          type: "merchant_customer",
                         })
                       }
-                      className="p-4 bg-orange-50/20 hover:bg-orange-600 hover:text-white transition-all flex items-center justify-between group"
+                      className="p-5 flex items-center justify-between group hover:bg-teal-50/30 transition-all"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-white border border-orange-100 rounded-none flex items-center justify-center text-orange-600 group-hover:bg-white group-hover:text-orange-600">
-                          <Bike size={18} />
+                      <div className="flex items-center gap-4 text-left">
+                        <div className="w-12 h-12 bg-white border border-slate-100 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-[#008080] group-hover:border-[#008080] transition-all shadow-sm">
+                          <Headset size={22} />
                         </div>
-                        <div className="text-left">
-                          <h4 className="font-black text-[10px] uppercase truncate max-w-[120px]">
-                            {order.couriers?.name} {/* FIX: Menggunakan name */}
+                        <div>
+                          <h4 className="font-bold text-[13px] text-slate-800 uppercase leading-none mb-1.5">
+                            {order.profiles?.name || "Pelanggan"}
                           </h4>
-                          <p className="text-[7px] font-bold uppercase opacity-60">
-                            Koordinasi Driver
+                          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
+                            Layanan Pelanggan
                           </p>
                         </div>
                       </div>
                       <ChevronRight
-                        size={14}
-                        className="opacity-20 group-hover:opacity-100"
+                        size={18}
+                        className="text-slate-200 group-hover:text-[#008080] transition-transform group-hover:translate-x-1"
                       />
                     </button>
-                  ) : (
-                    <div className="p-4 bg-slate-50 flex items-center justify-center">
-                      <p className="text-[7px] font-black text-slate-300 uppercase tracking-widest">
-                        Menunggu Kurir
-                      </p>
-                    </div>
-                  )}
+
+                    {/* CHAT DENGAN KURIR */}
+                    {order.couriers ? (
+                      <button
+                        onClick={() =>
+                          setSelectedChat({
+                            orderId: order.id,
+                            name: order.couriers?.name || "Kurir",
+                            type: "courier_merchant",
+                          })
+                        }
+                        className="p-5 flex items-center justify-between group hover:bg-orange-50/30 transition-all"
+                      >
+                        <div className="flex items-center gap-4 text-left">
+                          <div className="w-12 h-12 bg-white border border-slate-100 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-orange-500 group-hover:border-orange-200 transition-all shadow-sm">
+                            <Bike size={22} />
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-[13px] text-slate-800 uppercase leading-none mb-1.5">
+                              {order.couriers?.name}
+                            </h4>
+                            <p className="text-[10px] font-semibold text-orange-500 uppercase tracking-widest">
+                              Koordinasi Driver
+                            </p>
+                          </div>
+                        </div>
+                        <ChevronRight
+                          size={18}
+                          className="text-slate-200 group-hover:text-orange-500 transition-transform group-hover:translate-x-1"
+                        />
+                      </button>
+                    ) : (
+                      <div className="p-5 flex items-center justify-center bg-slate-50/30">
+                        <p className="text-[10px] font-bold text-slate-300 uppercase tracking-[0.2em]">
+                          Menunggu Kurir...
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              ))
           ) : (
-            <div className="py-20 text-center bg-white border border-slate-200">
-              <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">
+            <div className="py-24 text-center bg-white border border-dashed border-slate-200 rounded-[2rem]">
+              <MessageSquare
+                size={48}
+                className="mx-auto text-slate-100 mb-4"
+              />
+              <p className="text-[12px] font-bold text-slate-300 uppercase tracking-widest">
                 Tidak ada percakapan aktif
               </p>
             </div>

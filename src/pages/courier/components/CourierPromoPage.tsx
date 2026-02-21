@@ -13,7 +13,7 @@ import {
   Lock,
   User,
   ChevronLeft,
-  Map,
+  Map as MapIcon,
   Camera,
   CreditCard,
   UploadCloud,
@@ -21,6 +21,30 @@ import {
   Clock,
   Wallet,
 } from "lucide-react";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+
+// 🔑 GOOGLE MAPS API KEY PAK KENDY
+const GOOGLE_MAPS_API_KEY = "AIzaSyBQqWHps2WJ3YWfS16rir-uqeMCezb6lso";
+
+// Fix Icon Marker Industrial
+const customMarker = new L.Icon({
+  iconUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+  iconRetinaUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+});
 
 export const CourierPromoPage: React.FC = () => {
   const { showToast } = useToast();
@@ -28,6 +52,13 @@ export const CourierPromoPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [markets, setMarkets] = useState<any[]>([]);
   const [detectedMarketName, setDetectedMarketName] = useState<string>("");
+
+  const [coords, setCoords] = useState<{ lat: number; lng: number }>({
+    lat: -0.5021,
+    lng: 117.1536,
+  });
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -67,281 +98,241 @@ export const CourierPromoPage: React.FC = () => {
     initPage();
   }, []);
 
-  // FUNGSI UPLOAD KE SUPABASE STORAGE
-  const uploadImage = async (userId: string, file: File, prefix: string) => {
-    try {
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${userId}/${prefix}_${Date.now()}.${fileExt}`;
-
-      // Upload ke bucket 'courier-docs'
-      const { error: uploadError } = await supabase.storage
-        .from("courier-docs")
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      // Ambil Public URL
-      const { data } = supabase.storage
-        .from("courier-docs")
-        .getPublicUrl(fileName);
-
-      return data.publicUrl;
-    } catch (error: any) {
-      console.error("Upload error:", error);
-      throw new Error(`Gagal upload ${prefix}: ${error.message}`);
+  // 🌍 GOOGLE GEOCODING SEARCH
+  const handleAddressSearch = async (query: string) => {
+    setFormData({ ...formData, address: query });
+    if (query.length > 3) {
+      try {
+        const res = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${GOOGLE_MAPS_API_KEY}&region=id`,
+        );
+        const data = await res.json();
+        if (data.status === "OK") {
+          setSuggestions(data.results);
+          setShowSuggestions(true);
+        }
+      } catch (err) {
+        console.error("Google Geocoding Error:", err);
+      }
+    } else {
+      setShowSuggestions(false);
     }
+  };
+
+  const selectLocation = (result: any) => {
+    const { lat, lng } = result.geometry.location;
+    setCoords({ lat, lng });
+    setFormData({ ...formData, address: result.formatted_address });
+    setShowSuggestions(false);
+  };
+
+  // 🗺️ MAP INTERACTION COMPONENTS
+  const MapEvents = () => {
+    useMapEvents({
+      click(e) {
+        setCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
+      },
+    });
+    return null;
+  };
+
+  const ChangeView = ({ center }: { center: { lat: number; lng: number } }) => {
+    const map = useMap();
+    useEffect(() => {
+      map.flyTo(center, 16);
+    }, [center]);
+    return null;
+  };
+
+  const uploadImage = async (userId: string, file: File, prefix: string) => {
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${userId}/${prefix}_${Date.now()}.${fileExt}`;
+    const { error: uploadError } = await supabase.storage
+      .from("courier-docs")
+      .upload(fileName, file);
+    if (uploadError) throw uploadError;
+    const { data } = supabase.storage
+      .from("courier-docs")
+      .getPublicUrl(fileName);
+    return data.publicUrl;
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
-
-    // Validasi Manual
     if (!formData.market_id)
-      return showToast("Area operasional wajib dipilih!", "error");
+      return showToast("PILIH AREA OPERASIONAL!", "error");
     if (!files.ktp || !files.sim || !files.selfie)
-      return showToast("Mohon lengkapi Foto KTP, SIM, dan Selfie.", "error");
+      return showToast("LENGKAPI BERKAS!", "error");
 
     setIsLoading(true);
-
     try {
-      // 1. Buat User Auth
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
       });
-
       if (error) throw error;
-      if (!data.user) throw new Error("Gagal membuat akun.");
+      const userId = data.user!.id;
 
-      // Delay agar user terbuat di database
-      await new Promise((r) => setTimeout(r, 1500));
-
-      const userId = data.user.id;
-
-      // 2. Upload Dokumen Paralel (Biar Cepat)
       const [ktpUrl, simUrl, selfieUrl] = await Promise.all([
         uploadImage(userId, files.ktp!, "ktp"),
         uploadImage(userId, files.sim!, "sim"),
         uploadImage(userId, files.selfie!, "selfie"),
       ]);
 
-      // 3. Simpan Profil Kurir
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: userId,
         email: formData.email,
         name: formData.name,
         phone_number: formData.phone,
         address: formData.address,
+        latitude: coords.lat,
+        longitude: coords.lng,
         role: "COURIER",
         vehicle_type: formData.vehicle,
-        vehicle_plate: formData.plat, // Pastikan kolom ini ada di database (vehicle_plate atau plat_number)
+        plat_number: formData.plat,
         ktp_url: ktpUrl,
         sim_url: simUrl,
         selfie_url: selfieUrl,
         is_verified: false,
-        managed_market_id: formData.market_id,
-        created_at: new Date().toISOString(),
+        market_id: formData.market_id,
       });
 
       if (profileError) throw profileError;
-
-      showToast("Pendaftaran Berhasil! Menunggu verifikasi berkas.", "success");
+      showToast("PENDAFTARAN BERHASIL! MENUNGGU VERIFIKASI.", "success");
       setTimeout(() => navigate("/waiting-approval"), 1500);
     } catch (err: any) {
-      showToast(err.message, "error");
+      showToast(err.message.toUpperCase(), "error");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col font-sans text-left">
-      {/* NAVBAR */}
-      <nav className="border-b sticky top-0 bg-white z-50 shadow-sm">
+    <div className="min-h-screen bg-white flex flex-col font-black uppercase tracking-tighter text-left">
+      <nav className="border-b sticky top-0 bg-white z-[1001] shadow-sm">
         <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between">
           <div
             onClick={() => navigate("/")}
             className="cursor-pointer flex items-center gap-2"
           >
-            <div className="text-2xl font-black text-orange-500 tracking-tighter flex items-center gap-1">
-              <span className="bg-orange-500 text-white px-1.5 rounded">P</span>
+            <div className="text-2xl text-orange-500 flex items-center gap-1">
+              <span className="bg-orange-500 text-white px-1.5 rounded">P</span>{" "}
               PASARQU
-            </div>
-            <div className="h-6 w-[1px] bg-slate-200 hidden md:block mx-2"></div>
-            <div className="text-slate-800 font-bold text-lg hidden md:block">
-              Driver Center
             </div>
           </div>
           <button
             onClick={() => navigate("/portal")}
-            className="text-slate-500 hover:text-orange-500 flex items-center gap-1 font-bold text-sm"
+            className="text-slate-500 flex items-center gap-1 text-[12px]"
           >
-            <ChevronLeft size={18} /> Kembali
+            <ChevronLeft size={18} /> KEMBALI
           </button>
         </div>
       </nav>
 
-      {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col lg:flex-row max-w-[1200px] mx-auto w-full p-6 md:p-12 gap-12 lg:gap-20">
-        {/* KOLOM KIRI (BENEFIT) */}
-        <div className="flex-1 space-y-10">
-          <div className="space-y-6">
-            <div className="inline-flex items-center gap-2 bg-teal-50 text-teal-600 px-4 py-1.5 rounded-full">
-              <Zap size={14} className="fill-teal-500" />
-              <span className="text-xs font-black uppercase tracking-widest">
-                Peluang Cuan Instan
-              </span>
+        <div className="flex-1 space-y-10 hidden lg:block">
+          <h1 className="text-5xl font-black text-slate-900 leading-[1.1]">
+            ANTAR PESANAN, <br />{" "}
+            <span className="text-orange-500">JEMPUT PENGHASILAN.</span>
+          </h1>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 bg-slate-50 rounded-xl border-2 border-slate-100">
+              <Wallet className="text-[#008080] mb-2" size={32} />
+              <h3 className="text-[12px]">CAIR TIAP HARI</h3>
             </div>
-            <h1 className="text-4xl md:text-5xl font-black text-slate-900 leading-[1.1]">
-              Antar Pesanan, <br />
-              <span className="text-orange-500">Jemput Penghasilan.</span>
-            </h1>
-            <p className="text-lg text-slate-500 leading-relaxed max-w-md">
-              Jadilah bagian dari pahlawan pengiriman pasar. Fleksibel, tanpa
-              target, dan cair setiap hari.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <BenefitItem
-              icon={<Wallet className="text-orange-500" />}
-              title="Cair Tiap Hari"
-              desc="Ongkos kirim tunai langsung masuk kantong Anda."
-            />
-            <BenefitItem
-              icon={<MapPin className="text-teal-600" />}
-              title="Rute Dekat"
-              desc="Hanya antar di area sekitar pasar & tempat tinggal."
-            />
-            <BenefitItem
-              icon={<Clock className="text-blue-500" />}
-              title="Jam Fleksibel"
-              desc="Atur sendiri waktu bekerja Anda tanpa tekanan."
-            />
-            <BenefitItem
-              icon={<ShieldCheck className="text-green-600" />}
-              title="Proteksi Aman"
-              desc="Sistem pengiriman yang jelas & terverifikasi admin."
-            />
+            <div className="p-4 bg-slate-50 rounded-xl border-2 border-slate-100">
+              <MapPin className="text-[#FF6600] mb-2" size={32} />
+              <h3 className="text-[12px]">RUTE DEKAT</h3>
+            </div>
           </div>
         </div>
 
-        {/* KOLOM KANAN (FORMULIR) */}
         <div className="w-full lg:w-[480px] shrink-0">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 p-8 md:p-10 sticky top-24">
-            <div className="text-center mb-8">
-              <div className="inline-flex p-4 bg-orange-50 rounded-2xl mb-4 text-orange-600 border border-orange-100">
-                <Bike size={32} />
-              </div>
-              <h2 className="text-2xl font-black text-slate-800 tracking-tight">
-                Daftar Driver
-              </h2>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-2">
-                Lengkapi Berkas Kendaraan
-              </p>
-            </div>
+          <div className="bg-white rounded-xl shadow-2xl border-2 border-slate-100 p-8">
+            <h2 className="text-2xl text-slate-800 text-center mb-6">
+              REGISTRASI DRIVER
+            </h2>
 
             <form onSubmit={handleRegister} className="space-y-4">
-              {/* AREA OPERASIONAL */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-500 uppercase ml-1">
-                  Area Operasional (Pasar)
-                </label>
-                {detectedMarketName ? (
-                  <div className="w-full px-4 py-3 bg-teal-50 border border-teal-200 rounded-xl text-sm font-bold text-teal-800 flex justify-between items-center">
-                    <span className="flex items-center gap-2">
-                      <Map size={16} /> {detectedMarketName}
-                    </span>
-                    <span className="text-[8px] bg-teal-200 px-2 py-1 rounded">
-                      AREA TERKUNCI
-                    </span>
-                  </div>
-                ) : (
-                  <div className="relative group">
-                    <Map
-                      size={16}
-                      className="absolute left-3 top-3.5 text-slate-400 z-10"
-                    />
-                    <select
-                      required
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:border-teal-600 outline-none text-sm font-bold appearance-none transition-all shadow-inner"
-                      value={formData.market_id}
-                      onChange={(e) =>
-                        setFormData({ ...formData, market_id: e.target.value })
-                      }
-                    >
-                      <option value="">-- Pilih Wilayah Operasi --</option>
-                      {markets.map((m: any) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {/* IDENTITAS DIRI */}
-              <div className="grid grid-cols-2 gap-3">
-                <InputGroup
-                  placeholder="Nama (Sesuai KTP)"
-                  icon={<User size={16} />}
-                  value={formData.name}
-                  onChange={(v: string) =>
-                    setFormData({ ...formData, name: v })
-                  }
-                />
-                <InputGroup
-                  placeholder="WhatsApp"
-                  icon={<Smartphone size={16} />}
-                  value={formData.phone}
-                  onChange={(v: string) =>
-                    setFormData({ ...formData, phone: v })
-                  }
-                />
-              </div>
-
-              {/* KENDARAAN */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="relative group">
-                  <select
-                    className="w-full pl-4 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:border-teal-600 outline-none text-xs font-bold appearance-none transition-all h-full shadow-inner"
-                    value={formData.vehicle}
-                    onChange={(e) =>
-                      setFormData({ ...formData, vehicle: e.target.value })
-                    }
-                  >
-                    <option value="Motor">Motor</option>
-                    <option value="Bentor">Bentor</option>
-                    <option value="Mobil">Mobil</option>
-                  </select>
-                </div>
-                <InputGroup
-                  placeholder="No. Plat Polisi"
-                  icon={<CreditCard size={16} />}
-                  value={formData.plat}
-                  onChange={(v: string) =>
-                    setFormData({ ...formData, plat: v })
-                  }
-                />
-              </div>
-
-              {/* ALAMAT */}
               <InputGroup
-                placeholder="Alamat Domisili Lengkap"
-                icon={<MapPin size={16} />}
-                value={formData.address}
-                onChange={(v: string) =>
-                  setFormData({ ...formData, address: v })
-                }
+                placeholder="NAMA LENGKAP (KTP)"
+                icon={<User size={16} />}
+                value={formData.name}
+                onChange={(v: string) => setFormData({ ...formData, name: v })}
+              />
+              <InputGroup
+                placeholder="WHATSAPP AKTIF"
+                icon={<Smartphone size={16} />}
+                value={formData.phone}
+                onChange={(v: string) => setFormData({ ...formData, phone: v })}
               />
 
-              {/* AKUN LOGIN */}
-              <div className="pt-2 flex flex-col gap-3">
+              <div className="space-y-2 relative">
+                <label className="text-[10px] text-slate-400 ml-1">
+                  ALAMAT DOMISILI (GOOGLE MAPS)
+                </label>
+                <div className="relative">
+                  <MapPin
+                    className="absolute left-3 top-3.5 text-orange-500 z-10"
+                    size={16}
+                  />
+                  <input
+                    type="text"
+                    placeholder="KETIK ALAMAT LENGKAP..."
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl text-[12px] font-black focus:border-orange-500 outline-none"
+                    value={formData.address}
+                    onChange={(e) => handleAddressSearch(e.target.value)}
+                  />
+                  {showSuggestions && suggestions.length > 0 && (
+                    <div className="absolute z-[2000] w-full bg-white border border-slate-200 rounded-xl mt-1 shadow-2xl max-h-40 overflow-y-auto">
+                      {suggestions.map((item, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => selectLocation(item)}
+                          className="p-3 hover:bg-orange-50 cursor-pointer text-[10px] border-b border-slate-50 font-black"
+                        >
+                          {item.formatted_address.toUpperCase()}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="h-60 w-full rounded-xl border-2 border-slate-900 overflow-hidden z-0 shadow-lg relative">
+                  <div className="absolute top-2 right-2 z-[1002] bg-slate-900 text-white text-[8px] px-2 py-1 rounded font-black border border-[#008080]">
+                    KLIK ATAU GESER PIN UNTUK AKURASI
+                  </div>
+                  <MapContainer
+                    center={[coords.lat, coords.lng]}
+                    zoom={16}
+                    attributionControl={false}
+                    style={{ height: "100%", width: "100%" }}
+                  >
+                    <ChangeView center={coords} />
+                    <MapEvents />
+                    <TileLayer
+                      url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
+                      subdomains={["mt0", "mt1", "mt2", "mt3"]}
+                    />
+                    <Marker
+                      position={[coords.lat, coords.lng]}
+                      icon={customMarker}
+                      draggable={true}
+                      eventHandlers={{
+                        dragend: (e) => {
+                          const position = e.target.getLatLng();
+                          setCoords({ lat: position.lat, lng: position.lng });
+                        },
+                      }}
+                    />
+                  </MapContainer>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <InputGroup
-                  type="email"
-                  placeholder="Email Akun"
+                  placeholder="EMAIL"
                   icon={<Mail size={16} />}
                   value={formData.email}
                   onChange={(v: string) =>
@@ -349,8 +340,8 @@ export const CourierPromoPage: React.FC = () => {
                   }
                 />
                 <InputGroup
+                  placeholder="PASSWORD"
                   type="password"
-                  placeholder="Buat Password"
                   icon={<Lock size={16} />}
                   value={formData.password}
                   onChange={(v: string) =>
@@ -359,82 +350,46 @@ export const CourierPromoPage: React.FC = () => {
                 />
               </div>
 
-              {/* UPLOAD BERKAS */}
-              <div className="pt-2 space-y-3">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                  Upload Berkas Wajib
-                </p>
-                <div className="grid grid-cols-3 gap-3">
-                  <FileBox
-                    label="KTP"
-                    icon={<CreditCard size={18} />}
-                    file={files.ktp}
-                    onSelect={(f: File) => setFiles({ ...files, ktp: f })}
-                  />
-                  <FileBox
-                    label="SIM C"
-                    icon={<UploadCloud size={18} />}
-                    file={files.sim}
-                    onSelect={(f: File) => setFiles({ ...files, sim: f })}
-                  />
-                  <FileBox
-                    label="Selfie"
-                    icon={<Camera size={18} />}
-                    file={files.selfie}
-                    onSelect={(f: File) => setFiles({ ...files, selfie: f })}
-                  />
-                </div>
+              <div className="grid grid-cols-3 gap-3 pt-2">
+                <FileBox
+                  label="KTP"
+                  icon={<CreditCard size={18} />}
+                  file={files.ktp}
+                  onSelect={(f: File) => setFiles({ ...files, ktp: f })}
+                />
+                <FileBox
+                  label="SIM"
+                  icon={<UploadCloud size={18} />}
+                  file={files.sim}
+                  onSelect={(f: File) => setFiles({ ...files, sim: f })}
+                />
+                <FileBox
+                  label="SELFIE"
+                  icon={<Camera size={18} />}
+                  file={files.selfie}
+                  onSelect={(f: File) => setFiles({ ...files, selfie: f })}
+                />
               </div>
 
-              {/* TOMBOL DAFTAR */}
               <button
                 disabled={isLoading}
-                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-orange-600 active:scale-95 transition-all flex items-center justify-center gap-2 mt-4 group"
+                className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-[12px] tracking-widest hover:bg-orange-600 shadow-xl mt-4 active:scale-95"
               >
                 {isLoading ? (
                   <Loader2 className="animate-spin" />
                 ) : (
-                  <>
-                    DAFTAR SEKARANG
-                    <ArrowRight
-                      size={16}
-                      className="text-orange-500 group-hover:text-white transition-colors"
-                    />
-                  </>
+                  "KIRIM PENDAFTARAN"
                 )}
               </button>
             </form>
           </div>
         </div>
       </main>
-
-      <footer className="py-10 bg-slate-50 border-t border-slate-100 text-center">
-        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed">
-          © 2026 PASARQU DRIVER ECOSYSTEM
-        </p>
-      </footer>
     </div>
   );
 };
 
-// --- SUB COMPONENTS ---
-
-const BenefitItem = ({ icon, title, desc }: any) => (
-  <div className="flex gap-4 p-4 rounded-2xl hover:bg-slate-50 transition-colors group">
-    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shrink-0 shadow-sm border border-slate-100 group-hover:scale-110 transition-transform">
-      {icon}
-    </div>
-    <div>
-      <h3 className="font-black text-slate-800 text-sm uppercase tracking-tight">
-        {title}
-      </h3>
-      <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-        {desc}
-      </p>
-    </div>
-  </div>
-);
-
+// --- SUB-COMPONENTS DENGAN TYPE SAFETY ---
 const InputGroup = ({
   icon,
   type = "text",
@@ -449,7 +404,7 @@ const InputGroup = ({
   onChange: (v: string) => void;
 }) => (
   <div className="relative group flex-1">
-    <div className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-orange-500 transition-colors pointer-events-none">
+    <div className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-orange-500">
       {icon}
     </div>
     <input
@@ -457,7 +412,7 @@ const InputGroup = ({
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full pl-10 pr-3 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:border-orange-500 focus:bg-white outline-none text-xs font-bold transition-all placeholder:text-slate-300 shadow-inner"
+      className="w-full pl-10 pr-3 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:border-orange-500 outline-none text-[12px] font-black"
       required
     />
   </div>
@@ -475,25 +430,20 @@ const FileBox = ({
   file: File | null;
 }) => (
   <label
-    className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 border-dashed cursor-pointer transition-all h-20 ${
-      file
-        ? "bg-teal-50 border-teal-400 text-teal-700 font-black"
-        : "bg-white border-slate-200 text-slate-400 hover:border-orange-400 hover:bg-orange-50"
-    }`}
+    className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 border-dashed cursor-pointer transition-all h-20 ${file ? "bg-teal-50 border-teal-400 text-teal-700" : "bg-white border-slate-200 text-slate-400 hover:border-orange-400"}`}
   >
-    <div
-      className={`mb-1 transition-transform ${file ? "scale-110" : "scale-100"}`}
-    >
-      {icon}
-    </div>
-    <span className="text-[8px] font-black uppercase truncate w-full text-center tracking-tighter">
-      {file ? "TERUPLOAD" : label}
+    {icon}
+    <span className="text-[8px] font-black uppercase mt-1">
+      {file ? "BERKAS OK" : label}
     </span>
     <input
       type="file"
       className="hidden"
       accept="image/*"
-      onChange={(e) => onSelect(e.target.files?.[0] as File)}
+      onChange={(e) => {
+        const selectedFile = e.target.files?.[0];
+        if (selectedFile) onSelect(selectedFile);
+      }}
     />
   </label>
 );

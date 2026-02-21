@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-// PERBAIKAN 1: Jalur import disesuaikan dengan posisi folder 'src/hooks/'
 import { supabase } from "../lib/supabaseClient"; 
 import { useAuth } from "../contexts/AuthContext";
 
@@ -16,50 +15,100 @@ export const useCourierDashboard = () => {
   const fetchInitialData = async () => {
     if (!user) return;
     try {
-      // 1. Fetch Profile
-      const { data: profile } = await supabase
+      // 1. SAFE FETCH PROFILE (ANTI 400 ERROR)
+      // Tarik data profil murni tanpa embel-embel join tabel
+      const { data: profileData } = await supabase
         .from("profiles")
-        .select("*, markets:market_id(name)")
+        .select("*")
         .eq("id", user.id)
         .single();
 
-      if (profile) {
-        setCourierData(profile);
-        setIsOnline(profile.is_active || false);
-        if (profile.latitude) setCurrentCoords({ lat: profile.latitude, lng: profile.longitude });
+      if (profileData) {
+        let finalProfile = { ...profileData };
+
+        // Jika kurir punya market_id, kita cari nama pasarnya secara manual
+        if (profileData.market_id) {
+          const { data: marketData } = await supabase
+            .from("markets")
+            .select("name")
+            .eq("id", profileData.market_id)
+            .maybeSingle();
+
+          if (marketData) {
+            finalProfile.markets = { name: marketData.name };
+          }
+        }
+
+        setCourierData(finalProfile);
+        setIsOnline(finalProfile.is_active || false);
+        if (finalProfile.latitude) {
+          setCurrentCoords({ lat: finalProfile.latitude, lng: finalProfile.longitude });
+        }
       }
 
-      // 2. Fetch Transactions
+      // 2. SAFE FETCH TRANSACTIONS
       const { data: logs } = await supabase
         .from("wallet_logs")
         .select("*")
         .eq("profile_id", user.id)
         .order("created_at", { ascending: false })
         .limit(20);
+      
       if (logs) setTransactions(logs);
 
-      // 3. Fetch Active Order
-      const { data: order } = await supabase
+      // 3. SAFE FETCH ACTIVE ORDER (ANTI 400 ERROR)
+      const { data: orderData } = await supabase
         .from("orders")
-        .select(`
-          *,
-          profiles:customer_id (id, full_name, phone_number, address, latitude, longitude),
-          merchants:merchant_id (id, shop_name, address, latitude, longitude)
-        `)
+        .select("*")
         .eq("courier_id", user.id)
-        .in("shipping_status", ["COURIER_ASSIGNED", "PICKING_UP", "DELIVERING"])
-        .maybeSingle();
+        .order("created_at", { ascending: false })
+        .limit(1);
 
-      setActiveOrder(order || null);
+      if (orderData && orderData.length > 0) {
+        const ord = orderData[0];
+        const isCompleted = String(ord.status).toUpperCase() === "COMPLETED" || 
+                            String(ord.status).toUpperCase() === "CANCELLED" || 
+                            String(ord.status).toUpperCase() === "SELESAI";
+        
+        if (!isCompleted) {
+          // AMBIL DATA PELANGGAN & TOKO SECARA MANUAL
+          let customerData = null;
+          let merchantData = null;
+
+          if (ord.customer_id) {
+            const { data: c } = await supabase.from('profiles').select('*').eq('id', ord.customer_id).maybeSingle();
+            customerData = c;
+          }
+          
+          if (ord.merchant_id) {
+            let { data: m } = await supabase.from('profiles').select('*').eq('id', ord.merchant_id).maybeSingle();
+            if (!m) {
+              const { data: m2 } = await supabase.from('merchants').select('*').eq('id', ord.merchant_id).maybeSingle();
+              m = m2;
+            }
+            merchantData = m;
+          }
+
+          setActiveOrder({
+            ...ord,
+            profiles: customerData,
+            merchants: merchantData
+          });
+        } else {
+          setActiveOrder(null);
+        }
+      } else {
+        setActiveOrder(null);
+      }
     } catch (err) {
-      console.error("Error fetching data:", err);
+      console.error("ERROR FETCHING DATA:", err);
     } finally {
       setLoading(false);
     }
   };
 
   const toggleOnlineStatus = async () => {
-    if (!courierData?.is_verified) return { success: false, msg: "Akun belum diverifikasi Admin" };
+    if (!courierData?.is_verified) return { success: false, msg: "AKUN BELUM DIVERIFIKASI ADMIN" };
     
     const newState = !isOnline;
     const { error } = await supabase.from("profiles").update({ is_active: newState }).eq("id", user?.id);
@@ -68,7 +117,7 @@ export const useCourierDashboard = () => {
       setIsOnline(newState);
       return { success: true, msg: newState ? "DRIVER ONLINE" : "DRIVER OFFLINE" };
     }
-    return { success: false, msg: "Gagal update status" };
+    return { success: false, msg: "GAGAL UPDATE STATUS" };
   };
 
   useEffect(() => {
@@ -78,8 +127,11 @@ export const useCourierDashboard = () => {
     const channel = supabase
       .channel(`courier_dashboard_${user.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `courier_id=eq.${user.id}` }, fetchInitialData)
-      // PERBAIKAN 2: Menambahkan tipe ': any' pada payload agar TypeScript tidak protes
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.id}` }, (payload: any) => setCourierData(payload.new))
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.id}` }, (payload: any) => {
+         // Agar nama pasar tidak hilang saat update profile dari realtime
+         setCourierData((prev: any) => ({ ...prev, ...payload.new }));
+         setIsOnline(payload.new.is_active);
+      })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "wallet_logs", filter: `profile_id=eq.${user.id}` }, fetchInitialData)
       .subscribe();
 

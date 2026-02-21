@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
-
-// --- HOOKS ---
 import { useMerchantDashboard } from "../../hooks/useMerchantDashboard";
 
 // --- COMPONENTS ---
@@ -14,6 +12,9 @@ import { MerchantOrders } from "./components/MerchantOrders";
 import { MerchantFinanceDashboard } from "./components/MerchantFinanceDashboard";
 import { MerchantMessages } from "./components/MerchantMessages";
 import { LocationPickerModal } from "./components/LocationPickerModal";
+
+// --- ICONS ---
+import { Moon, Sun } from "lucide-react";
 
 type TabType =
   | "overview"
@@ -28,9 +29,13 @@ export const MerchantDashboard: React.FC = () => {
   const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [triggerAddProduct, setTriggerAddProduct] = useState(false);
-
   const [visitedTabs, setVisitedTabs] = useState<Record<string, boolean>>({
     overview: true,
+  });
+
+  // ✅ 1. LOGIKA THEME (DARK / LIGHT)
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return localStorage.getItem("merchant-theme") === "dark";
   });
 
   const {
@@ -44,10 +49,21 @@ export const MerchantDashboard: React.FC = () => {
   } = useMerchantDashboard();
 
   useEffect(() => {
-    if (!visitedTabs[activeTab]) {
+    if (!visitedTabs[activeTab])
       setVisitedTabs((prev) => ({ ...prev, [activeTab]: true }));
-    }
   }, [activeTab, visitedTabs]);
+
+  // ✅ 2. SYNC THEME KE HTML CLASS & LOCAL STORAGE
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (isDarkMode) {
+      root.classList.add("dark");
+      localStorage.setItem("merchant-theme", "dark");
+    } else {
+      root.classList.remove("dark");
+      localStorage.setItem("merchant-theme", "light");
+    }
+  }, [isDarkMode]);
 
   const validProductsCount = products
     ? products.filter((p: any) => p && p.id).length
@@ -64,15 +80,22 @@ export const MerchantDashboard: React.FC = () => {
 
   if (!merchantProfile) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white font-black text-slate-300 uppercase tracking-[0.3em] animate-pulse">
+      <div
+        className={`min-h-screen flex items-center justify-center font-black text-[12px] uppercase tracking-[0.3em] animate-pulse transition-colors duration-300 ${isDarkMode ? "bg-slate-950 text-slate-700" : "bg-slate-50 text-slate-300"}`}
+      >
         Menyiapkan Dashboard...
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col md:flex-row font-sans text-left overflow-hidden">
-      <aside className="hidden md:flex w-64 h-screen fixed left-0 top-0 z-50 border-r border-slate-100 bg-white">
+    <div
+      className={`min-h-screen flex flex-col md:flex-row font-sans text-left overflow-hidden transition-colors duration-500 ${isDarkMode ? "bg-slate-950" : "bg-slate-50"}`}
+    >
+      {/* SIDEBAR DESKTOP */}
+      <aside
+        className={`hidden md:flex w-64 h-screen fixed left-0 top-0 z-50 border-r transition-colors duration-300 ${isDarkMode ? "bg-slate-900 border-slate-800 shadow-2xl shadow-black" : "bg-white border-slate-200"}`}
+      >
         <MerchantSidebar
           activeTab={activeTab}
           setActiveTab={(tab: any) => setActiveTab(tab as TabType)}
@@ -83,18 +106,39 @@ export const MerchantDashboard: React.FC = () => {
           onAddProduct={handleAddProductShortcut}
           orderCount={validOrdersCount}
           productCount={validProductsCount}
+          isDarkMode={isDarkMode} // Kirim prop theme ke sidebar
         />
       </aside>
 
+      {/* MAIN CONTENT AREA */}
       <div className="flex-1 flex flex-col min-w-0 md:ml-64 w-full md:w-[calc(100%-16rem)] h-screen overflow-hidden">
-        <MerchantHeader
-          shopName={merchantProfile.shop_name}
-          marketName={merchantProfile.market_name}
-          isOpen={merchantProfile.is_shop_open}
-        />
+        {/* HEADER DENGAN SWITCHER TEMA */}
+        <div
+          className={`border-b sticky top-0 z-40 shadow-sm flex items-center transition-colors duration-300 ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}
+        >
+          <div className="flex-1">
+            <MerchantHeader
+              shopName={merchantProfile.shop_name}
+              marketName={merchantProfile.market_name}
+              isOpen={merchantProfile.is_shop_open}
+            />
+          </div>
 
-        <main className="flex-1 overflow-y-auto no-scrollbar pb-24 md:pb-6 bg-slate-50/30">
-          <div className="p-3 md:p-6 w-full max-w-[1400px] mx-auto relative">
+          {/* ✅ TOMBOL TOGGLE DARK MODE */}
+          <button
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            className={`mr-4 p-2.5 rounded-xl transition-all active:scale-90 ${isDarkMode ? "bg-slate-800 text-yellow-400 hover:bg-slate-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+            title={isDarkMode ? "Ganti ke Terang" : "Ganti ke Gelap"}
+          >
+            {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+        </div>
+
+        {/* WORKSPACE / HALAMAN UTAMA */}
+        <main
+          className={`flex-1 overflow-y-auto no-scrollbar pb-24 md:pb-10 transition-colors duration-300 ${isDarkMode ? "bg-slate-950" : "bg-slate-50/50"} p-4 md:p-8`}
+        >
+          <div className="w-full max-w-[1400px] mx-auto relative">
             {/* 1. OVERVIEW */}
             <div className={activeTab === "overview" ? "block" : "hidden"}>
               <MerchantOverview
@@ -106,7 +150,7 @@ export const MerchantDashboard: React.FC = () => {
               />
             </div>
 
-            {/* 2. PRODUCTS - FIX: Mengirimkan props yang sudah didefinisikan */}
+            {/* 2. PRODUCTS */}
             {visitedTabs["products"] && (
               <div className={activeTab === "products" ? "block" : "hidden"}>
                 <MerchantProducts
@@ -145,7 +189,9 @@ export const MerchantDashboard: React.FC = () => {
 
             {/* 6. LOCATION */}
             {activeTab === "location" && (
-              <div className="bg-white border-2 border-slate-100">
+              <div
+                className={`border rounded-xl shadow-sm p-4 transition-colors ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}
+              >
                 <LocationPickerModal
                   merchantProfile={merchantProfile}
                   onClose={() => setActiveTab("overview")}
@@ -157,7 +203,9 @@ export const MerchantDashboard: React.FC = () => {
         </main>
 
         {/* BOTTOM NAV MOBILE */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-slate-100 bg-white">
+        <div
+          className={`md:hidden fixed bottom-0 left-0 right-0 z-50 border-t transition-colors duration-300 ${isDarkMode ? "bg-slate-900 border-slate-800 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]" : "bg-white border-slate-200"}`}
+        >
           <MerchantSidebar
             activeTab={activeTab}
             setActiveTab={(tab: any) => setActiveTab(tab as TabType)}
@@ -168,6 +216,7 @@ export const MerchantDashboard: React.FC = () => {
             onAddProduct={handleAddProductShortcut}
             orderCount={validOrdersCount}
             productCount={validProductsCount}
+            isDarkMode={isDarkMode}
           />
         </div>
       </div>
@@ -181,6 +230,18 @@ export const MerchantDashboard: React.FC = () => {
         }}
         onMute={stopAlarm}
       />
+
+      {/* ✅ INTERNAL CSS UNTUK OVERRIDE MODE GELAP (Efisien & Cepat) */}
+      <style>{`
+        .dark .bg-white { background-color: #0f172a !important; color: #f1f5f9 !important; }
+        .dark .text-slate-800, .dark .text-slate-900 { color: #f8fafc !important; }
+        .dark .text-slate-700, .dark .text-slate-600 { color: #cbd5e1 !important; }
+        .dark .border-slate-200, .dark .border-slate-100 { border-color: #1e293b !important; }
+        .dark .bg-slate-50, .dark .bg-slate-100 { background-color: #020617 !important; }
+        .dark input, .dark select, .dark textarea { background-color: #1e293b !important; border-color: #334155 !important; color: white !important; }
+        .dark .shadow-sm { box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4) !important; }
+        .dark .bg-slate-50\/50 { background-color: rgba(2, 6, 23, 0.5) !important; }
+      `}</style>
     </div>
   );
 };

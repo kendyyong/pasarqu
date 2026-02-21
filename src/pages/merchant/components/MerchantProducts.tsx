@@ -1,297 +1,576 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { supabase } from "../../../lib/supabaseClient";
+import { useAuth } from "../../../contexts/AuthContext";
+import { useToast } from "../../../contexts/ToastContext";
 import {
+  ArrowLeft,
+  ImageIcon,
+  Upload,
+  X,
   Loader2,
+  Tag,
+  Package,
+  Type,
+  FileText,
+  Percent,
+  Lock,
+  Layers,
+  Archive,
   Plus,
   Search,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  XCircle,
-  Edit3,
+  Edit2,
   Trash2,
-  Tag,
-  X,
-  Check,
-  Percent,
-  FileText,
 } from "lucide-react";
-import { useMerchantProducts } from "../../../hooks/useMerchantProducts";
-import { ProductForm } from "./ProductForm";
-import { supabase } from "../../../lib/supabaseClient";
 
-interface MerchantProductsProps {
+// --- FUNGSI KOMPRESI GAMBAR (AUTO COMPRESS) ---
+const compressImage = (file: File): Promise<File> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_WIDTH = 800; // Ukuran optimal untuk HP
+        const MAX_HEIGHT = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // Kompresi ke format JPEG dengan kualitas 0.7 (70%)
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name, {
+                type: "image/jpeg",
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            }
+          },
+          "image/jpeg",
+          0.7,
+        );
+      };
+    };
+  });
+};
+
+interface Props {
   merchantProfile: any;
   autoOpenForm?: boolean;
 }
 
-export const MerchantProducts: React.FC<MerchantProductsProps> = ({
+export const MerchantProducts: React.FC<Props> = ({
   merchantProfile,
-  autoOpenForm,
+  autoOpenForm = false,
 }) => {
-  const { products, loading, categories, fetchProducts, showToast, user } =
-    useMerchantProducts();
-  const [isAdding, setIsAdding] = useState(autoOpenForm || false);
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const [view, setView] = useState<"list" | "form">(
+    autoOpenForm ? "form" : "list",
+  );
+  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [editingProduct, setEditingProduct] = useState<any>(null);
-  const [editingDiscount, setEditingDiscount] = useState<any>(null);
-  const [newPromoPrice, setNewPromoPrice] = useState("");
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  useEffect(() => {
-    if (autoOpenForm) setIsAdding(true);
-  }, [autoOpenForm]);
-
-  const handleUpdateDiscount = async () => {
-    if (!editingDiscount) return;
-    const normalPrice = editingDiscount.price;
-    const promoPrice = newPromoPrice ? parseInt(newPromoPrice) : null;
-
-    if (promoPrice !== null && promoPrice >= normalPrice) {
-      showToast("Harga promo harus lebih murah!", "error");
-      return;
-    }
-
-    setIsUpdating(true);
+  const fetchData = async () => {
+    if (!user) return;
+    setLoading(true);
     try {
-      const { error } = await supabase
-        .from("products")
-        .update({
-          promo_price: promoPrice,
-          final_price: promoPrice || normalPrice,
-        })
-        .eq("id", editingDiscount.id);
+      const { data: catData } = await supabase
+        .from("categories")
+        .select("*")
+        .order("name");
+      if (catData) setCategories(catData);
 
-      if (error) throw error;
-      showToast("Diskon berhasil diperbarui!", "success");
-      setEditingDiscount(null);
-      setNewPromoPrice("");
-      fetchProducts();
+      const { data: prodData } = await supabase
+        .from("products")
+        .select("*, categories(name)")
+        .eq("merchant_id", merchantProfile?.merchant_id || user.id)
+        .order("created_at", { ascending: false });
+
+      if (prodData) setProducts(prodData);
     } catch (err: any) {
-      showToast(err.message || "Gagal memperbarui diskon", "error");
+      showToast(err.message, "error");
     } finally {
-      setIsUpdating(false);
+      setLoading(false);
     }
   };
 
-  if (isAdding || editingProduct) {
+  useEffect(() => {
+    fetchData();
+  }, [user, merchantProfile]);
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("HAPUS PRODUK INI?")) return;
+    try {
+      const { error } = await supabase.from("products").delete().eq("id", id);
+      if (error) throw error;
+      showToast("PRODUK DIHAPUS", "success");
+      fetchData();
+    } catch (err: any) {
+      showToast(err.message, "error");
+    }
+  };
+
+  if (view === "list") {
     return (
-      <ProductForm
-        onBack={() => {
-          setIsAdding(false);
-          setEditingProduct(null);
-        }}
-        initialData={editingProduct}
-        categories={categories}
-        user={user}
-        showToast={showToast}
-        onSuccess={() => {
-          setIsAdding(false);
-          setEditingProduct(null);
-          fetchProducts();
-        }}
-      />
+      <div className="w-full animate-in fade-in duration-500 pb-20 text-left font-sans">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div>
+            <h2 className="text-[16px] font-bold text-slate-800 uppercase tracking-tight">
+              Katalog Produk
+            </h2>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mt-1">
+              Total: {products.length} Item
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setSelectedProduct(null);
+              setView("form");
+            }}
+            className="bg-[#008080] hover:bg-teal-700 text-white px-6 py-3 rounded-xl font-bold text-[12px] uppercase tracking-widest transition-all shadow-lg active:scale-95 flex items-center gap-2"
+          >
+            <Plus size={18} /> Produk Baru
+          </button>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-2 mb-6 flex items-center gap-3 shadow-sm focus-within:border-[#008080] transition-all">
+          <div className="pl-3 text-slate-400">
+            <Search size={18} />
+          </div>
+          <input
+            type="text"
+            placeholder="CARI BARANG..."
+            className="flex-1 bg-transparent border-none outline-none py-2 text-[12px] font-bold text-slate-700 placeholder:text-slate-300 uppercase"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        {loading ? (
+          <div className="py-20 text-center">
+            <Loader2 className="animate-spin mx-auto text-teal-600" size={32} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {products
+              .filter((p) =>
+                p.name.toLowerCase().includes(searchQuery.toLowerCase()),
+              )
+              .map((product) => (
+                <div
+                  key={product.id}
+                  className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:shadow-md transition-all group"
+                >
+                  <div className="aspect-square relative bg-slate-100">
+                    <img
+                      src={product.image_url}
+                      className="w-full h-full object-cover"
+                      alt=""
+                    />
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <button
+                        onClick={() => {
+                          setSelectedProduct(product);
+                          setView("form");
+                        }}
+                        className="p-2 bg-white/90 rounded-lg text-slate-600 shadow-sm"
+                      >
+                        <Edit2 size={12} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(product.id)}
+                        className="p-2 bg-white/90 rounded-lg text-red-600 shadow-sm"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <h4 className="font-bold text-slate-800 text-[11px] uppercase truncate">
+                      {product.name}
+                    </h4>
+                    <p className="text-[#008080] font-black text-[12px] mt-1">
+                      Rp{product.final_price?.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
     );
   }
 
-  const filteredProducts = products.filter((p: any) =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
-
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-20 text-left">
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tighter italic text-teal-600">
-            Etalase Toko
-          </h2>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-            Total {products.length} Produk Terdaftar
-          </p>
-        </div>
-        <button
-          onClick={() => setIsAdding(true)}
-          className="flex items-center gap-2 px-8 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-teal-600 transition-all shadow-xl active:scale-95"
-        >
-          <Plus size={18} strokeWidth={3} /> Tambah Baru
-        </button>
-      </div>
-
-      {/* SEARCH */}
-      <div className="relative group">
-        <Search
-          className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-teal-600"
-          size={20}
-        />
-        <input
-          type="text"
-          placeholder="Cari produk Anda..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-14 pr-6 py-5 bg-white border border-slate-200 rounded-[2rem] text-sm font-bold outline-none focus:border-teal-600 shadow-sm transition-all"
-        />
-      </div>
-
-      {loading ? (
-        <div className="py-20 text-center">
-          <Loader2 className="animate-spin text-teal-600 mx-auto" size={40} />
-        </div>
-      ) : filteredProducts.length === 0 ? (
-        <div className="py-20 text-center bg-white border-2 border-dashed border-slate-100 rounded-[2.5rem]">
-          <p className="text-slate-400 font-black uppercase text-[11px] tracking-widest text-center">
-            Belum ada barang di gudang
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProducts.map((p: any) => (
-            <ProductMerchantCard
-              key={p.id}
-              product={p}
-              onEdit={() => setEditingProduct(p)}
-              onEditDiscount={(prod) => {
-                setEditingDiscount(prod);
-                setNewPromoPrice(prod.promo_price?.toString() || "");
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* MODAL DISKON */}
-      {editingDiscount && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 border-t-[12px] border-orange-600 shadow-2xl">
-            <div className="flex justify-between items-start mb-6">
-              <h2 className="font-black text-slate-800 uppercase italic tracking-tighter text-xl">
-                Setting Diskon
-              </h2>
-              <button
-                onClick={() => setEditingDiscount(null)}
-                className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="space-y-5">
-              <input
-                type="number"
-                autoFocus
-                className="w-full px-6 py-5 bg-orange-50 border border-orange-100 rounded-2xl outline-none focus:border-orange-600 font-black text-orange-900"
-                placeholder="Harga Promo Baru..."
-                value={newPromoPrice}
-                onChange={(e) => setNewPromoPrice(e.target.value)}
-              />
-              <button
-                onClick={handleUpdateDiscount}
-                disabled={isUpdating}
-                className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black uppercase text-[11px] tracking-widest hover:bg-teal-600 transition-all flex items-center justify-center gap-3 shadow-xl"
-              >
-                {isUpdating ? (
-                  <Loader2 className="animate-spin" size={20} />
-                ) : (
-                  <Check size={20} strokeWidth={4} />
-                )}
-                Terapkan Diskon
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    <ProductFormInternal
+      onBack={() => setView("list")}
+      categories={categories}
+      user={user}
+      merchantProfile={merchantProfile}
+      onSuccess={() => {
+        setView("list");
+        fetchData();
+      }}
+      showToast={showToast}
+      initialData={selectedProduct}
+    />
   );
 };
 
-// --- CARD DENGAN INFO KETERANGAN ---
-const ProductMerchantCard = ({
-  product,
-  onEdit,
-  onEditDiscount,
-}: {
-  product: any;
-  onEdit: () => void;
-  onEditDiscount: (p: any) => void;
-}) => {
-  const hasDiscount = product.promo_price && product.promo_price > 0;
+// --- KOMPONEN INTERNAL FORM (DENGAN AUTO COMPRESS & LIMIT 2 FOTO) ---
+const ProductFormInternal = ({
+  onBack,
+  categories,
+  user,
+  merchantProfile,
+  onSuccess,
+  showToast,
+  initialData,
+}: any) => {
+  const [isUploading, setIsUploading] = useState(false);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const isEditMode = !!initialData;
+
+  const [newProduct, setNewProduct] = useState({
+    name: "",
+    price: "",
+    promo_price: "",
+    stock: "",
+    description: "",
+    unit: "Pcs",
+    category_id: "",
+    is_po: false,
+    po_days: "3",
+  });
+
+  useEffect(() => {
+    if (initialData) {
+      setNewProduct({
+        name: initialData.name || "",
+        price: initialData.price?.toString() || "",
+        promo_price: initialData.promo_price?.toString() || "",
+        stock: initialData.stock?.toString() || "",
+        description: initialData.description || "",
+        unit: initialData.unit || "Pcs",
+        category_id: initialData.category_id || "",
+        is_po: initialData.is_po || false,
+        po_days: initialData.po_days?.toString() || "3",
+      });
+      setExistingImages(initialData.image_urls || [initialData.image_url]);
+    }
+  }, [initialData]);
+
+  const handleAddProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (imageFiles.length === 0 && existingImages.length === 0) {
+      showToast("WAJIB ADA FOTO PRODUK", "error");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const finalMerchantId = merchantProfile?.merchant_id || user.id;
+      const finalMarketId = merchantProfile?.market_id;
+
+      let finalUrls = [...existingImages];
+
+      // LOGIKA UPLOAD DENGAN AUTO COMPRESS
+      for (const file of imageFiles) {
+        // 1. Kompres gambar di Client-side sebelum kirim ke server
+        const compressed = await compressImage(file);
+
+        const fileName = `${finalMerchantId}-${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+        const { error: upErr } = await supabase.storage
+          .from("product-images")
+          .upload(fileName, compressed);
+
+        if (upErr) throw upErr;
+
+        const { data: url } = supabase.storage
+          .from("product-images")
+          .getPublicUrl(fileName);
+        finalUrls.push(url.publicUrl);
+      }
+
+      const productData: any = {
+        name: newProduct.name.toUpperCase(),
+        price: parseInt(newProduct.price),
+        promo_price: newProduct.promo_price
+          ? parseInt(newProduct.promo_price)
+          : null,
+        final_price: newProduct.promo_price
+          ? parseInt(newProduct.promo_price)
+          : parseInt(newProduct.price),
+        stock: parseInt(newProduct.stock),
+        description: newProduct.description,
+        unit: newProduct.unit,
+        category_id: newProduct.category_id,
+        merchant_id: finalMerchantId,
+        market_id: finalMarketId,
+        image_url: finalUrls[0],
+        image_urls: finalUrls.slice(0, 2), // Pastikan hanya simpan maksimal 2
+      };
+
+      if (isEditMode) {
+        await supabase
+          .from("products")
+          .update(productData)
+          .eq("id", initialData.id);
+        showToast("DATA DIPERBARUI", "success");
+      } else {
+        await supabase
+          .from("products")
+          .insert([{ ...productData, status: "PENDING" }]);
+        showToast("BARANG DIDAFTARKAN", "success");
+      }
+      onSuccess();
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden flex flex-col group hover:shadow-2xl transition-all duration-500">
-      <div className="aspect-video relative overflow-hidden bg-slate-100">
-        <img
-          src={product.image_url}
-          alt={product.name}
-          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-        />
-        <div className="absolute top-4 left-4">
-          <span
-            className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg text-white ${product.status === "APPROVED" ? "bg-teal-600" : "bg-orange-600"}`}
-          >
-            {product.status === "APPROVED" ? "Aktif" : "Verifikasi"}
-          </span>
+    <div className="min-h-screen bg-slate-50 animate-in slide-in-from-right duration-300 pb-20 text-left">
+      <div className="bg-white border-b border-slate-200 px-4 py-4 sticky top-0 z-50 flex items-center gap-4 shadow-sm">
+        <button
+          onClick={onBack}
+          className="w-10 h-10 flex items-center justify-center text-slate-400 hover:bg-slate-100 rounded-xl transition-all"
+        >
+          <ArrowLeft size={24} />
+        </button>
+        <div>
+          <h2 className="text-[14px] font-bold text-slate-800 uppercase leading-none">
+            {isEditMode ? "Edit Produk" : "Produk Baru"}
+          </h2>
+          <p className="text-[10px] font-semibold text-orange-500 uppercase tracking-widest mt-1">
+            Maksimal 2 Foto Produk
+          </p>
         </div>
       </div>
 
-      <div className="p-6 flex-1 flex flex-col">
-        <div className="flex justify-between items-start mb-2">
-          <p className="text-[10px] font-black text-slate-400 uppercase">
-            {product.categories?.name || "UMUM"}
-          </p>
-          <div className="text-right">
-            <p
-              className={`text-sm font-black italic ${hasDiscount ? "text-orange-600" : "text-slate-800"}`}
-            >
-              Rp{" "}
-              {product.final_price?.toLocaleString() ||
-                product.price?.toLocaleString()}
+      <div className="max-w-4xl mx-auto md:p-6 p-4">
+        <form onSubmit={handleAddProduct} className="space-y-6">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <ImageIcon size={14} className="text-[#008080]" /> Foto Produk
+              (Maks 2)
+            </label>
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {existingImages.map((url, i) => (
+                <div
+                  key={i}
+                  className="min-w-[120px] h-[120px] rounded-xl overflow-hidden border border-slate-100 relative"
+                >
+                  <img
+                    src={url}
+                    className="w-full h-full object-cover"
+                    alt=""
+                  />
+                  {!isEditMode && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExistingImages((prev) =>
+                          prev.filter((_, idx) => idx !== i),
+                        )
+                      }
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-md p-0.5"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {imageFiles.map((file, i) => (
+                <div
+                  key={i}
+                  className="min-w-[120px] h-[120px] rounded-xl overflow-hidden border-2 border-orange-200 relative"
+                >
+                  <img
+                    src={URL.createObjectURL(file)}
+                    className="w-full h-full object-cover"
+                    alt=""
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setImageFiles((prev) =>
+                        prev.filter((_, idx) => idx !== i),
+                      )
+                    }
+                    className="absolute top-1 right-1 bg-red-500 text-white rounded-md p-0.5"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              {/* LIMITASI 2 FOTO DI SINI */}
+              {imageFiles.length + existingImages.length < 2 && (
+                <label className="min-w-[120px] h-[120px] bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 rounded-xl cursor-pointer">
+                  <Upload size={20} />
+                  <span className="text-[8px] font-black mt-1">UPLOAD</span>
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    accept="image/*"
+                    onChange={(e) => {
+                      if (e.target.files) {
+                        const files = Array.from(e.target.files);
+                        const availableSlots =
+                          2 - (imageFiles.length + existingImages.length);
+                        setImageFiles((prev) => [
+                          ...prev,
+                          ...files.slice(0, availableSlots),
+                        ]);
+                      }
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+            <p className="text-[9px] text-slate-400 font-medium">
+              * Foto akan di-compress otomatis agar ringan
             </p>
           </div>
-        </div>
 
-        <h3 className="text-base font-black text-slate-800 uppercase leading-none mb-2 line-clamp-1">
-          {product.name}
-        </h3>
-
-        {/* INFO KETERANGAN / DESKRIPSI (BARU) */}
-        <div className="bg-slate-50/50 p-3 rounded-xl mb-6 border border-slate-100">
-          <div className="flex items-center gap-1.5 mb-1">
-            <FileText size={10} className="text-slate-400" />
-            <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider">
-              Keterangan Barang:
-            </span>
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                <Type size={14} /> Nama Produk
+              </label>
+              <input
+                required
+                className="w-full p-4 rounded-xl border border-slate-200 font-bold text-[12px] uppercase outline-none focus:border-[#008080] shadow-sm"
+                value={newProduct.name}
+                onChange={(e) =>
+                  setNewProduct({ ...newProduct, name: e.target.value })
+                }
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                  <Archive size={14} /> Stok
+                </label>
+                <input
+                  type="number"
+                  required
+                  className="w-full p-4 rounded-xl border border-slate-200 font-bold text-[12px] focus:border-[#008080] outline-none shadow-sm"
+                  value={newProduct.stock}
+                  onChange={(e) =>
+                    setNewProduct({ ...newProduct, stock: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                  <Layers size={14} /> Kategori
+                </label>
+                <select
+                  required
+                  className="w-full p-4 rounded-xl border border-slate-200 font-bold text-[12px] outline-none focus:border-[#008080] shadow-sm"
+                  value={newProduct.category_id}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      category_id: e.target.value,
+                    })
+                  }
+                >
+                  <option value="">PILIH</option>
+                  {categories.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                  <Tag size={14} /> Harga Normal
+                </label>
+                <input
+                  type="number"
+                  required
+                  className="w-full p-4 rounded-xl border border-slate-200 font-bold text-[12px] focus:border-[#008080] outline-none shadow-sm"
+                  value={newProduct.price}
+                  onChange={(e) =>
+                    setNewProduct({ ...newProduct, price: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-orange-600 uppercase flex items-center gap-1">
+                  <Percent size={14} /> Harga Promo
+                </label>
+                <input
+                  type="number"
+                  className="w-full p-4 border-orange-100 bg-orange-50/30 rounded-xl border font-bold text-[12px] focus:border-orange-500 outline-none shadow-sm"
+                  value={newProduct.promo_price}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      promo_price: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+                <FileText size={14} /> Deskripsi
+              </label>
+              <textarea
+                required
+                className="w-full p-4 rounded-xl border border-slate-200 font-medium text-[12px] h-32 focus:border-[#008080] outline-none shadow-sm resize-none"
+                value={newProduct.description}
+                onChange={(e) =>
+                  setNewProduct({ ...newProduct, description: e.target.value })
+                }
+              />
+            </div>
           </div>
-          <p className="text-[10px] font-medium text-slate-500 line-clamp-2 leading-relaxed italic">
-            {product.description || "Tidak ada deskripsi."}
-          </p>
-        </div>
 
-        <div className="mt-auto pt-6 border-t border-slate-100 flex items-center justify-between">
-          <div className="flex flex-col">
-            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-              Tersedia
-            </span>
-            <span className="text-sm font-black text-slate-800">
-              {product.stock} {product.unit}
-            </span>
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              onClick={() => onEditDiscount(product)}
-              className="w-12 h-12 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center hover:bg-orange-600 hover:text-white transition-all shadow-md active:scale-90"
-              title="Atur Diskon"
-            >
-              <Tag size={20} strokeWidth={2.5} />
-            </button>
-            <button
-              onClick={onEdit}
-              className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center hover:bg-teal-600 hover:text-white transition-all shadow-md active:scale-90"
-              title="Edit Produk"
-            >
-              <Edit3 size={20} strokeWidth={2.5} />
-            </button>
-          </div>
-        </div>
+          <button
+            disabled={isUploading}
+            className="w-full py-5 bg-[#008080] text-white rounded-2xl font-bold text-[12px] uppercase tracking-widest hover:bg-slate-800 active:scale-95 transition-all shadow-xl disabled:opacity-50 flex items-center justify-center gap-3"
+          >
+            {isUploading ? (
+              <Loader2 className="animate-spin" size={20} />
+            ) : isEditMode ? (
+              "SIMPAN PERUBAHAN"
+            ) : (
+              "DAFTARKAN PRODUK"
+            )}
+          </button>
+        </form>
       </div>
     </div>
   );

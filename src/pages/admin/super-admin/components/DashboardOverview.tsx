@@ -1,9 +1,13 @@
-import React, { useState, useEffect } from "react";
-import { GoogleMap, Marker, InfoWindow } from "@react-google-maps/api";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  GoogleMap,
+  MarkerF,
+  InfoWindowF,
+  CircleF,
+} from "@react-google-maps/api";
 import {
   SearchCode,
   ShoppingBag,
-  Clock,
   MapPin,
   User,
   TrendingUp,
@@ -11,6 +15,7 @@ import {
   RefreshCcw,
   Activity,
   Layers,
+  Store,
 } from "lucide-react";
 import { supabase } from "../../../../lib/supabaseClient";
 import { useToast } from "../../../../contexts/ToastContext";
@@ -21,7 +26,7 @@ const mapContainerStyle = {
   height: "100%",
   borderRadius: "0.375rem",
 };
-const centerDefault = { lat: -0.7893, lng: 113.9213 };
+const centerDefault = { lat: -0.7893, lng: 113.9213 }; // Posisi tengah Indonesia
 
 const formatRupiah = (num: number) => {
   return new Intl.NumberFormat("id-ID", {
@@ -30,6 +35,10 @@ const formatRupiah = (num: number) => {
     minimumFractionDigits: 0,
   }).format(num);
 };
+
+// SVG PATH UNTUK IKON KANTOR PASAR
+const pathOffice =
+  "M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z";
 
 interface Props {
   isLoaded: boolean;
@@ -46,6 +55,8 @@ export const DashboardOverview: React.FC<Props> = ({
 }) => {
   const { showToast } = useToast();
   const [selectedMarker, setSelectedMarker] = useState<any>(null);
+  const [marketAdmin, setMarketAdmin] = useState<any>(null);
+
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [stats, setStats] = useState({
     revenue: 0,
@@ -54,6 +65,28 @@ export const DashboardOverview: React.FC<Props> = ({
   });
   const [loading, setLoading] = useState(true);
 
+  // ✅ STATE UNTUK PETA & ZOOM DINAMIS
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const [currentZoom, setCurrentZoom] = useState(5);
+  const [maxDistanceKm, setMaxDistanceKm] = useState<number>(1);
+
+  // 1. TARIK DATA GLOBAL CONFIG
+  useEffect(() => {
+    const fetchConfig = async () => {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("max_distance_km")
+        .eq("id", 1)
+        .maybeSingle();
+
+      if (data && data.max_distance_km) {
+        setMaxDistanceKm(data.max_distance_km);
+      }
+    };
+    fetchConfig();
+  }, []);
+
+  // 2. FETCH LIVE DATA STATISTIK
   const fetchLiveData = async () => {
     setLoading(true);
     try {
@@ -90,9 +123,51 @@ export const DashboardOverview: React.FC<Props> = ({
     return () => clearInterval(interval);
   }, []);
 
+  // 3. CARI ADMIN PASAR SAAT PIN DIKLIK
+  useEffect(() => {
+    if (selectedMarker) {
+      const fetchAdminProfile = async () => {
+        setMarketAdmin(null);
+        const { data } = await supabase
+          .from("profiles")
+          .select("name, phone_number")
+          .eq("managed_market_id", selectedMarker.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (data) setMarketAdmin(data);
+      };
+      fetchAdminProfile();
+    }
+  }, [selectedMarker]);
+
+  // ✅ GENERATOR IKON DINAMIS (Mengikuti Zoom Level)
+  const makeSvgIcon = (svgPath: string, color: string, baseSize: number) => {
+    if (!window.google) return undefined;
+
+    // Karena default zoom Super Admin adalah 5, kita jadikan 5 sebagai rasio dasar (1.0x)
+    const scaleFactor = currentZoom / 5;
+
+    // Minimal ukuran 14px (kalau di zoom out), maksimal 3x lipat (kalau di zoom in dalam)
+    const dynamicSize = Math.min(
+      baseSize * 3,
+      Math.max(14, baseSize * scaleFactor),
+    );
+
+    const svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${dynamicSize}" height="${dynamicSize}"><path fill="${color}" stroke="#ffffff" stroke-width="1" d="${svgPath}"/></svg>`;
+    return {
+      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgString)}`,
+      scaledSize: new window.google.maps.Size(dynamicSize, dynamicSize),
+      anchor: new window.google.maps.Point(dynamicSize / 2, dynamicSize / 2),
+    };
+  };
+
+  // Ikon Kantor Pusat Kontrol
+  const iconOffice = makeSvgIcon(pathOffice, "#FF6600", 22);
+
   return (
     <div className="space-y-4 md:space-y-6 animate-in fade-in duration-700 font-black uppercase tracking-tighter text-left pb-10">
-      {/* 1. TOP STATS - HYBRID GRID (2 Cols on Mobile, 3 Cols on Desktop) */}
+      {/* 1. TOP STATS */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
         <StatCard
           title="TOTAL OMSET"
@@ -116,13 +191,15 @@ export const DashboardOverview: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* 2. MAIN MONITORING - HYBRID LAYOUT (Stacking on Mobile) */}
+      {/* 2. MAIN MONITORING */}
       <div className="flex flex-col lg:grid lg:grid-cols-12 gap-4 md:gap-6">
-        {/* LEFT: PETA GIS (Full width on Mobile, 8 Cols on Desktop) */}
+        {/* LEFT: PETA GIS */}
         <div className="lg:col-span-8 bg-white p-2 md:p-3 rounded-md border border-slate-200 shadow-sm relative flex flex-col h-[350px] md:h-[500px] lg:h-[650px]">
           <div className="absolute top-4 left-4 z-10 hidden md:flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-md shadow-xl border-b-2 border-teal-500">
             <Layers size={14} className="text-teal-400" />
-            <span className="text-[9px] tracking-widest">LIVE GIS MONITOR</span>
+            <span className="text-[9px] tracking-widest">
+              LIVE GIS MONITOR | ZONA: {maxDistanceKm}KM
+            </span>
           </div>
 
           <div className="flex-1 rounded-md overflow-hidden bg-slate-100 relative border border-slate-100">
@@ -130,43 +207,131 @@ export const DashboardOverview: React.FC<Props> = ({
               <GoogleMap
                 mapContainerStyle={mapContainerStyle}
                 center={centerDefault}
-                zoom={5}
+                zoom={currentZoom}
                 options={{
                   disableDefaultUI: true,
                   zoomControl: true,
                   gestureHandling: "greedy",
                 }}
+                onLoad={(map) => {
+                  mapRef.current = map;
+                }}
+                // ✅ SENSOR PERUBAHAN ZOOM UNTUK RESIZE IKON
+                onZoomChanged={() => {
+                  if (mapRef.current) {
+                    const newZoom = mapRef.current.getZoom();
+                    if (newZoom && newZoom !== currentZoom)
+                      setCurrentZoom(newZoom);
+                  }
+                }}
               >
-                {markets?.map((m) => (
-                  <Marker
-                    key={m.id}
-                    position={{
-                      lat: parseFloat(m.lat),
-                      lng: parseFloat(m.lng),
-                    }}
-                    onClick={() => setSelectedMarker(m)}
-                  />
-                ))}
+                {/* RENDER SEMUA PASAR */}
+                {markets?.map((m) => {
+                  const lat = parseFloat(m.lat || m.latitude || "0");
+                  const lng = parseFloat(m.lng || m.longitude || "0");
+
+                  if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0)
+                    return null;
+                  const position = { lat, lng };
+
+                  return (
+                    <React.Fragment key={`group-${m.id}`}>
+                      {/* LINGKARAN RADIUS KEKUASAAN PASAR */}
+                      <CircleF
+                        center={position}
+                        radius={maxDistanceKm * 1000}
+                        options={{
+                          fillColor: "#FF6600",
+                          fillOpacity: 0.05,
+                          strokeColor: "#FF6600",
+                          strokeWeight: 1.5,
+                          clickable: false,
+                        }}
+                      />
+
+                      {/* PIN GEDUNG KANTOR (Auto-Resize) */}
+                      <MarkerF
+                        position={position}
+                        icon={iconOffice}
+                        onClick={() => setSelectedMarker(m)}
+                      />
+                    </React.Fragment>
+                  );
+                })}
+
+                {/* POPUP PROFIL PASAR KETIKA DIKLIK */}
                 {selectedMarker && (
-                  <InfoWindow
+                  <InfoWindowF
                     position={{
-                      lat: parseFloat(selectedMarker.lat),
-                      lng: parseFloat(selectedMarker.lng),
+                      lat: parseFloat(
+                        selectedMarker.lat || selectedMarker.latitude,
+                      ),
+                      lng: parseFloat(
+                        selectedMarker.lng || selectedMarker.longitude,
+                      ),
                     }}
                     onCloseClick={() => setSelectedMarker(null)}
                   >
-                    <div className="p-1 min-w-[120px] font-black uppercase text-left">
-                      <p className="text-[10px] mb-2 text-slate-900 border-b pb-1">
-                        {selectedMarker.name}
-                      </p>
+                    <div className="p-2 min-w-[220px] font-sans uppercase text-left">
+                      {/* HEADER PROFIL */}
+                      <div className="flex items-center gap-3 border-b border-slate-200 pb-3 mb-3">
+                        <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-md flex items-center justify-center shrink-0 border border-orange-100 shadow-inner">
+                          <Store size={20} />
+                        </div>
+                        <div>
+                          <p className="text-[14px] font-black text-slate-900 leading-none tracking-tight">
+                            {selectedMarker.name}
+                          </p>
+                          <p className="text-[8px] font-bold text-slate-400 tracking-widest mt-1">
+                            NODE PUSAT KONTROL LOKAL
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* DETAIL ADMIN & ZONA */}
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-start gap-2 bg-slate-50 p-2 rounded border border-slate-100">
+                          <User
+                            size={14}
+                            className="text-[#008080] mt-0.5 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-[8px] font-bold text-slate-400 tracking-widest leading-none">
+                              ADMIN PENGELOLA
+                            </p>
+                            <p className="text-[11px] font-black text-slate-800 tracking-tight mt-1 truncate">
+                              {marketAdmin
+                                ? marketAdmin.name
+                                : "BELUM DI-ASSIGN"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-start gap-2 bg-slate-50 p-2 rounded border border-slate-100">
+                          <MapPin
+                            size={14}
+                            className="text-orange-500 mt-0.5 shrink-0"
+                          />
+                          <div>
+                            <p className="text-[8px] font-bold text-slate-400 tracking-widest leading-none">
+                              ZONA AMAN (RADIUS)
+                            </p>
+                            <p className="text-[11px] font-black text-slate-800 tracking-tight mt-1">
+                              MAKS {maxDistanceKm} KM
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* TOMBOL AKSI */}
                       <button
                         onClick={() => setAuditMarket(selectedMarker)}
-                        className="w-full py-1.5 bg-slate-900 text-white text-[9px] rounded flex items-center justify-center gap-1"
+                        className="w-full py-2.5 bg-slate-900 text-white text-[10px] font-black tracking-widest rounded flex items-center justify-center gap-1.5 hover:bg-[#008080] transition-colors shadow-md active:scale-95"
                       >
-                        <SearchCode size={12} /> AUDIT
+                        <SearchCode size={14} /> AUDIT SYSTEM NODE
                       </button>
                     </div>
-                  </InfoWindow>
+                  </InfoWindowF>
                 )}
               </GoogleMap>
             ) : (
@@ -177,7 +342,7 @@ export const DashboardOverview: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* RIGHT: LIVE FEED (Full width on Mobile, 4 Cols on Desktop) */}
+        {/* RIGHT: LIVE FEED */}
         <div className="lg:col-span-4 flex flex-col gap-4">
           <div className="bg-slate-900 rounded-md shadow-xl flex flex-col h-[450px] lg:h-[650px] overflow-hidden border-b-8 border-teal-600">
             <div className="p-4 flex items-center justify-between border-b border-white/10">
@@ -234,7 +399,7 @@ export const DashboardOverview: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* 3. MOBILE NOTICE - Only visible on small screens */}
+      {/* 3. MOBILE NOTICE */}
       <div className="lg:hidden bg-orange-50 p-4 rounded-md border border-orange-100 flex items-center gap-3">
         <Activity size={18} className="text-[#FF6600]" />
         <p className="text-[9px] text-[#FF6600] font-black leading-tight">
