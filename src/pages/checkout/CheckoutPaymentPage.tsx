@@ -14,9 +14,14 @@ import {
   ShoppingBag,
   Store,
   ShieldCheck,
-  Ticket,
   CheckCircle2,
+  Truck,
+  CreditCard,
+  Banknote,
+  Gift,
+  Coins,
 } from "lucide-react";
+import { MobileLayout } from "../../components/layout/MobileLayout";
 
 export const CheckoutPaymentPage = () => {
   const { user, profile } = useAuth() as any;
@@ -32,16 +37,29 @@ export const CheckoutPaymentPage = () => {
     lng: 106.8,
   });
 
-  // 🚀 STATE UNTUK PROMO
-  const [promoCode, setPromoCode] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState<any>(null);
-  const [isCheckingPromo, setIsCheckingPromo] = useState(false);
-  const [promoError, setPromoError] = useState("");
+  const [shippingMethod, setShippingMethod] = useState<"courier" | "pickup">(
+    "courier",
+  );
+  const [paymentMethod, setPaymentMethod] = useState<"midtrans" | "cod">(
+    "midtrans",
+  );
+
+  const [useBalance, setUseBalance] = useState(false);
+  const [showSurprise, setShowSurprise] = useState(false);
+  const [cashbackAmount, setCashbackAmount] = useState(0);
+  const [createdOrderId, setCreatedOrderId] = useState("");
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
   });
+
+  const calculateMysteryCashback = (subtotal: number) => {
+    const percentages = [0.03, 0.04, 0.05];
+    return Math.round(
+      subtotal * percentages[Math.floor(Math.random() * percentages.length)],
+    );
+  };
 
   const updateLogistics = useCallback(
     async (lat: number, lng: number) => {
@@ -65,43 +83,34 @@ export const CheckoutPaymentPage = () => {
         ];
         const extraCount =
           uniqueMerchants.length > 1 ? uniqueMerchants.length - 1 : 0;
+        const isPickup = shippingMethod === "pickup";
 
-        let baseFare = Number(r.base_fare);
-        if (distance > Number(r.base_distance_km)) {
+        let baseFare = isPickup ? 0 : Number(r.base_fare);
+        if (!isPickup && distance > Number(r.base_distance_km)) {
           baseFare +=
             (distance - Number(r.base_distance_km)) * Number(r.price_per_km);
         }
 
         const totalLayanan = Math.round(
           Number(r.buyer_service_fee || 0) +
-            extraCount * Number(r.surge_fee || 0),
-        );
-        const appCutBase = Math.round(
-          baseFare * (Number(r.app_fee_percent) / 100),
+            (isPickup ? 0 : extraCount * Number(r.surge_fee || 0)),
         );
 
         setShippingDetails({
-          merchantCount: uniqueMerchants.length,
-          extraCount,
           base_fare: Math.round(baseFare),
-          total_extra_fee: Math.round(
-            extraCount * Number(r.multi_stop_fee || 0),
-          ),
           combined_service_fee: totalLayanan,
-          courier_pure: Math.round(baseFare - appCutBase),
-          app_profit: Math.round(appCutBase + totalLayanan),
-          seller_admin_percent: Number(r.seller_admin_fee_percent),
           grand_total: Math.round(
             baseFare +
-              extraCount * Number(r.multi_stop_fee || 0) +
+              (isPickup ? 0 : extraCount * Number(r.multi_stop_fee || 0)) +
               totalLayanan,
           ),
+          seller_admin_percent: Number(r.seller_admin_fee_percent),
         });
       } catch (err) {
-        console.error(err);
+        console.error("Logistics Error:", err);
       }
     },
-    [selectedMarket, cart],
+    [selectedMarket, cart, shippingMethod],
   );
 
   useEffect(() => {
@@ -110,99 +119,35 @@ export const CheckoutPaymentPage = () => {
       const lng =
         Number(profile?.longitude) || Number(selectedMarket.longitude);
       setDeliveryCoords({ lat, lng });
-      const fullAddress =
-        `${profile.address_street || ""} RT/RW: ${profile.address_rt_rw || ""} DESA ${profile.address_village || ""} KEC. ${profile.address_district || ""}`
-          .trim()
-          .toUpperCase();
-      setManualAddress(fullAddress || profile.address || "");
+      setManualAddress(
+        (profile.address_street || profile.address || "").toUpperCase(),
+      );
       updateLogistics(lat, lng);
     }
   }, [selectedMarket, profile, updateLogistics]);
 
-  // 🚀 LOGIKA CEK KODE PROMO
-  const handleApplyPromo = async () => {
-    if (!promoCode) return;
-    setIsCheckingPromo(true);
-    setPromoError("");
-
-    try {
-      const { data, error } = await supabase
-        .from("promos")
-        .select("*")
-        .eq("code", promoCode.toUpperCase())
-        .eq("is_active", true)
-        .maybeSingle();
-
-      if (error || !data)
-        throw new Error("Kode voucher tidak ditemukan atau tidak aktif.");
-
-      const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-
-      // Validasi Syarat Promo
-      if (data.min_purchase && subtotal < data.min_purchase) {
-        throw new Error(
-          `Minimal belanja Rp ${data.min_purchase.toLocaleString()} untuk promo ini.`,
-        );
-      }
-      if (data.usage_limit && data.used_count >= data.usage_limit) {
-        throw new Error("Kuota voucher sudah habis digunakan.");
-      }
-      if (data.valid_until && new Date(data.valid_until) < new Date()) {
-        throw new Error("Masa berlaku kode voucher sudah habis.");
-      }
-
-      setAppliedPromo(data);
-      showToast("Voucher berhasil digunakan!", "success");
-    } catch (err: any) {
-      setPromoError(err.message);
-      setAppliedPromo(null);
-    } finally {
-      setIsCheckingPromo(false);
-    }
-  };
-
-  // 🚀 LOGIKA HITUNG DISKON
   const subtotalCart = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-  let discountAmount = 0;
-
-  if (appliedPromo) {
-    if (appliedPromo.type === "DISCOUNT_NOMINAL") {
-      discountAmount = appliedPromo.value;
-    } else if (appliedPromo.type === "DISCOUNT_PERCENT") {
-      discountAmount = (subtotalCart * appliedPromo.value) / 100;
-      if (
-        appliedPromo.max_discount &&
-        discountAmount > appliedPromo.max_discount
-      ) {
-        discountAmount = appliedPromo.max_discount;
-      }
-    } else if (appliedPromo.type === "FREE_SHIPPING") {
-      discountAmount = shippingDetails?.base_fare || 0;
-      if (
-        appliedPromo.max_discount &&
-        discountAmount > appliedPromo.max_discount
-      ) {
-        discountAmount = appliedPromo.max_discount;
-      }
-    }
-  }
-
-  // Mencegah total menjadi minus jika diskon lebih besar dari harga
-  const grandTotalAkhir = Math.max(
+  const totalSebelumSaldo = Math.max(
     0,
-    subtotalCart + (shippingDetails?.grand_total || 0) - discountAmount,
+    subtotalCart + (shippingDetails?.grand_total || 0),
   );
+  const usedBalanceAmount = useBalance
+    ? Math.min(profile?.balance || 0, totalSebelumSaldo)
+    : 0;
+  const grandTotalAkhir = totalSebelumSaldo - usedBalanceAmount;
 
   const handlePayment = async () => {
-    if (!user || !selectedMarket || !shippingDetails) return;
+    if (!user || !selectedMarket || !shippingDetails) {
+      showToast("Data belum lengkap, mohon tunggu...", "error");
+      return;
+    }
+
     setLoading(true);
+    const mysteryBonus =
+      shippingMethod === "pickup" ? calculateMysteryCashback(subtotalCart) : 0;
 
     try {
-      const adminFee = Math.round(
-        subtotalCart * (shippingDetails.seller_admin_percent / 100),
-      );
-
-      // 1. Simpan Pesanan (Dengan data promo)
+      // 1. Simpan Pesanan ke Database
       const { data: newOrder, error: orderErr } = await supabase
         .from("orders")
         .insert({
@@ -211,25 +156,26 @@ export const CheckoutPaymentPage = () => {
           total_price: grandTotalAkhir,
           shipping_cost: Math.round(shippingDetails.base_fare),
           service_fee: Math.round(shippingDetails.combined_service_fee),
-          status: "UNPAID",
-          address: manualAddress.trim(),
-          extra_store_fee: Math.round(shippingDetails.total_extra_fee),
-          merchant_earning_total: Math.round(subtotalCart - adminFee),
-          courier_earning_total: Math.round(
-            shippingDetails.courier_pure + shippingDetails.total_extra_fee,
-          ),
-          app_earning_total: Math.round(shippingDetails.app_profit + adminFee),
-          shipping_status: "PENDING",
-          promo_code: appliedPromo ? appliedPromo.code : null,
-          discount_amount: Math.round(discountAmount),
+          status: paymentMethod === "cod" ? "PROCESSING" : "UNPAID",
+          address:
+            shippingMethod === "pickup"
+              ? "AMBIL SENDIRI DI LAPAK"
+              : manualAddress.trim(),
+          shipping_method: shippingMethod,
+          payment_method: paymentMethod,
+          cashback_amount: mysteryBonus,
+          used_balance: usedBalanceAmount,
+          shipping_status:
+            shippingMethod === "pickup" ? "READY_TO_PICKUP" : "PENDING",
         })
         .select()
         .single();
 
-      if (orderErr) throw orderErr;
+      if (orderErr)
+        throw new Error(`Gagal simpan pesanan: ${orderErr.message}`);
 
       // 2. Simpan Item
-      await supabase.from("order_items").insert(
+      const { error: itemsErr } = await supabase.from("order_items").insert(
         cart.map((i) => ({
           order_id: newOrder.id,
           product_id: i.id,
@@ -238,253 +184,261 @@ export const CheckoutPaymentPage = () => {
           merchant_id: i.merchant_id,
         })),
       );
+      if (itemsErr) throw new Error("Gagal simpan rincian item");
 
-      // 3. Tambah count penggunaan promo jika ada (DIPERBAIKI)
-      if (appliedPromo) {
-        const { error: promoErr } = await supabase.rpc(
-          "increment_promo_usage",
-          { p_code: appliedPromo.code },
+      // 3. Potong Saldo jika dipakai
+      if (usedBalanceAmount > 0) {
+        await supabase.rpc("deduct_user_balance", {
+          u_id: user.id,
+          amount: usedBalanceAmount,
+        });
+      }
+
+      // 4. Jalur Navigasi
+      if (paymentMethod === "cod") {
+        clearCart();
+        showToast("PESANAN COD BERHASIL!", "success");
+        setLoading(false);
+        navigate(`/track-order/${newOrder.id}`);
+      } else {
+        const { data: payData } = await supabase.functions.invoke(
+          "create-midtrans-token",
+          {
+            body: {
+              order_id: newOrder.id,
+              amount: grandTotalAkhir,
+              customer_name: profile?.full_name || user.email,
+              customer_email: user.email,
+            },
+          },
         );
-        if (promoErr) {
-          console.error("Gagal update kuota promo:", promoErr);
+
+        if (payData?.token && (window as any).snap) {
+          (window as any).snap.pay(payData.token, {
+            onSuccess: () => {
+              clearCart();
+              if (shippingMethod === "pickup") {
+                setCashbackAmount(mysteryBonus);
+                setCreatedOrderId(newOrder.id);
+                setShowSurprise(true);
+              } else {
+                navigate(`/track-order/${newOrder.id}`);
+              }
+            },
+            onPending: () => {
+              clearCart();
+              navigate(`/track-order/${newOrder.id}`);
+            },
+            onClose: () => {
+              setLoading(false);
+            },
+          });
         }
       }
-
-      // 4. PANGGIL EDGE FUNCTION MIDTRANS (Kirim harga yg sudah didiskon)
-      const { data: payData, error: payError } =
-        await supabase.functions.invoke("create-midtrans-token", {
-          body: {
-            order_id: newOrder.id,
-            amount: grandTotalAkhir,
-            customer_name: profile?.full_name || user.email,
-            customer_email: user.email,
-          },
-        });
-
-      if (payError || !payData?.token) {
-        throw new Error(
-          payData?.error || "Gagal mendapatkan token pembayaran dari server.",
-        );
-      }
-
-      // 5. Jalankan Snap Midtrans
-      if ((window as any).snap) {
-        (window as any).snap.pay(payData.token, {
-          onSuccess: function () {
-            clearCart();
-            showToast("PEMBAYARAN BERHASIL!", "success");
-            navigate(`/track-order/${newOrder.id}`);
-          },
-          onPending: function () {
-            clearCart();
-            showToast("SILAKAN SELESAIKAN PEMBAYARAN", "info");
-            navigate(`/track-order/${newOrder.id}`);
-          },
-          onError: function () {
-            showToast("PEMBAYARAN GAGAL ATAU DITOLAK", "error");
-            setLoading(false);
-          },
-          onClose: function () {
-            showToast("PEMBAYARAN DITUNDA / DIBATALKAN", "info");
-            setLoading(false);
-          },
-        });
-      } else {
-        throw new Error("Sistem pembayaran (Snap.js) tidak termuat.");
-      }
     } catch (err: any) {
-      console.error("CHECKOUT ERROR:", err);
-      showToast(`GAGAL: ${err.message}`, "error");
+      console.error("Error Transaksi:", err);
+      showToast(err.message, "error");
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-black uppercase tracking-tighter pb-10 text-left">
-      <header className="bg-white border-b h-12 flex items-center px-4 justify-between sticky top-0 z-[100] font-black">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/")} className="p-1 text-slate-400">
-            <ArrowLeft size={22} />
-          </button>
-          <div className="text-xl font-black">
-            <span className="text-teal-600">PASAR</span>
-            <span className="text-[#FF6600]">QU</span>
+    <MobileLayout
+      activeTab="orders"
+      onTabChange={(tab: string) => {
+        if (tab === "home") navigate("/");
+        if (tab === "account") navigate("/customer-dashboard");
+      }}
+      onSearch={() => {}}
+      onCartClick={() => {}}
+      cartCount={0}
+    >
+      <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-black uppercase tracking-tighter pb-32 text-left not-italic">
+        {/* HEADER */}
+        <header className="bg-[#008080] h-16 flex items-center px-4 justify-between sticky top-0 z-[100] shadow-md">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate(-1)}
+              className="p-2 text-white bg-white/10 rounded-md active:scale-90 transition-all"
+            >
+              <ArrowLeft size={24} strokeWidth={3} />
+            </button>
+            <div className="text-[14px] font-[1000] text-white tracking-[0.1em]">
+              RINCIAN PEMBAYARAN
+            </div>
           </div>
-        </div>
-        <div className="bg-teal-50 text-teal-600 px-3 py-1 rounded-lg border text-[10px]">
-          <Store size={12} className="inline mr-1" /> {selectedMarket?.name}
-        </div>
-      </header>
+          <div className="bg-[#FF6600] text-white px-3 py-1.5 rounded-md text-[12px] font-black shadow-sm">
+            {selectedMarket?.name}
+          </div>
+        </header>
 
-      <main className="max-w-6xl mx-auto flex flex-col md:flex-row gap-2 p-2 mt-2 font-black uppercase">
-        <div className="flex-1 space-y-2">
-          {/* LOKASI */}
-          <section className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-2 mb-4 font-black">
-              <MapPin size={18} className="text-red-500" />
-              <h2>LOKASI ANTAR</h2>
-            </div>
-            <div className="h-[250px] rounded-2xl overflow-hidden border border-slate-100 mb-4 shadow-inner">
-              {isLoaded && (
-                <GoogleMap
-                  mapContainerStyle={{ width: "100%", height: "100%" }}
-                  center={deliveryCoords}
-                  zoom={16}
-                  options={{
-                    disableDefaultUI: true,
-                    gestureHandling: "greedy",
-                  }}
+        <main className="max-w-[1200px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-5 p-4 mt-2">
+          <div className="md:col-span-2 space-y-5">
+            {/* CARA AMBIL */}
+            <section className="bg-white p-5 rounded-md border border-slate-200 shadow-sm">
+              <h2 className="text-[12px] text-slate-400 mb-4 tracking-widest font-black">
+                1. PILIH CARA AMBIL
+              </h2>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => setShippingMethod("courier")}
+                  className={`flex flex-col items-center justify-center gap-3 py-6 rounded-md border-2 transition-all ${shippingMethod === "courier" ? "border-[#008080] bg-teal-50 text-[#008080]" : "border-slate-100 bg-slate-50 text-slate-400"}`}
                 >
-                  <MarkerF
-                    position={deliveryCoords}
-                    draggable
-                    onDragEnd={(e) => {
-                      const lat = e.latLng?.lat() || 0;
-                      const lng = e.latLng?.lng() || 0;
-                      setDeliveryCoords({ lat, lng });
-                      updateLogistics(lat, lng);
-                    }}
-                  />
-                </GoogleMap>
-              )}
-            </div>
-            <textarea
-              rows={2}
-              className="w-full bg-slate-50 border-none p-3 rounded-2xl text-[12px] font-black outline-none focus:bg-teal-50"
-              value={manualAddress}
-              onChange={(e) => setManualAddress(e.target.value)}
-            />
-          </section>
-
-          {/* KERANJANG */}
-          <section className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm font-black">
-            <div className="flex items-center gap-2 mb-4 border-b border-slate-50 pb-2">
-              <ShoppingBag size={18} className="text-teal-600" />
-              <h2>KERANJANG BELANJA</h2>
-            </div>
-            {cart.map((item) => (
-              <div
-                key={item.id}
-                className="flex justify-between items-center text-[12px] py-2 border-b border-slate-50 last:border-0"
-              >
-                <p className="flex-1 truncate pr-4 text-slate-700">
-                  {item.name} x{item.quantity}
-                </p>
-                <span className="font-sans font-black">
-                  {(item.price * item.quantity).toLocaleString()}
-                </span>
+                  <Truck size={32} />{" "}
+                  <span className="text-[12px] font-black">KURIR PASAR</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShippingMethod("pickup");
+                    setPaymentMethod("midtrans");
+                  }}
+                  className={`flex flex-col items-center justify-center gap-3 py-6 rounded-md border-2 transition-all ${shippingMethod === "pickup" ? "border-[#008080] bg-teal-50 text-[#008080]" : "border-slate-100 bg-slate-50 text-slate-400"}`}
+                >
+                  <ShoppingBag size={32} />{" "}
+                  <span className="text-[12px] font-black">AMBIL SENDIRI</span>
+                </button>
               </div>
-            ))}
-          </section>
-        </div>
+            </section>
 
-        {/* SIDEBAR PEMBAYARAN & PROMO */}
-        <div className="w-full md:w-[360px]">
-          <div className="space-y-2 sticky top-16">
-            {/* 🚀 KOTAK PROMO */}
-            <section className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm font-black">
-              <div className="flex items-center gap-2 mb-3">
-                <Ticket size={18} className="text-teal-600" />
-                <h2 className="text-[12px] text-slate-800">PAKAI VOUCHER</h2>
-              </div>
-              <div className="flex gap-2 relative">
-                <input
-                  type="text"
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                  placeholder="KODE PROMO"
-                  className="flex-1 bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-xs font-black outline-none focus:border-teal-500 uppercase transition-all"
-                  disabled={!!appliedPromo}
-                />
-                {!appliedPromo ? (
+            {/* CARA BAYAR */}
+            <section className="bg-white p-5 rounded-md border border-slate-200 shadow-sm">
+              <h2 className="text-[12px] text-slate-400 mb-4 tracking-widest font-black">
+                2. CARA BAYAR
+              </h2>
+              <div className="space-y-3">
+                <button
+                  onClick={() => setPaymentMethod("midtrans")}
+                  className={`w-full flex items-center justify-between p-5 rounded-md border-2 transition-all ${paymentMethod === "midtrans" ? "border-[#008080] bg-teal-50" : "border-slate-100 bg-slate-50"}`}
+                >
+                  <div className="flex items-center gap-4">
+                    <CreditCard
+                      className={
+                        paymentMethod === "midtrans"
+                          ? "text-[#008080]"
+                          : "text-slate-400"
+                      }
+                      size={24}
+                    />
+                    <span className="text-[13px] font-black uppercase">
+                      BAYAR ONLINE (QRIS/E-WALLET)
+                    </span>
+                  </div>
+                  {paymentMethod === "midtrans" && (
+                    <CheckCircle2 size={24} className="text-[#008080]" />
+                  )}
+                </button>
+
+                {shippingMethod === "courier" ? (
                   <button
-                    onClick={handleApplyPromo}
-                    disabled={!promoCode || isCheckingPromo}
-                    className="bg-slate-900 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50 active:scale-95 transition-all"
+                    onClick={() => setPaymentMethod("cod")}
+                    className={`w-full flex items-center justify-between p-5 rounded-md border-2 transition-all ${paymentMethod === "cod" ? "border-[#008080] bg-teal-50" : "border-slate-100 bg-slate-50"}`}
                   >
-                    {isCheckingPromo ? (
-                      <Loader2 size={16} className="animate-spin" />
-                    ) : (
-                      "PAKAI"
+                    <div className="flex items-center gap-4">
+                      <Banknote
+                        className={
+                          paymentMethod === "cod"
+                            ? "text-[#008080]"
+                            : "text-slate-400"
+                        }
+                        size={24}
+                      />
+                      <span className="text-[13px] font-black uppercase">
+                        BAYAR TUNAI (COD)
+                      </span>
+                    </div>
+                    {paymentMethod === "cod" && (
+                      <CheckCircle2 size={24} className="text-[#008080]" />
                     )}
                   </button>
                 ) : (
-                  <button
-                    onClick={() => {
-                      setAppliedPromo(null);
-                      setPromoCode("");
-                    }}
-                    className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
-                  >
-                    BATAL
-                  </button>
+                  <div className="p-4 bg-orange-50 border-l-4 border-[#FF6600] rounded-md flex gap-4">
+                    <Gift size={24} className="text-[#FF6600] shrink-0" />
+                    <div>
+                      <p className="text-[12px] font-black text-[#FF6600] uppercase">
+                        BONUS AMBIL SENDIRI
+                      </p>
+                      <p className="text-[12px] font-bold text-slate-600 mt-1 uppercase leading-tight">
+                        WAJIB BAYAR ONLINE UNTUK DAPAT CASHBACK 3-5%.
+                      </p>
+                    </div>
+                  </div>
                 )}
               </div>
-              {promoError && (
-                <p className="text-[9px] text-red-500 font-bold mt-2 ml-1">
-                  {promoError}
-                </p>
-              )}
-              {appliedPromo && (
-                <div className="flex items-center gap-1.5 text-[9px] text-teal-600 font-black mt-2 ml-1 bg-teal-50 px-2 py-1.5 rounded-lg border border-teal-100">
-                  <CheckCircle2 size={12} /> VOUCHER BERHASIL DITERAPKAN!
+            </section>
+          </div>
+
+          <div className="space-y-5">
+            {/* SALDO PASARQU */}
+            <section className="bg-white p-5 rounded-md border border-slate-200 shadow-sm border-t-8 border-[#008080]">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2 text-[#008080]">
+                  <Coins size={20} />
+                  <h2 className="text-[12px] font-black uppercase">
+                    DOMPET SAYA
+                  </h2>
                 </div>
-              )}
+                <span className="text-[14px] font-sans font-black text-slate-900">
+                  RP {(profile?.balance || 0).toLocaleString()}
+                </span>
+              </div>
+              <button
+                onClick={() => setUseBalance(!useBalance)}
+                disabled={(profile?.balance || 0) === 0}
+                className={`w-full flex items-center justify-between p-4 rounded-md border-2 transition-all ${useBalance ? "border-[#008080] bg-teal-50 text-[#008080]" : "border-slate-100 bg-slate-50 text-slate-400"}`}
+              >
+                <span className="text-[12px] font-black uppercase">
+                  PAKAI SALDO
+                </span>
+                <div
+                  className={`w-10 h-5 rounded-full relative transition-colors ${useBalance ? "bg-[#008080]" : "bg-slate-300"}`}
+                >
+                  <div
+                    className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${useBalance ? "right-0.5" : "left-0.5"}`}
+                  />
+                </div>
+              </button>
             </section>
 
-            {/* RINCIAN HARGA */}
-            <section className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl border-b-[8px] border-teal-600 font-black">
-              <div className="flex items-center gap-2 mb-6 font-black">
-                <ReceiptText size={20} className="text-[#FF6600]" />
-                <h2>RINCIAN PEMBAYARAN</h2>
-              </div>
-              <div className="space-y-3 mb-8">
-                <div className="flex justify-between text-[12px] text-slate-500 uppercase">
+            {/* RINGKASAN TAGIHAN */}
+            <section className="bg-white p-6 rounded-md border border-slate-200 shadow-xl border-b-[8px] border-[#008080]">
+              <h2 className="text-[13px] font-[1000] mb-5 flex items-center gap-2 uppercase tracking-widest">
+                <ReceiptText size={22} className="text-[#FF6600]" /> RINGKASAN
+                HARGA
+              </h2>
+              <div className="space-y-4 text-[12px] font-black uppercase">
+                <div className="flex justify-between text-slate-500">
                   <span>PRODUK</span>
-                  <span className="font-sans text-slate-900 font-black">
+                  <span className="font-sans text-slate-900">
                     {subtotalCart.toLocaleString()}
                   </span>
                 </div>
-                <div className="flex justify-between text-[12px] text-slate-500 uppercase">
-                  <span>ONGKIR UTAMA</span>
-                  <span className="font-sans text-slate-900 font-black">
+                <div className="flex justify-between text-slate-500">
+                  <span>ONGKIR</span>
+                  <span className="font-sans text-slate-900">
                     {shippingDetails?.base_fare?.toLocaleString() || 0}
                   </span>
                 </div>
-                {shippingDetails?.extraCount > 0 && (
-                  <div className="flex justify-between text-[11px] text-orange-600 font-black italic bg-orange-50 px-2 py-1 rounded-lg border border-orange-100">
-                    <span>EXTRA TOKO ({shippingDetails.extraCount})</span>
-                    <span className="font-sans font-black">
-                      +{shippingDetails.total_extra_fee.toLocaleString()}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between text-[12px] text-teal-600 uppercase">
-                  <span>
-                    <ShieldCheck size={14} className="inline mr-1" /> Layanan
-                  </span>
-                  <span className="font-sans font-black">
+                <div className="flex justify-between text-[#008080]">
+                  <span>LAYANAN</span>
+                  <span className="font-sans">
                     +
                     {shippingDetails?.combined_service_fee?.toLocaleString() ||
                       0}
                   </span>
                 </div>
-
-                {/* 🚀 BARIS DISKON (MUNCUL JIKA ADA PROMO) */}
-                {appliedPromo && (
-                  <div className="flex justify-between text-[12px] text-red-500 font-black border-t border-dashed pt-2 mt-2">
-                    <span>DISKON PROMO</span>
-                    <span className="font-sans font-black">
-                      - {Math.round(discountAmount).toLocaleString()}
+                {useBalance && (
+                  <div className="flex justify-between text-[#FF6600]">
+                    <span>SALDO TERPAKAI</span>
+                    <span className="font-sans">
+                      -{usedBalanceAmount.toLocaleString()}
                     </span>
                   </div>
                 )}
-
-                <div className="pt-4 border-t-2 border-slate-100 mt-4 font-black uppercase">
-                  <p className="text-[10px] text-slate-400 mb-1 tracking-widest uppercase font-black">
-                    TOTAL PEMBAYARAN
+                <div className="pt-5 border-t-2 border-slate-100 mt-5 leading-none">
+                  <p className="text-[12px] text-slate-400 mb-2 font-black text-center">
+                    TOTAL BAYAR
                   </p>
-                  <p className="text-4xl font-black text-[#FF6600] font-sans tracking-tighter leading-none italic">
+                  <p className="text-[42px] font-[1000] text-[#FF6600] font-sans text-center leading-none">
                     RP {grandTotalAkhir.toLocaleString()}
                   </p>
                 </div>
@@ -492,19 +446,67 @@ export const CheckoutPaymentPage = () => {
               <button
                 disabled={loading}
                 onClick={handlePayment}
-                className="w-full py-4 bg-teal-600 text-white rounded-2xl font-black text-[14px] shadow-lg hover:bg-slate-900 transition-all active:scale-95 disabled:bg-slate-200"
+                className="w-full mt-8 py-5 bg-[#FF6600] text-white rounded-md font-black text-[14px] uppercase active:scale-95 disabled:bg-slate-200 flex justify-center items-center gap-2 shadow-lg shadow-orange-200"
               >
                 {loading ? (
-                  <Loader2 className="animate-spin mx-auto" />
+                  <Loader2 className="animate-spin" size={24} />
                 ) : (
-                  "BAYAR SEKARANG"
+                  "PROSES PESANAN"
                 )}
               </button>
+              <p className="mt-5 text-[12px] text-slate-400 text-center px-2 uppercase font-black leading-tight">
+                Klik Proses berarti setuju{" "}
+                <button
+                  onClick={() => navigate("/terms-cashback")}
+                  className="text-[#008080] underline underline-offset-4"
+                >
+                  S&K Cashback
+                </button>
+              </p>
             </section>
           </div>
-        </div>
-      </main>
-    </div>
+        </main>
+
+        {/* MODAL HADIAH */}
+        {showSurprise && (
+          <div className="fixed inset-0 z-[1000] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in">
+            <div className="bg-white w-full max-w-sm rounded-md overflow-hidden shadow-2xl border-t-[12px] border-[#FF6600]">
+              <div className="bg-orange-50 p-8 flex flex-col items-center text-center">
+                <div className="w-24 h-24 bg-[#FF6600] rounded-md flex items-center justify-center text-white mb-6 rotate-3 shadow-lg">
+                  <Gift size={52} />
+                </div>
+                <h2 className="text-[18px] font-[1000] text-slate-800 uppercase tracking-widest leading-none">
+                  BONUS TUNAI!
+                </h2>
+                <p className="text-[12px] text-slate-400 font-black uppercase mt-3">
+                  HADIAH KHUSUS AMBIL SENDIRI
+                </p>
+              </div>
+              <div className="p-8 text-center">
+                <span className="text-[12px] font-black text-[#008080] uppercase">
+                  SALDO DITERIMA
+                </span>
+                <h3 className="text-[48px] font-[1000] text-[#008080] font-sans leading-none mt-2 mb-4">
+                  RP {cashbackAmount.toLocaleString()}
+                </h3>
+                <p className="text-[12px] font-black text-slate-400 uppercase leading-tight mb-8">
+                  SALDO MASUK OTOMATIS SETELAH BARANG DIAMBIL DI LAPAK.
+                </p>
+                <button
+                  onClick={() => {
+                    setShowSurprise(false);
+                    navigate(`/track-order/${createdOrderId}`);
+                  }}
+                  className="w-full py-5 bg-slate-900 text-white rounded-md font-[1000] text-[14px] uppercase active:scale-95 shadow-xl"
+                >
+                  KLAIM & LANJUT
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </MobileLayout>
   );
 };
 

@@ -53,13 +53,14 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5] flex flex-col font-black uppercase tracking-tighter overflow-x-hidden text-left">
-      {/* AREA KONTEN UTAMA */}
-      <main className="flex-1 w-full max-w-[1200px] mx-auto bg-white min-h-screen relative pt-[60px] md:pt-[70px] pb-20 md:pb-10 isolate">
-        <div className="flex flex-col m-0 p-0 bg-white">
-          {children}
-          {/* 🚀 BARIS CustomerServiceSection SUDAH DIHAPUS TOTAL DARI SINI */}
-        </div>
+    <div className="min-h-screen bg-[#F1F5F9] flex flex-col font-black uppercase tracking-tighter overflow-x-hidden text-left">
+      {/* AREA KONTEN UTAMA 
+        - pt-0: Menghilangkan sisa ruang atas.
+        - max-w-[1200px] mx-auto: Memastikan lebar maksimal sama dengan Top Bar Dashboard.
+        - bg-transparent: Agar warna background Dashboard asli yang terlihat.
+      */}
+      <main className="flex-1 w-full max-w-[1200px] mx-auto relative pt-0 pb-20 md:pb-10 isolate">
+        <div className="flex flex-col m-0 p-0">{children}</div>
       </main>
 
       {/* --- NAVIGASI BAWAH SLIM & FLAT (HP ONLY) --- */}
@@ -73,7 +74,9 @@ export const MobileLayout: React.FC<MobileLayoutProps> = ({
             }`}
           >
             <div
-              className={`transition-transform duration-200 ${activeTab === tab.id ? "-translate-y-0.5" : ""}`}
+              className={`transition-transform duration-200 ${
+                activeTab === tab.id ? "-translate-y-0.5" : ""
+              }`}
             >
               {tab.icon}
             </div>

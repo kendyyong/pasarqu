@@ -32,11 +32,21 @@ import { LocalAdminDashboard } from "../pages/admin/local-admin/LocalAdminDashbo
 import { SuperAdminDashboard } from "../pages/admin/super-admin/SuperAdminDashboard";
 import { ShippingConfig } from "../pages/admin/super-admin/components/ShippingConfig";
 
-// ✅ IMPORT KOMPONEN CUSTOMER BARU
+// ✅ IMPORT LEGAL, OTP & PROFILE COMPLETION
+import { TermsPage } from "../pages/legal/Termspage";
+import { PrivacyPage } from "../pages/legal/PrivacyPage";
+import { OTPVerificationPage } from "../pages/auth/OTPVerificationPage";
+import { CompleteProfilePage } from "../pages/auth/CompleteProfilePage";
+
+// ✅ IMPORT FITUR BARU: PASARQU PAY & CASHBACK TERMS
+import { PasarQuPay } from "../pages/customer/components/PasarQuPay";
+import { TermsCashback } from "../pages/customer/components/TermsCashback";
+
+// --- CUSTOMER PAGES ---
 import { AddressSettingsPage } from "../pages/customer/components/AddressSettingsPage";
 import { OrderHistoryPage } from "../pages/customer/components/OrderHistoryPage";
 
-// ✅ IMPORT HALAMAN CHECKOUT & LAINNYA
+// --- OTHER PAGES ---
 import { CheckoutPaymentPage } from "../pages/checkout/CheckoutPaymentPage";
 import { OrderInvoice } from "../pages/Invoice/OrderInvoice";
 import { ChatPage } from "../pages/chat/ChatPage";
@@ -70,6 +80,10 @@ export const AppRoutes = () => {
   const bypassRoutes = [
     "/login",
     "/register",
+    "/verify-otp",
+    "/complete-profile",
+    "/terms",
+    "/privacy",
     "/register-merchant",
     "/portal",
     "/super-admin",
@@ -85,6 +99,8 @@ export const AppRoutes = () => {
     "/checkout",
     "/settings/address",
     "/order-history",
+    "/pasarqu-pay", // ✅ IZINKAN CEK SALDO TANPA PILIH PASAR
+    "/terms-cashback", // ✅ IZINKAN BACA S&K TANPA PILIH PASAR
   ];
 
   const isBypassRoute = bypassRoutes.some((route) =>
@@ -99,9 +115,33 @@ export const AppRoutes = () => {
 
   return (
     <Routes>
-      {/* 1. RUTE UTAMA (DASHBOARD) */}
+      {/* 1. RUTE UTAMA */}
       <Route path="/" element={<RoleBasedRedirect />} />
       <Route path="/select-market" element={<MarketSelectionPage />} />
+
+      {/* --- RUTE LEGAL & AUTH FLOW --- */}
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/verify-otp" element={<OTPVerificationPage />} />
+      <Route
+        path="/complete-profile"
+        element={
+          <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN"]}>
+            <CompleteProfilePage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* --- 🚀 RUTE PASARQU PAY & CASHBACK --- */}
+      <Route
+        path="/pasarqu-pay"
+        element={
+          <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN"]}>
+            <PasarQuPay />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/terms-cashback" element={<TermsCashback />} />
 
       {/* --- RUTE CHECKOUT --- */}
       <Route
@@ -113,7 +153,7 @@ export const AppRoutes = () => {
         }
       />
 
-      {/* --- RUTE INVOICE --- */}
+      {/* sisanya tetap sama ... */}
       <Route
         path="/invoice/:orderId"
         element={
@@ -125,7 +165,6 @@ export const AppRoutes = () => {
         }
       />
 
-      {/* --- RUTE CHAT --- */}
       <Route
         path="/chat"
         element={
@@ -159,7 +198,6 @@ export const AppRoutes = () => {
         }
       />
 
-      {/* --- RUTE AUTH --- */}
       <Route path="/portal" element={<PortalLoginPage />} />
       <Route path="/login" element={<AuthPage />} />
       <Route path="/login/master" element={<SuperAdminLogin />} />
@@ -170,7 +208,6 @@ export const AppRoutes = () => {
       <Route path="/register-merchant" element={<RegisterMerchantPage />} />
       <Route path="/waiting-approval" element={<WaitingApprovalPage />} />
 
-      {/* --- RUTE FITUR --- */}
       <Route path="/merchant-promo" element={<MerchantPromoPage />} />
       <Route path="/promo/kurir" element={<CourierPromoPage />} />
       <Route path="/shop/:merchantId" element={<ShopDetail />} />
@@ -187,7 +224,6 @@ export const AppRoutes = () => {
         }
       />
 
-      {/* --- DASHBOARDS --- */}
       <Route
         path="/merchant-dashboard"
         element={
@@ -213,7 +249,6 @@ export const AppRoutes = () => {
         }
       />
 
-      {/* --- RUTE PENGATURAN ALAMAT CUSTOMER --- */}
       <Route
         path="/settings/address"
         element={
@@ -222,8 +257,6 @@ export const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-
-      {/* --- RUTE RIWAYAT PESANAN CUSTOMER --- */}
       <Route
         path="/order-history"
         element={
@@ -233,7 +266,6 @@ export const AppRoutes = () => {
         }
       />
 
-      {/* --- 🚩 ADMIN WILAYAH (LOKAL) --- */}
       <Route
         path="/admin-wilayah/*"
         element={
@@ -243,7 +275,6 @@ export const AppRoutes = () => {
         }
       />
 
-      {/* --- SUPER ADMIN DASHBOARD (Pusat Segala Tab) --- */}
       <Route
         path="/super-admin/*"
         element={
