@@ -54,8 +54,9 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
               app_fee_percent: 20,
               buyer_service_fee: 2000,
               seller_admin_fee_percent: 5,
-              multi_stop_fee: 2000, // Hak Kurir
-              multi_stop_app_share: 1000, // Hak App
+              sembako_admin_fee_percent: 2, // Default Sembako
+              multi_stop_fee: 2000,
+              multi_stop_app_share: 1000,
               surge_fee: 0,
               is_new: true,
             }
@@ -102,8 +103,9 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
         app_fee_percent: Number(rate.app_fee_percent),
         buyer_service_fee: Number(rate.buyer_service_fee),
         seller_admin_fee_percent: Number(rate.seller_admin_fee_percent),
+        sembako_admin_fee_percent: Number(rate.sembako_admin_fee_percent || 0), // Menyimpan rate sembako
         multi_stop_fee: Number(rate.multi_stop_fee),
-        multi_stop_courier_share: Number(rate.multi_stop_courier_share || 0), // Fallback jika tidak terpakai
+        multi_stop_courier_share: Number(rate.multi_stop_courier_share || 0),
         multi_stop_app_share: Number(rate.multi_stop_app_share),
         surge_fee: Number(rate.surge_fee),
       };
@@ -248,7 +250,8 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
+              {/* INPUT PENGATURAN */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <InputGroup
                   label="LAYANAN PEMBELI"
                   value={rate.buyer_service_fee}
@@ -279,8 +282,22 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                   unit="%"
                   isAdmin
                 />
+                {/* 🚀 INPUT ADMIN SEMBAKO DITAMBAHKAN DI SINI */}
+                <InputGroup
+                  label="ADMIN SEMBAKO (%)"
+                  value={rate.sembako_admin_fee_percent}
+                  onChange={(v: any) =>
+                    handleUpdate(
+                      rate.district_name,
+                      "sembako_admin_fee_percent",
+                      v,
+                    )
+                  }
+                  unit="%"
+                  isSurge
+                />
 
-                <div className="col-span-2 md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-5 bg-white p-5 rounded-md border border-slate-200 mt-2 shadow-inner">
+                <div className="col-span-2 md:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-5 bg-white p-5 rounded-md border border-slate-200 mt-2 shadow-inner">
                   <InputGroup
                     label="EXTRA TOKO (HAK KURIR)"
                     value={rate.multi_stop_fee}
@@ -312,7 +329,7 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                   />
                 </div>
 
-                <div className="col-span-2 md:col-span-3 grid grid-cols-2 md:grid-cols-3 gap-5 mt-2 bg-slate-100 p-5 rounded-md border border-slate-200">
+                <div className="col-span-2 md:col-span-4 grid grid-cols-2 md:grid-cols-3 gap-5 mt-2 bg-slate-100 p-5 rounded-md border border-slate-200">
                   <InputGroup
                     label="JARAK DASAR"
                     value={rate.base_distance_km}

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Star, X, MessageSquare, Loader2, Heart } from "lucide-react";
-import { supabase } from "../../lib/supabaseClient"; // Jalur diperbaiki
-import { useToast } from "../../contexts/ToastContext"; // Jalur diperbaiki
+import { supabase } from "../../../lib/supabaseClient"; // Jalur diperbaiki
+import { useToast } from "../../../contexts/ToastContext"; // Jalur diperbaiki
 
 interface Props {
   order: any;

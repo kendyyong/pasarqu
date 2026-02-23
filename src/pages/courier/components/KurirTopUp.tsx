@@ -4,17 +4,13 @@ import { Wallet, ArrowRight, Loader2, AlertCircle } from "lucide-react";
 
 interface KurirTopUpProps {
   courierId: string;
-  theme?: any;
 }
 
-export const KurirTopUp: React.FC<KurirTopUpProps> = ({ courierId, theme }) => {
+export const KurirTopUp: React.FC<KurirTopUpProps> = ({ courierId }) => {
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const isDark = theme?.bg?.includes("#0b0f19");
-
   const handleRequestTopUp = async () => {
-    // 1. Validasi awal
     if (!amount || Number(amount) < 10000) {
       return alert("Minimal Top Up adalah Rp 10.000");
     }
@@ -22,7 +18,6 @@ export const KurirTopUp: React.FC<KurirTopUpProps> = ({ courierId, theme }) => {
     try {
       setLoading(true);
 
-      // 2. Buat record di database Supabase (Status PENDING)
       const { data: topup, error: dbError } = await supabase
         .from("topup_requests")
         .insert([
@@ -38,7 +33,6 @@ export const KurirTopUp: React.FC<KurirTopUpProps> = ({ courierId, theme }) => {
 
       if (dbError) throw dbError;
 
-      // 3. Panggil Edge Function untuk mendapatkan Snap Token
       const { data, error: funcError } = await supabase.functions.invoke(
         "create-midtrans-token",
         {
@@ -52,14 +46,12 @@ export const KurirTopUp: React.FC<KurirTopUpProps> = ({ courierId, theme }) => {
 
       if (funcError) throw funcError;
 
-      // 4. MUNCULKAN JENDELA SNAP MIDTRANS
-      // (window as any).snap berasal dari script yang kita pasang di index.html
       if ((window as any).snap) {
         (window as any).snap.pay(data.token, {
           onSuccess: (result: any) => {
             console.log("Success:", result);
             alert("Pembayaran Berhasil! Saldo akan segera diperbarui.");
-            window.location.reload(); // Refresh untuk update saldo di UI
+            window.location.reload();
           },
           onPending: (result: any) => {
             console.log("Pending:", result);
@@ -89,83 +81,78 @@ export const KurirTopUp: React.FC<KurirTopUpProps> = ({ courierId, theme }) => {
   };
 
   return (
-    <div
-      className={`p-8 rounded-[3rem] border ${theme?.border} ${theme?.card} shadow-2xl max-w-md mx-auto text-left relative overflow-hidden`}
-    >
-      <div className="flex items-center gap-5 mb-10 relative z-10">
-        <div className="w-14 h-14 bg-teal-500 rounded-[1.5rem] flex items-center justify-center text-white shadow-xl shadow-teal-500/40 rotate-3">
-          <Wallet size={28} />
+    <div className="bg-white p-6 rounded-md shadow-2xl border-t-4 border-[#008080] w-full text-left font-black uppercase tracking-tighter not-italic">
+      {/* HEADER TOP UP */}
+      <div className="flex items-center gap-4 mb-6 border-b border-slate-100 pb-4">
+        <div className="w-12 h-12 bg-teal-50 rounded-md flex items-center justify-center text-[#008080] border border-teal-100 shrink-0">
+          <Wallet size={24} />
         </div>
         <div>
-          <h3
-            className={`text-xl font-black uppercase tracking-tighter italic ${theme?.text}`}
-          >
-            Top Up Saldo
+          <h3 className="text-[16px] text-slate-800 leading-none">
+            TOP UP SALDO
           </h3>
-          <p
-            className={`text-[9px] font-black uppercase tracking-[0.2em] ${theme?.subText}`}
-          >
-            Instant Deposit Protocol
+          <p className="text-[9px] text-slate-400 tracking-widest mt-1">
+            INSTANT DEPOSIT PROTOCOL
           </p>
         </div>
       </div>
 
-      <div className="space-y-8 relative z-10">
+      <div className="space-y-6">
+        {/* INPUT NOMINAL */}
         <div>
-          <label
-            className={`text-[10px] font-black uppercase ${theme?.subText} mb-3 block ml-1`}
-          >
-            Nominal Deposit (IDR)
+          <label className="text-[10px] text-slate-500 mb-2 block tracking-widest">
+            NOMINAL DEPOSIT (IDR)
           </label>
           <div className="relative group">
-            <span className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-slate-400 group-focus-within:text-teal-500 transition-colors text-lg">
-              Rp
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 font-sans font-[1000] text-slate-400 group-focus-within:text-[#008080] transition-colors text-[16px]">
+              RP
             </span>
             <input
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0"
-              className={`w-full pl-16 pr-8 py-6 rounded-[2rem] border-2 ${theme?.border} ${isDark ? "bg-white/5" : "bg-slate-50"} font-black text-2xl outline-none focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 transition-all ${theme?.text}`}
+              className="w-full pl-12 pr-4 py-4 rounded-md border-2 border-slate-200 bg-slate-50 font-sans font-[1000] text-[20px] text-slate-800 outline-none focus:border-[#008080] focus:bg-white transition-all shadow-inner"
             />
           </div>
         </div>
 
+        {/* TOMBOL CEPAT NOMINAL */}
         <div className="grid grid-cols-3 gap-3">
           {[20000, 50000, 100000].map((val) => (
             <button
               key={val}
               onClick={() => setAmount(val.toString())}
-              className={`py-4 rounded-2xl border ${theme?.border} ${isDark ? "hover:bg-white/10" : "hover:bg-slate-100"} text-[11px] font-black transition-all active:scale-95 ${theme?.text}`}
+              className="py-3 bg-white border border-slate-200 hover:border-[#008080] hover:text-[#008080] rounded-md text-[11px] font-[1000] transition-all active:scale-95 shadow-sm text-slate-600"
             >
               {val / 1000}K
             </button>
           ))}
         </div>
 
-        <div className="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/10 flex items-start gap-3">
-          <AlertCircle className="text-orange-500 shrink-0" size={16} />
-          <p className="text-[9px] font-bold text-orange-600 uppercase leading-relaxed">
-            Pilih metode pembayaran (QRIS, Bank, atau E-Wallet) di jendela
-            selanjutnya.
+        {/* INFO INFO */}
+        <div className="p-3 rounded-md bg-slate-50 border border-slate-200 flex items-start gap-3">
+          <AlertCircle className="text-[#008080] shrink-0 mt-0.5" size={16} />
+          <p className="text-[9px] font-bold text-slate-500 leading-relaxed tracking-widest">
+            PILIH METODE PEMBAYARAN (QRIS ATAU E-WALLET) DI JENDELA SELANJUTNYA
+            SETELAH KLIK BAYAR.
           </p>
         </div>
 
+        {/* TOMBOL SUBMIT */}
         <button
           onClick={handleRequestTopUp}
-          disabled={loading}
-          className="w-full bg-slate-900 text-white p-6 rounded-[2rem] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-teal-600 transition-all shadow-2xl shadow-black/20 active:scale-[0.98] disabled:opacity-50"
+          disabled={loading || Number(amount) < 10000}
+          className="w-full bg-[#FF6600] text-white py-4 rounded-md font-[1000] text-[12px] tracking-widest flex items-center justify-center gap-2 hover:bg-[#e65c00] transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:bg-slate-300"
         >
           {loading ? (
-            <Loader2 className="animate-spin" size={20} />
+            <Loader2 className="animate-spin" size={18} />
           ) : (
-            <ArrowRight size={20} />
+            <ArrowRight size={18} strokeWidth={3} />
           )}
-          Bayar Sekarang
+          LANJUTKAN PEMBAYARAN
         </button>
       </div>
-
-      <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-teal-500/5 rounded-full blur-3xl"></div>
     </div>
   );
 };

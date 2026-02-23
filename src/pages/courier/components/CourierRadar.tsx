@@ -16,11 +16,8 @@ export const CourierRadar: React.FC<Props> = ({
   onRefresh,
 }) => {
   return (
-    <div className="space-y-6 animate-in fade-in">
-      <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">
-        Radar Driver
-      </h1>
-
+    // Dihapus <h1>Radar Driver</h1> agar tampilan atas lebih lega
+    <div className="animate-in fade-in w-full space-y-4">
       {activeOrder ? (
         <CourierActiveOrder order={activeOrder} onFinished={onRefresh} />
       ) : (

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabaseClient";
-import { useAuth } from "../../contexts/AuthContext";
-import { useToast } from "../../contexts/ToastContext";
+import { supabase } from "../../../lib/supabaseClient";
+import { useAuth } from "../../../contexts/AuthContext";
+import { useToast } from "../../../contexts/ToastContext";
 import {
   ChevronLeft,
   MapPin,
@@ -11,7 +11,7 @@ import {
   Map as MapIcon,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { AddressAutocomplete } from "../../components/maps/AddressAutocomplete";
+import { AddressAutocomplete } from "../../../components/maps/AddressAutocomplete";
 
 export const CustomerAddressSettings: React.FC = () => {
   const { profile } = useAuth();

@@ -1,94 +1,65 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts"
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-// Fungsi Helper untuk Hash SHA512 (Verifikasi Midtrans)
-async function verifySignature(payload: any, serverKey: string) {
-  const input = payload.order_id + payload.status_code + payload.gross_amount + serverKey;
-  const data = new TextEncoder().encode(input);
-  const hashBuffer = await crypto.subtle.digest("SHA-512", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  return hashHex === payload.signature_key;
-}
-
-serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+Deno.serve(async (req) => {
+  // Hanya menerima metode POST dari Midtrans
+  if (req.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405 })
+  }
 
   try {
-    const payload = await req.json();
-    const serverKey = Deno.env.get('MIDTRANS_SERVER_KEY') ?? ''; // Pastikan ini sudah di-set di Supabase
+    const body = await req.json()
+    const { order_id, status_code, gross_amount, signature_key, transaction_status } = body
+
+    // 1. VERIFIKASI KEASLIAN MIDTRANS (PENTING!)
+    const MIDTRANS_SERVER_KEY = Deno.env.get('MIDTRANS_SERVER_KEY') ?? ''
     
-    // 🛡️ 1. VERIFIKASI KEAMANAN (WAJIB)
-    const isValid = await verifySignature(payload, serverKey);
-    if (!isValid) {
-      console.error("🚨 SIGNATURE TIDAK VALID! Seseorang mencoba memalsukan pembayaran.");
-      return new Response(JSON.stringify({ error: "Invalid Signature" }), { status: 403 });
+    // Rumus Signature Midtrans: SHA512(order_id + status_code + gross_amount + server_key)
+    const dataString = `${order_id}${status_code}${gross_amount}${MIDTRANS_SERVER_KEY}`
+    const encoder = new TextEncoder()
+    const dataBuffer = encoder.encode(dataString)
+    const hashBuffer = await crypto.subtle.digest('SHA-512', dataBuffer)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    const expectedSignature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+
+    // Jika signature tidak cocok, ini adalah serangan hacker! Tolak!
+    if (expectedSignature !== signature_key) {
+      console.error("Signature Mismatch! Potensi serangan manipulasi.")
+      return new Response("Invalid Signature", { status: 401 })
     }
 
-    const supabase = createClient(
+    // 2. KONEKSI KE DATABASE (Bypass RLS)
+    const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SERVICE_ROLE_KEY') ?? '' 
-    );
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
 
-    const orderId = payload.order_id;
-    const transactionStatus = payload.transaction_status;
-    const fraudStatus = payload.fraud_status;
+    // 3. PROSES STATUS PEMBAYARAN
+    if (transaction_status === 'settlement' || transaction_status === 'capture') {
+      // Pembayaran Sukses! Panggil RPC yang kita buat tadi
+      const { error } = await supabaseAdmin.rpc('process_topup_success', {
+        p_order_id: order_id
+      })
+      if (error) throw error
+      console.log(`Top Up Sukses: ${order_id}`)
 
-    // 2. PROSES JIKA SUKSES
-    if (transactionStatus === 'settlement' || (transactionStatus === 'capture' && fraudStatus === 'accept')) {
-      
-      const { data: topupReq, error: findError } = await supabase
+    } else if (['cancel', 'deny', 'expire'].includes(transaction_status)) {
+      // Pembayaran Gagal/Kadaluarsa
+      await supabaseAdmin
         .from('topup_requests')
-        .select('*, courier:profiles!courier_id(wallet_balance)')
-        .eq('id', orderId)
-        .single();
-
-      // Cegah Double Topup (Idempotency)
-      if (topupReq && topupReq.status !== 'APPROVED') {
-        const amount = Number(topupReq.amount);
-        const currentBalance = Number(topupReq.courier.wallet_balance || 0);
-        const newBalance = currentBalance + amount;
-
-        // EKSEKUSI DATABASE DALAM SATU SERANGAN (Bisa dibungkus RPC jika mau lebih atomik)
-        await supabase.from('profiles').update({ 
-          wallet_balance: newBalance, 
-          status: 'ACTIVE' 
-        }).eq('id', topupReq.courier_id);
-
-        await supabase.from('topup_requests').update({ 
-          status: 'APPROVED', 
-          processed_at: new Date().toISOString() 
-        }).eq('id', orderId);
-
-        await supabase.from('transactions').insert([{
-          type: 'KURIR_TOPUP_AUTO',
-          debit: amount,
-          account_code: '1001-KAS',
-          description: `Top Up Otomatis Midtrans - Kurir: ${topupReq.courier_id}`
-        }]);
-
-        await supabase.from('wallet_logs').insert([{
-          profile_id: topupReq.courier_id,
-          type: 'TOPUP',
-          amount: amount,
-          balance_after: newBalance,
-          description: "Top up otomatis via Midtrans"
-        }]);
-      }
+        .update({ status: 'FAILED' })
+        .eq('id', order_id)
+      console.log(`Top Up Gagal/Expired: ${order_id}`)
     }
 
-    return new Response(JSON.stringify({ status: "success" }), { 
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200 
-    });
+    // Selalu balas dengan 200 OK agar Midtrans berhenti mengirim notifikasi ulang
+    return new Response(JSON.stringify({ message: 'Webhook Processed' }), { 
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    })
 
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 400 });
+    console.error("Webhook Error:", err)
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 })
   }
-});
+})

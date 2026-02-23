@@ -22,18 +22,18 @@ export const OTPVerificationPage = () => {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [timer, setTimer] = useState(60);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    if (!phoneNumber) {
-      navigate("/register");
-    }
+    if (!phoneNumber) navigate("/register");
   }, [phoneNumber, navigate]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTimer((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
+    const interval = setInterval(
+      () => setTimer((prev) => (prev > 0 ? prev - 1 : 0)),
+      1000,
+    );
     return () => clearInterval(interval);
   }, []);
 
@@ -42,42 +42,68 @@ export const OTPVerificationPage = () => {
     const newOtp = [...otp];
     newOtp[index] = value.substring(value.length - 1);
     setOtp(newOtp);
-
-    if (value && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
+    if (value && index < 5) inputRefs.current[index + 1]?.focus();
   };
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0) {
+    if (e.key === "Backspace" && !otp[index] && index > 0)
       inputRefs.current[index - 1]?.focus();
-    }
   };
 
-  // 🚀 LOGIKA BARU: MEMANGGIL RPC SQL (LEBIH AMAN)
+  // 🚀 LOGIKA VERIFIKASI + LOGIN OTOMATIS
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     const fullOtp = otp.join("");
-
     if (fullOtp.length < 6) {
       showToast("MASUKKAN 6 DIGIT KODE LENGKAP", "error");
       return;
     }
 
     setIsVerifying(true);
-
     try {
-      // Panggil fungsi SQL verify_otp_secure yang kita buat tadi
-      const { data, error } = await supabase.rpc("verify_otp_secure", {
-        p_phone: "62" + phoneNumber,
-        p_code: fullOtp,
-      });
+      // 1. Verifikasi Kode
+      const { data, error: rpcError } = await supabase.rpc(
+        "verify_otp_secure",
+        {
+          p_phone: "62" + phoneNumber,
+          p_code: fullOtp,
+        },
+      );
 
-      if (error) throw error;
+      if (rpcError) throw rpcError;
 
       if (data.success) {
-        showToast("AKSES DIIZINKAN. SELAMAT DATANG!", "success");
-        navigate(redirectTarget);
+        // 2. LOGIN OTOMATIS KE SUPABASE AUTH
+        const virtualEmail = `${phoneNumber}@pasarqu.com`;
+        const secretPassword = `PASS_OTP_${phoneNumber}_2026`;
+
+        let { error: loginError } = await supabase.auth.signInWithPassword({
+          email: virtualEmail,
+          password: secretPassword,
+        });
+
+        if (loginError) {
+          const { error: signUpError } = await supabase.auth.signUp({
+            email: virtualEmail,
+            password: secretPassword,
+            options: {
+              data: { phone_number: "62" + phoneNumber, role: "CUSTOMER" },
+            },
+          });
+          if (signUpError) throw signUpError;
+          await supabase.auth.signInWithPassword({
+            email: virtualEmail,
+            password: secretPassword,
+          });
+        }
+
+        showToast("VERIFIKASI SUKSES! LANJUT KE PEMBAYARAN...", "success");
+
+        // 3. 🎯 REDIRECT KE TUJUAN AWAL (/checkout)
+        const finalPath = redirectTarget.startsWith("/")
+          ? redirectTarget
+          : `/${redirectTarget}`;
+        setTimeout(() => navigate(finalPath, { replace: true }), 1000);
       } else {
         throw new Error(data.message);
       }
@@ -91,23 +117,27 @@ export const OTPVerificationPage = () => {
   };
 
   const handleResend = async () => {
-    if (timer > 0) return;
+    if (timer > 0 || isResending) return;
+    setIsResending(true);
     try {
-      const { error } = await supabase.functions.invoke("send-otp", {
-        body: { phone: "62" + phoneNumber },
+      const { data: otpData } = await supabase.rpc("generate_otp_secure", {
+        p_phone: "62" + phoneNumber,
       });
-      if (error) throw error;
+      await supabase.functions.invoke("send-wa-otp", {
+        body: { phone: "62" + phoneNumber, otp: otpData.otp_code },
+      });
       setTimer(60);
-      showToast("KODE BARU TELAH DIKIRIM", "success");
+      showToast("KODE BARU DIKIRIM", "success");
     } catch (err) {
-      showToast("GAGAL MENGIRIM ULANG", "error");
+      showToast("GAGAL KIRIM ULANG", "error");
+    } finally {
+      setIsResending(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F1F5F9] md:bg-[#008080] flex flex-col items-center justify-center p-0 md:p-6 font-black uppercase tracking-tighter text-left">
+    <div className="min-h-screen bg-[#F1F5F9] md:bg-[#008080] flex flex-col items-center justify-center p-0 md:p-6 font-black uppercase tracking-tighter text-left relative">
       <div className="w-full max-w-md bg-white md:rounded-[2.5rem] md:shadow-2xl overflow-hidden min-h-screen md:min-h-0 flex flex-col">
-        {/* HEADER */}
         <div className="p-6 border-b-4 border-slate-100 flex items-center gap-4">
           <button
             onClick={() => navigate(-1)}
@@ -119,30 +149,28 @@ export const OTPVerificationPage = () => {
             <h1 className="text-[16px] leading-none font-[1000] text-slate-900 uppercase">
               VERIFIKASI OTP
             </h1>
-            <p className="text-[9px] text-slate-400 mt-1 tracking-widest font-bold uppercase">
-              SECURITY GATE PASARQU
+            <p className="text-[9px] text-slate-400 mt-1 tracking-widest uppercase font-bold">
+              KEAMANAN PASARQU
             </p>
           </div>
         </div>
-
         <div className="p-8 flex-1 flex flex-col justify-center">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-teal-50 text-[#008080] rounded-2xl flex items-center justify-center mx-auto mb-4 border-2 border-teal-100 shadow-sm">
+            <div className="w-16 h-16 bg-teal-50 text-[#008080] rounded-2xl flex items-center justify-center mx-auto mb-4 border-2 border-teal-100">
               <ShieldCheck size={32} />
             </div>
             <h2 className="text-[14px] text-slate-900 leading-tight normal-case font-bold">
-              KAMI TELAH MENGIRIMKAN KODE 6-DIGIT KE NOMOR:
+              KODE 6-DIGIT DIKIRIM VIA{" "}
+              <span className="text-[#008080] font-black uppercase">
+                WHATSAPP
+              </span>{" "}
+              KE:
             </h2>
-            <div className="mt-2 flex items-center justify-center gap-2 text-[#008080] text-[16px]">
-              <MessageCircle
-                size={18}
-                fill="currentColor"
-                className="opacity-20"
-              />
+            <div className="mt-3 flex items-center justify-center gap-2 text-slate-900 text-[18px] font-[1000]">
+              <MessageCircle size={20} className="text-[#008080]" />
               <span>+62 {phoneNumber}</span>
             </div>
           </div>
-
           <form onSubmit={handleVerify} className="space-y-8">
             <div className="flex justify-between gap-2">
               {otp.map((data, index) => (
@@ -155,16 +183,15 @@ export const OTPVerificationPage = () => {
                   onChange={(e) => handleOtpChange(index, e.target.value)}
                   onKeyDown={(e) => handleKeyDown(index, e)}
                   disabled={isVerifying}
-                  className="w-full h-14 bg-slate-50 border-2 border-slate-100 rounded-xl text-center text-[20px] font-black text-[#008080] outline-none focus:border-[#FF6600] focus:bg-white transition-all shadow-inner disabled:opacity-50"
+                  className="w-full h-14 bg-slate-50 border-2 border-slate-100 rounded-xl text-center text-[20px] font-black text-[#008080] outline-none focus:border-[#FF6600] focus:bg-white"
                 />
               ))}
             </div>
-
             <div className="space-y-3">
               <button
                 type="submit"
-                disabled={isVerifying}
-                className="w-full bg-slate-900 text-white py-4 rounded-2xl text-[12px] font-[1000] shadow-xl hover:bg-[#008080] active:scale-95 transition-all flex items-center justify-center gap-2 uppercase tracking-[0.2em] disabled:opacity-50"
+                disabled={isVerifying || otp.join("").length < 6}
+                className="w-full bg-[#008080] text-white py-4 rounded-xl text-[12px] font-[1000] shadow-md uppercase tracking-[0.2em] disabled:opacity-50"
               >
                 {isVerifying ? (
                   <Loader2 className="animate-spin" size={18} />
@@ -173,33 +200,28 @@ export const OTPVerificationPage = () => {
                 )}{" "}
                 <ChevronRight size={18} />
               </button>
-
               <button
                 type="button"
                 onClick={handleResend}
-                disabled={timer > 0 || isVerifying}
-                className={`w-full py-2 text-[10px] font-black tracking-widest uppercase flex items-center justify-center gap-2 transition-all ${
-                  timer > 0
-                    ? "text-slate-300"
-                    : "text-[#FF6600] hover:underline"
-                }`}
+                disabled={timer > 0 || isVerifying || isResending}
+                className={`w-full py-4 text-[10px] font-black tracking-widest uppercase flex items-center justify-center gap-2 transition-all rounded-xl border-2 ${timer > 0 || isResending ? "text-slate-400 border-slate-100 bg-slate-50" : "text-[#FF6600] border-orange-100 bg-orange-50"}`}
               >
-                <RefreshCw
-                  size={12}
-                  className={timer > 0 ? "" : "animate-spin-slow"}
-                />
-                {timer > 0
-                  ? `KIRIM ULANG DALAM ${timer} DETIK`
-                  : "KIRIM ULANG KODE VIA WHATSAPP"}
+                {isResending ? (
+                  <Loader2 className="animate-spin" size={14} />
+                ) : (
+                  <RefreshCw
+                    size={14}
+                    className={timer > 0 ? "" : "animate-spin-slow"}
+                  />
+                )}
+                {isResending
+                  ? "MENGIRIM..."
+                  : timer > 0
+                    ? `KIRIM ULANG (${timer}s)`
+                    : "KIRIM ULANG WA"}
               </button>
             </div>
           </form>
-        </div>
-
-        <div className="p-6 bg-slate-50 border-t-2 border-slate-100">
-          <p className="text-[9px] text-slate-400 text-center leading-relaxed font-bold uppercase">
-            SISTEM INI DILINDUNGI ENKRIPSI END-TO-END PASARQU DIGITAL INDONESIA.
-          </p>
         </div>
       </div>
     </div>

@@ -17,9 +17,7 @@ import {
 interface Props {
   orderId: string;
   receiverName: string;
-  // merchant_customer (CS), courier_merchant (Jemput), courier_customer (Antar)
   chatType: "merchant_customer" | "courier_merchant" | "courier_customer";
-  // ✅ TAMBAHAN: merchantId untuk isolasi chat antar toko
   merchantId?: string | null;
 }
 
@@ -39,18 +37,15 @@ export const OrderChatRoom: React.FC<Props> = ({
   const fetchChatAndStatus = async () => {
     try {
       setLoading(true);
-      // ✅ QUERY: Tambahkan filter merchant_id
       let query = supabase
         .from("order_chats")
         .select("*")
         .eq("order_id", orderId)
         .eq("chat_type", chatType);
 
-      // Jika ada merchantId, filter berdasarkan merchant tersebut
       if (merchantId) {
         query = query.eq("merchant_id", merchantId);
       } else {
-        // Jika null, cari yang merchant_id-nya kosong (Admin Pusat)
         query = query.is("merchant_id", null);
       }
 
@@ -68,7 +63,6 @@ export const OrderChatRoom: React.FC<Props> = ({
         .eq("id", orderId)
         .single();
 
-      // Logika Kunci Chat
       if (chatType.startsWith("courier")) {
         if (
           orderData?.status === "COMPLETED" ||
@@ -92,7 +86,6 @@ export const OrderChatRoom: React.FC<Props> = ({
   useEffect(() => {
     fetchChatAndStatus();
 
-    // ✅ REALTIME: Langganan dengan filter yang sama
     const channel = supabase
       .channel(`chat_${orderId}_${chatType}_${merchantId || "admin"}`)
       .on(
@@ -105,7 +98,6 @@ export const OrderChatRoom: React.FC<Props> = ({
         },
         (payload) => {
           const newMsg = payload.new;
-          // Validasi apakah pesan ini milik chat_type dan merchant_id yang sedang dibuka
           const isSameType = newMsg.chat_type === chatType;
           const isSameMerchant = merchantId
             ? newMsg.merchant_id === merchantId
@@ -137,10 +129,9 @@ export const OrderChatRoom: React.FC<Props> = ({
     const content = newMessage;
     setNewMessage("");
 
-    // ✅ INSERT: Sertakan merchant_id
     await supabase.from("order_chats").insert({
       order_id: orderId,
-      merchant_id: merchantId || null, // Jika null berarti chat ke Admin
+      merchant_id: merchantId || null,
       sender_id: user?.id,
       message: content,
       chat_type: chatType,
@@ -150,48 +141,23 @@ export const OrderChatRoom: React.FC<Props> = ({
   if (loading)
     return (
       <div className="p-10 text-center flex flex-col items-center justify-center h-full">
-        <Loader2 className="animate-spin text-teal-600" size={32} />
-        <p className="text-[10px] font-black text-slate-400 mt-4 tracking-widest uppercase">
-          Membuka Jalur Aman...
+        <Loader2 className="animate-spin text-[#008080]" size={36} />
+        <p className="text-[10px] font-[1000] text-slate-400 mt-4 tracking-widest uppercase">
+          MEMUAT JALUR AMAN...
         </p>
       </div>
     );
 
   return (
-    <div className="flex flex-col h-full bg-white overflow-hidden text-left font-black uppercase tracking-tighter">
-      {/* HEADER INFO */}
-      <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div
-            className={`p-2 rounded-xl text-white shadow-md ${chatType.includes("courier") ? "bg-orange-500" : merchantId ? "bg-teal-600" : "bg-slate-900"}`}
-          >
-            {chatType === "courier_customer" ? (
-              <Bike size={18} />
-            ) : merchantId ? (
-              <Store size={18} />
-            ) : (
-              <Headset size={18} />
-            )}
-          </div>
-          <div>
-            <h4 className="text-[11px] leading-none text-slate-800">
-              {receiverName}
-            </h4>
-            <p className="text-[8px] text-slate-400 mt-1 tracking-widest">
-              {merchantId ? "OBROLAN TOKO" : chatType.replace("_", " ")}
-            </p>
-          </div>
-        </div>
-        <ShieldCheck size={16} className="text-teal-500 opacity-50" />
-      </div>
-
-      {/* MESSAGES AREA */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-[#fcfdfe] no-scrollbar">
+    // 🚀 MASTER WRAPPER CHAT: Memakai h-full absolut agar menempati 100% sisa tinggi box
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden text-left font-black uppercase tracking-tighter">
+      {/* 🚀 AREA CHAT: Menggunakan flex-1 dan overflow-y-auto agar bisa digulir */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center opacity-30 grayscale">
-            <MessageSquareOff size={32} className="mb-3 text-slate-300" />
-            <p className="text-[9px] text-center max-w-[150px] leading-relaxed">
-              Belum ada percakapan. Mulai tanya ke pedagang?
+          <div className="h-full flex flex-col items-center justify-center">
+            <MessageSquareOff size={40} className="mb-3 text-slate-300" />
+            <p className="text-[10px] text-slate-400 text-center max-w-[200px] leading-relaxed tracking-widest">
+              BELUM ADA PERCAKAPAN. SILAKAN MEMULAI OBROLAN.
             </p>
           </div>
         ) : (
@@ -200,18 +166,18 @@ export const OrderChatRoom: React.FC<Props> = ({
             return (
               <div
                 key={idx}
-                className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+                className={`flex w-full ${isMe ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[85%] p-4 rounded-[2rem] text-[12px] shadow-sm transition-all border ${
+                  className={`max-w-[85%] p-3 md:p-4 rounded-md text-[12px] shadow-sm font-bold normal-case tracking-normal border ${
                     isMe
-                      ? "bg-slate-900 border-slate-800 text-white rounded-tr-none"
-                      : "bg-white border-slate-100 text-slate-700 rounded-tl-none"
+                      ? "bg-[#008080] border-[#008080] text-white"
+                      : "bg-white border-slate-200 text-slate-800"
                   }`}
                 >
                   {msg.message}
                   <div
-                    className={`text-[8px] mt-2 opacity-40 font-sans ${isMe ? "text-right" : "text-left"}`}
+                    className={`text-[9px] mt-2 opacity-60 font-sans tracking-widest ${isMe ? "text-right" : "text-left"}`}
                   >
                     {new Date(msg.created_at).toLocaleTimeString([], {
                       hour: "2-digit",
@@ -226,31 +192,34 @@ export const OrderChatRoom: React.FC<Props> = ({
         <div ref={scrollRef} />
       </div>
 
-      {/* INPUT FIELD */}
-      <div className="p-4 bg-white border-t border-slate-50">
+      {/* 🚀 KOTAK INPUT BAWAH: Dikunci di bawah (shrink-0) */}
+      <div className="shrink-0 p-3 md:p-4 bg-white border-t border-slate-200 pb-safe">
         {!isChatLocked ? (
           <form
             onSubmit={sendMessage}
-            className="flex gap-2 bg-slate-50 p-1.5 rounded-[1.5rem] border border-slate-100 shadow-inner"
+            className="flex gap-2 bg-slate-50 p-1.5 rounded-md border border-slate-200 shadow-inner"
           >
             <input
               type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               placeholder="TULIS PESAN JURAGAN..."
-              className="flex-1 bg-transparent px-4 py-2 text-[11px] font-black outline-none placeholder:text-slate-300"
+              className="flex-1 bg-transparent px-3 py-2 text-[12px] md:text-[14px] font-black outline-none placeholder:text-slate-300"
             />
             <button
               type="submit"
-              className="w-10 h-10 bg-teal-600 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all"
+              disabled={!newMessage.trim()}
+              className="w-12 h-12 shrink-0 bg-[#008080] text-white rounded-md flex items-center justify-center shadow-md active:scale-90 transition-all disabled:opacity-50 disabled:bg-slate-300"
             >
-              <Send size={16} />
+              <Send size={18} />
             </button>
           </form>
         ) : (
-          <div className="bg-red-50 p-3 rounded-xl flex items-center justify-center gap-2 text-red-400 border border-red-100">
-            <Lock size={14} />
-            <p className="text-[9px] font-black">Sesi ditutup otomatis</p>
+          <div className="bg-red-50 p-4 rounded-md flex items-center justify-center gap-2 text-red-500 border border-red-200 shadow-inner">
+            <Lock size={16} />
+            <p className="text-[10px] tracking-widest font-[1000]">
+              SESI PERCAKAPAN TELAH DITUTUP
+            </p>
           </div>
         )}
       </div>

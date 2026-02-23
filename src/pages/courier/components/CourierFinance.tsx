@@ -1,4 +1,3 @@
-// src/pages/courier/components/CourierFinance.tsx
 import React from "react";
 import { Wallet, Plus, ArrowDownLeft, AlertCircle } from "lucide-react";
 import { formatRupiah } from "../../../utils/format";
@@ -17,40 +16,61 @@ export const CourierFinance: React.FC<Props> = ({
   onWithdraw,
 }) => {
   return (
-    <div className="space-y-6 animate-in slide-in-from-bottom-4">
-      <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">
-        Dompet Saya
-      </h1>
-      <div className="bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden shadow-2xl">
+    <div className="w-full space-y-6 animate-in fade-in duration-500 text-left font-black uppercase tracking-tighter not-italic text-[12px]">
+      {/* 🚀 KARTU SALDO UTAMA - Desain Bersih & Elegan */}
+      <div className="bg-slate-900 rounded-xl p-6 text-white relative overflow-hidden shadow-lg border-t-4 border-[#008080]">
+        {/* Latar Belakang Geometris Halus */}
+        <div className="absolute inset-0 opacity-10 pointer-events-none">
+          <div className="absolute -right-10 -top-10 w-40 h-40 bg-white rounded-full blur-3xl"></div>
+          <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-[#008080] rounded-full blur-3xl"></div>
+        </div>
+
         <div className="relative z-10">
-          <p className="text-[10px] font-black uppercase opacity-60 mb-2">
-            Gaji Bersih
-          </p>
-          <h2 className="text-5xl font-black tracking-tighter mb-10 italic">
+          <div className="flex items-center gap-2 mb-2">
+            <Wallet size={16} className="text-[#008080]" />
+            <p className="text-[10px] text-slate-400 tracking-widest leading-none">
+              SALDO DOMPET KURIR
+            </p>
+          </div>
+
+          <h2 className="text-[32px] md:text-[40px] font-sans font-[1000] tracking-tighter mb-8 leading-none">
             {formatRupiah(balance)}
           </h2>
+
           <div className="flex gap-3">
             <button
               onClick={onTopUp}
-              className="py-4 px-8 bg-white/10 hover:bg-white/20 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest flex gap-2"
+              className="flex-1 py-3.5 bg-[#FF6600] text-white rounded-md font-[1000] text-[11px] tracking-widest flex items-center justify-center gap-2 shadow-md active:scale-95 transition-all"
             >
-              <Plus size={16} /> Top Up
+              <Plus size={16} strokeWidth={3} /> ISI SALDO
             </button>
             <button
               onClick={onWithdraw}
-              className={`py-4 px-8 rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest flex gap-2 ${balance >= minWithdrawal ? "bg-teal-500 text-slate-900" : "bg-slate-800 text-slate-500"}`}
+              disabled={balance < minWithdrawal}
+              className={`flex-1 py-3.5 rounded-md font-[1000] text-[11px] tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                balance >= minWithdrawal
+                  ? "bg-white text-slate-900 shadow-md hover:bg-slate-100"
+                  : "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
+              }`}
             >
-              <ArrowDownLeft size={16} /> Tarik Dana
+              <ArrowDownLeft size={16} strokeWidth={3} /> TARIK DANA
             </button>
           </div>
         </div>
-        <Wallet className="absolute -bottom-10 -right-10 text-white/5 w-80 h-80 rotate-[-15deg]" />
       </div>
+
+      {/* Peringatan Minimal Penarikan (Hanya Muncul Jika Saldo Kurang) */}
       {balance < minWithdrawal && (
-        <p className="text-xs font-bold text-slate-400 uppercase italic flex items-center gap-2 px-6">
-          <AlertCircle size={14} className="text-orange-500" /> Min WD{" "}
-          {formatRupiah(minWithdrawal)}
-        </p>
+        <div className="bg-orange-50 border border-orange-200 rounded-md p-4 flex items-center gap-3 animate-in slide-in-from-top-2">
+          <AlertCircle size={20} className="text-[#FF6600] shrink-0" />
+          <p className="text-[10px] text-orange-800 tracking-widest leading-relaxed">
+            SALDO ANDA BELUM MENCAPAI BATAS MINIMAL PENARIKAN (
+            <span className="font-sans font-[1000] text-[#FF6600]">
+              {formatRupiah(minWithdrawal)}
+            </span>
+            ).
+          </p>
+        </div>
       )}
     </div>
   );
