@@ -5,6 +5,10 @@ import { CartItem } from "../../types";
 import { useCartSelection } from "../../hooks/useCartSelection";
 import { CartItemCard } from "./CartItemCard";
 
+// 🚀 IMPORT TAMBAHAN UNTUK TARIF DINAMIS
+import { supabase } from "../../lib/supabaseClient";
+import { useMarket } from "../../contexts/MarketContext";
+
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -25,12 +29,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const navigate = useNavigate();
   const [mounted, setMounted] = useState(false);
 
+  // 🚀 AMBIL CONTEXT PASAR UNTUK CEK DISTRIK
+  const { selectedMarket } = useMarket();
+  const [shippingRate, setShippingRate] = useState<any>(null);
+
   const {
     selectedIds,
     toggleSelection,
     totalPrice,
     merchantCount,
-    courierSurgeFee,
+    // courierSurgeFee, // Kita matikan yang dari hook karena kita pakai yang dinamis dari DB
   } = useCartSelection(cart, isOpen);
 
   useEffect(() => {
@@ -38,9 +46,35 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     return () => setMounted(false);
   }, []);
 
+  // 🚀 FETCH DATA TARIF DARI SUPER ADMIN SETIAP DRAWER DIBUKA
+  useEffect(() => {
+    const fetchRate = async () => {
+      if (!selectedMarket?.district) return;
+      try {
+        const { data } = await supabase
+          .from("shipping_rates")
+          .select("*")
+          .eq("district_name", selectedMarket.district)
+          .single();
+        if (data) setShippingRate(data);
+      } catch (err) {
+        console.error("Gagal menarik tarif:", err);
+      }
+    };
+
+    if (isOpen) fetchRate();
+  }, [selectedMarket?.district, isOpen]);
+
   if (!mounted || !isOpen) return null;
 
-  const subTotalCart = totalPrice + courierSurgeFee;
+  // 🚀 KALKULASI BIAYA LAYANAN DINAMIS
+  const extraCount = merchantCount > 1 ? merchantCount - 1 : 0;
+  const buyerServiceFee = Number(shippingRate?.buyer_service_fee || 0);
+  const dynamicSurgeFee = extraCount * Number(shippingRate?.surge_fee || 0);
+  const totalLayanan = buyerServiceFee + dynamicSurgeFee;
+
+  // Total Akhir Sementara di Keranjang
+  const subTotalCart = totalPrice + totalLayanan;
 
   return (
     <div className="fixed inset-0 z-[9999] flex justify-end font-sans text-left">
@@ -68,7 +102,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         </div>
 
         {/* BODY - LIST ITEM */}
-        {/* pb-60 ditambahkan agar scroll tidak terhalang footer yang lebih tinggi */}
         <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-60">
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-50">
@@ -95,32 +128,39 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         </div>
 
         {/* FOOTER - RINGKASAN BIAYA */}
-        {/* PERBAIKAN: pb-10 dan padding-bottom safe area untuk mobile */}
         {cart.length > 0 && (
           <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-5 pb-10 md:pb-5 shadow-[0_-10px_30px_rgba(0,0,0,0.1)] z-20">
             <div className="space-y-2 mb-5">
               <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase tracking-tight">
                 <span>Subtotal Produk</span>
-                <span>Rp{totalPrice.toLocaleString()}</span>
+                <span>Rp{totalPrice.toLocaleString("id-ID")}</span>
               </div>
 
-              {merchantCount > 1 && (
+              {/* 🚀 RINCIAN LAYANAN DITAMPILKAN JIKA ADA */}
+              {buyerServiceFee > 0 && (
+                <div className="flex justify-between text-[11px] font-bold text-[#008080] uppercase tracking-tight">
+                  <span>Biaya Layanan</span>
+                  <span>+ Rp{buyerServiceFee.toLocaleString("id-ID")}</span>
+                </div>
+              )}
+
+              {/* 🚀 EKSTRA TOKO (SURGE FEE) */}
+              {extraCount > 0 && (
                 <div className="flex justify-between text-[11px] font-black text-orange-600 uppercase tracking-tight">
-                  <span>Ekstra Toko ({merchantCount - 1})</span>
-                  <span>+ Rp{courierSurgeFee.toLocaleString()}</span>
+                  <span>Ekstra Toko ({extraCount})</span>
+                  <span>+ Rp{dynamicSurgeFee.toLocaleString("id-ID")}</span>
                 </div>
               )}
             </div>
 
             {/* TOTAL AKHIR & ACTION */}
-            {/* Perbaikan: Menambahkan margin bottom tambahan khusus mobile agar tidak tertutup nav bar */}
             <div className="flex items-center justify-between border-t border-slate-100 pt-4 mb-4 md:mb-0">
               <div className="text-left">
                 <p className="text-[9px] font-black text-slate-400 uppercase leading-none mb-1">
                   Total Sementara
                 </p>
                 <p className="text-2xl font-black text-slate-900 tracking-tighter">
-                  Rp{subTotalCart.toLocaleString()}
+                  Rp{subTotalCart.toLocaleString("id-ID")}
                 </p>
               </div>
 
@@ -137,7 +177,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </button>
             </div>
 
-            {/* Ganjalan tambahan untuk browser mobile tertentu */}
             <div className="h-4 md:hidden"></div>
           </div>
         )}

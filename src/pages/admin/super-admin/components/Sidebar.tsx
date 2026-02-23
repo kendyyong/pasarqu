@@ -19,6 +19,7 @@ import {
   Image as ImageIcon,
   Receipt,
   ArrowUpRight,
+  Landmark, // ✅ Ikon baru untuk Pajak & CSR
 } from "lucide-react";
 
 interface SidebarProps {
@@ -42,14 +43,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       group: "CORE MONITORING",
       items: [
-        // ✅ JUDUL DIUBAH MENJADI DASHBOARD MONITORING
-        {
-          id: "dashboard",
-          label: "DASHBOARD MONITORING",
-          icon: LayoutDashboard,
-        },
-        { id: "markets", label: "KELOLA WILAYAH", icon: Store },
-        { id: "users", label: "DATABASE USER", icon: Users },
+        { id: "dashboard", label: "DASHBOARD MONITOR", icon: LayoutDashboard },
+        { id: "markets", label: "KELOLA PASAR", icon: Store },
+        { id: "users", label: "DATABASE PENGGUNA", icon: Users },
       ],
     },
     {
@@ -59,13 +55,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: "ledger", label: "BUKU BESAR", icon: Receipt },
         { id: "withdrawals", label: "PENCAIRAN DANA", icon: CheckSquare },
         { id: "topup-requests", label: "PERMINTAAN TOPUP", icon: ArrowUpRight },
+        /** 🛠️ PENGEMBALIAN FITUR: PAJAK & CSR */
+        { id: "tax-csr", label: "PENGATURAN PAJAK & CSR", icon: Landmark },
       ],
     },
     {
       group: "OPERATIONAL",
       items: [
         { id: "verification", label: "VERIFIKASI ADMIN", icon: ShieldCheck },
-        { id: "shipping-config", label: "LOGISTIK & ONGKIR", icon: Truck },
+        {
+          id: "shipping-config",
+          label: "PENGATURAN TARIF PASAR DAN APLIKASI",
+          icon: Truck,
+        },
         { id: "categories", label: "KATEGORI PRODUK", icon: List },
         { id: "menus", label: "MANAJEMEN MENU", icon: Package },
         { id: "disputes", label: "PUSAT RESOLUSI", icon: AlertTriangle },
@@ -86,21 +88,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside
       className={`hidden md:flex flex-col bg-white border-r border-slate-200 transition-all duration-300 relative z-50 ${isSidebarOpen ? "w-72" : "w-20"}`}
     >
-      {/* LOGO AREA */}
+      {/* 1. LOGO AREA */}
       <div
-        className={`h-20 flex items-center px-6 border-b border-slate-100 ${brand.bgTosca} shrink-0`}
+        className={`h-20 flex items-center px-6 border-b border-slate-100 shrink-0`}
       >
-        <div className="flex items-center gap-3 text-white">
-          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shrink-0 shadow-sm">
-            <span className={`text-xl font-black ${brand.tosca}`}>P</span>
-          </div>
+        <div className="flex items-center gap-1">
+          <span className="text-2xl font-black tracking-tighter text-[#008080]">
+            Pasar
+            <span className="text-[#FF6600]">Qu</span>
+          </span>
           {isSidebarOpen && (
-            <span className="text-xl tracking-tighter leading-none font-black uppercase">
-              PASARQU
-              <span className="text-orange-300 text-[9px] block opacity-80 font-bold">
-                SUPER ADMIN ENGINE
+            <div className="ml-2 pl-2 border-l border-slate-200">
+              <span className="text-[10px] font-black text-slate-400 uppercase leading-none block">
+                Super
               </span>
-            </span>
+              <span className="text-[10px] font-black text-slate-400 uppercase leading-none block">
+                Admin
+              </span>
+            </div>
           )}
         </div>
       </div>
@@ -122,12 +127,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   className={`w-full flex items-center gap-4 p-3.5 rounded-xl transition-all ${
                     activeTab === item.id
                       ? `${brand.bgTosca} text-white shadow-lg shadow-teal-900/20`
-                      : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                      : "text-slate-800 hover:bg-slate-50 hover:text-teal-600"
                   }`}
                 >
                   <item.icon size={20} className="shrink-0" />
                   {isSidebarOpen && (
-                    <span className="text-[11px] truncate font-black uppercase tracking-tighter">
+                    <span className="text-[12px] truncate font-black uppercase tracking-tighter text-left">
                       {item.label}
                     </span>
                   )}
@@ -146,12 +151,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <LogOut size={20} />
           {isSidebarOpen && (
-            <span className="text-[11px] tracking-tighter">KELUAR SISTEM</span>
+            <span className="text-[12px] tracking-tighter">KELUAR SISTEM</span>
           )}
         </button>
       </div>
 
-      {/* SIDEBAR TOGGLE (DESKTOP) */}
+      {/* SIDEBAR TOGGLE */}
       <button
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
         className="absolute -right-3 top-24 bg-white border border-slate-200 rounded-full p-1 text-slate-400 hover:text-teal-600 shadow-sm z-50 transition-transform active:scale-90"

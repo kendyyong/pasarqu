@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { createPortal } from "react-dom"; // 🚀 IMPORT PORTAL DARI REACT
+import { createPortal } from "react-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useToast } from "../../../contexts/ToastContext";
@@ -65,7 +65,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
     }
   }, [order?.shipping_status, user?.id]);
 
-  // UPDATE STATUS
+  // UPDATE STATUS & PEMOTONGAN SALDO BERDASARKAN CONFIG LOGISTICS SUPER ADMIN
   const handleStatusUpdate = async () => {
     setLoading(true);
     try {
@@ -88,12 +88,12 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
       }
 
       if (isFinalStep) {
+        // PENYELESAIAN ORDER: Berikan pendapatan ke kurir
+        // 🚀 MENGGUNAKAN MESIN PENCAIRAN OTOMATIS YANG BARU
         const { error: rpcError } = await supabase.rpc(
-          "complete_order_and_pay_courier",
+          "complete_order_transaction",
           {
             p_order_id: order.id,
-            p_courier_id: order.courier_id,
-            p_amount: order.courier_earning_total || 0,
           },
         );
 
@@ -101,6 +101,28 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
         if (locationInterval) clearInterval(locationInterval);
         showToast("Pesanan Selesai! Saldo masuk ke dompet Anda.", "success");
       } else {
+        // MULAI ORDER: Potong saldo kurir (Hak Aplikasi / System Fee)
+        // Membaca nominal pasti yang sudah dihitung saat pembeli checkout berdasarkan tarif distrik
+        const deductionAmount = Number(
+          order.app_fee || order.system_fee || order.platform_fee || 0,
+        );
+
+        // 1. Panggil fungsi potong saldo di database
+        if (deductionAmount > 0) {
+          const { error: deductError } = await supabase.rpc(
+            "deduct_courier_balance",
+            {
+              p_courier_id: user?.id,
+              p_amount: deductionAmount,
+              p_order_id: order.id,
+            },
+          );
+
+          // Jika saldo kurang, proses akan otomatis berhenti di sini
+          if (deductError) throw deductError;
+        }
+
+        // 2. Jika saldo berhasil dipotong (atau tidak ada potongan), baru ubah status pesanan
         const { error } = await supabase
           .from("orders")
           .update({ shipping_status: nextStatus })
@@ -108,7 +130,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
 
         if (error) throw error;
         showToast(
-          `Status diperbarui: ${nextStatus.replace("_", " ")}`,
+          `Order diambil! Saldo terpotong Rp ${deductionAmount.toLocaleString("id-ID")}`,
           "success",
         );
       }
@@ -116,7 +138,8 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
       onFinished();
     } catch (err: any) {
       console.error("Update Error:", err);
-      showToast(err.message || "Gagal update status", "error");
+      // Akan menampilkan pesan: "Saldo Anda tidak mencukupi..." jika saldo < potongan
+      showToast(err.message || "Gagal memproses pesanan", "error");
     } finally {
       setLoading(false);
     }
@@ -132,7 +155,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
 
   return (
     <>
-      {/* 🚀 FIX: Menggunakan createPortal agar menembus batasan layout dan scroll dari komponen parent */}
+      {/* PORTAL CHAT */}
       {showChat &&
         createPortal(
           <div className="fixed inset-0 z-[999999] bg-white md:bg-slate-900/80 backdrop-blur-sm flex justify-center">
@@ -168,7 +191,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
               </div>
             </div>
           </div>,
-          document.body, // Ditempelkan paksa ke body paling luar
+          document.body,
         )}
 
       {/* KONTEN UTAMA RADAR */}

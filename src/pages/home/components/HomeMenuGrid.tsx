@@ -7,34 +7,30 @@ import { useMarket } from "../../../contexts/MarketContext";
 const MenuIcon = ({ icon, label, color, onClick }: any) => (
   <div
     onClick={onClick}
-    /**
-     * gap-1.5: Jarak ikon ke teks yang sudah kita rapatkan.
-     * pb-0: Menghilangkan padding bawah item agar teks tetap naik.
-     */
-    className="flex flex-col items-center gap-1.5 cursor-pointer active:scale-90 transition-all flex-shrink-0 w-[72px] group pb-0"
+    className="flex flex-col items-center gap-1 cursor-pointer active:scale-90 transition-all flex-shrink-0 w-[72px] group pb-0"
   >
-    {/* Box Ikon */}
+    {/* Box Ikon - Warna dinamis sesuai database */}
     <div
-      className={`w-12 h-12 ${
+      className={`w-11 h-11 ${
         color
           ? color
               .replace("text-", "bg-")
               .replace("600", "100")
               .replace("500", "100")
           : "bg-slate-50"
-      } rounded-2xl flex items-center justify-center ${color || "text-slate-600"} shadow-sm`}
+      } rounded-2xl flex items-center justify-center ${color || "text-slate-600"} shadow-sm border border-white/50`}
     >
-      {React.cloneElement(icon as React.ReactElement, { size: 22 })}
+      {React.cloneElement(icon as React.ReactElement, { size: 20 })}
     </div>
 
-    {/* Label Teks - leading-none agar rapat ke bawah */}
+    {/* Label Teks - Font Black sesuai tema PasarQu */}
     <span className="text-[10px] font-black text-slate-500 text-center leading-none truncate w-full px-1 uppercase tracking-tighter">
       {label}
     </span>
   </div>
 );
 
-const DynamicIcon = ({ name, size = 22 }: { name: string; size?: number }) => {
+const DynamicIcon = ({ name, size = 20 }: { name: string; size?: number }) => {
   // @ts-ignore
   const IconComponent = Icons[name];
   return IconComponent ? (
@@ -82,15 +78,12 @@ export const HomeMenuGrid = () => {
 
   return (
     /**
-     * WRAPPER UTAMA
-     * mt-2: Jarak atas dari iklan utama.
+     * 🚀 UPDATE SPACING:
+     * Menghapus mt-[74px] yang keras agar tidak bertabrakan dengan padding parent.
+     * Menggunakan margin yang lebih fleksibel.
      */
-    <div className="-mx-5 md:mx-0 relative z-10 mt-2 md:mt-3 pb-0 bg-transparent">
-      {/* KONTEN MENU (PUTIH BERSIH)
-          pt-2: Jarak atas ikon.
-          pb-1: Jarak bawah teks ke garis (sangat pendek sesuai permintaan).
-      */}
-      <div className="w-full bg-white pt-2 pb-1 px-4 md:px-5 rounded-none md:rounded-xl border-b md:border border-slate-50 shadow-none">
+    <div className="relative z-10 mt-2 mb-4 bg-transparent">
+      <div className="w-full bg-white pt-2 pb-2 px-4 md:px-5 rounded-none md:rounded-xl border-b md:border border-slate-50">
         <div
           className="flex flex-nowrap items-center gap-4 overflow-x-auto no-scrollbar"
           style={{
@@ -103,9 +96,9 @@ export const HomeMenuGrid = () => {
             ? [...Array(5)].map((_, i) => (
                 <div
                   key={i}
-                  className="flex flex-col items-center gap-2 flex-shrink-0 w-[72px] animate-pulse"
+                  className="flex flex-col items-center gap-1 flex-shrink-0 w-[72px] animate-pulse"
                 >
-                  <div className="w-12 h-12 bg-slate-50 rounded-2xl"></div>
+                  <div className="w-11 h-11 bg-slate-50 rounded-2xl"></div>
                   <div className="w-10 h-2 bg-slate-50 rounded"></div>
                 </div>
               ))

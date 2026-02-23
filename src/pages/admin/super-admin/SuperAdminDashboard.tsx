@@ -26,7 +26,8 @@ import {
   Receipt,
   ArrowUpRight,
   Crown,
-  MessageSquare, // 🚀 Tambahan icon untuk Chat
+  MessageSquare,
+  Landmark, // 🚀 Tambahan icon untuk Pajak & CSR
 } from "lucide-react";
 
 import { useSuperAdminDashboard } from "../../../hooks/useSuperAdminDashboard";
@@ -59,7 +60,6 @@ export const SuperAdminDashboard: React.FC = () => {
     fetchData,
   } = useSuperAdminDashboard();
 
-  // Otomatis tutup menu mobile jika tab/menu diklik
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [activeTab]);
@@ -74,18 +74,18 @@ export const SuperAdminDashboard: React.FC = () => {
     bgOrange: "bg-[#FF6600]",
   };
 
-  // KONFIGURASI MENU SIDEBAR
+  // 🛠️ KONFIGURASI MENU SIDEBAR YANG SUDAH DIPERBARUI
   const menuGroups = [
     {
       group: "CORE MONITORING",
       items: [
         {
           id: "dashboard",
-          label: "DASHBOARD MONITORING",
+          label: "DASHBOARD MONITOR", // Diubah
           icon: LayoutDashboard,
         },
-        { id: "markets", label: "KELOLA WILAYAH", icon: Store },
-        { id: "users", label: "DATABASE USER", icon: Users },
+        { id: "markets", label: "KELOLA PASAR", icon: Store }, // Diubah
+        { id: "users", label: "DATABASE PENGGUNA", icon: Users }, // Diubah
         {
           id: "merchant-manager",
           label: "MANAJEMEN MITRA TOKO",
@@ -100,13 +100,18 @@ export const SuperAdminDashboard: React.FC = () => {
         { id: "ledger", label: "BUKU BESAR", icon: Receipt },
         { id: "withdrawals", label: "PENCAIRAN DANA", icon: CheckSquare },
         { id: "topup-requests", label: "PERMINTAAN TOPUP", icon: ArrowUpRight },
+        { id: "tax-csr", label: "PENGATURAN PAJAK & CSR", icon: Landmark }, // Ditambahkan kembali
       ],
     },
     {
       group: "OPERATIONAL",
       items: [
         { id: "verification", label: "VERIFIKASI ADMIN", icon: ShieldCheck },
-        { id: "shipping-config", label: "LOGISTIK & ONGKIR", icon: Truck },
+        {
+          id: "shipping-config",
+          label: "PENGATURAN TARIF PASAR DAN APLIKASI",
+          icon: Truck,
+        }, // Diubah
         { id: "categories", label: "KATEGORI PRODUK", icon: List },
         { id: "menus", label: "MANAJEMEN MENU", icon: Package },
         { id: "disputes", label: "PUSAT RESOLUSI", icon: AlertTriangle },
@@ -116,7 +121,6 @@ export const SuperAdminDashboard: React.FC = () => {
       group: "MARKETING & SYSTEM",
       items: [
         { id: "manage-ads", label: "MANAJEMEN IKLAN", icon: ImageIcon },
-        // 🚀 UPDATE: Mengubah Broadcast menjadi Live Chat
         { id: "live-chat", label: "LIVE CHAT ADMIN", icon: MessageSquare },
         { id: "logs", label: "LOG AKTIVITAS", icon: History },
         { id: "settings", label: "PENGATURAN SISTEM", icon: Settings },
@@ -139,20 +143,24 @@ export const SuperAdminDashboard: React.FC = () => {
           >
             <Menu size={22} />
           </button>
-          <div className="flex items-center gap-2">
-            <div
-              className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isDark ? "bg-slate-800 text-teal-400" : "bg-teal-600 text-white"}`}
-            >
-              <span className="text-sm font-black">P</span>
-            </div>
-            <span className="text-sm tracking-tighter leading-none">
-              PASARQU{" "}
-              <span
-                className={`text-[8px] block opacity-80 uppercase mt-0.5 ${isDark ? "text-slate-400" : "text-orange-600"}`}
-              >
-                SUPER ADMIN
-              </span>
+
+          {/* 🛠️ LOGO TEKS MOBILE */}
+          <div className="flex items-center gap-1">
+            <span className="text-xl font-black tracking-tighter text-[#008080]">
+              Pasar<span className="text-[#FF6600]">Qu</span>
             </span>
+            <div className="ml-1.5 pl-1.5 border-l border-slate-300">
+              <span
+                className={`text-[8px] font-black uppercase leading-none block ${isDark ? "text-slate-400" : "text-slate-500"}`}
+              >
+                Super
+              </span>
+              <span
+                className={`text-[8px] font-black uppercase leading-none block ${isDark ? "text-slate-400" : "text-slate-500"}`}
+              >
+                Admin
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -173,30 +181,40 @@ export const SuperAdminDashboard: React.FC = () => {
           ${isDark ? "bg-slate-900 border-r border-slate-800 shadow-2xl md:shadow-none" : "bg-white border-r border-slate-200 shadow-2xl md:shadow-none"}
         `}
       >
+        {/* 🛠️ LOGO TEKS DESKTOP/SIDEBAR */}
         <div
-          className={`h-20 flex items-center justify-between px-6 shrink-0 ${isDark ? "bg-slate-950 border-b border-slate-800" : `${brand.bgTosca} border-b border-slate-100`}`}
+          className={`h-20 flex items-center justify-between px-6 shrink-0 ${isDark ? "bg-slate-950 border-b border-slate-800" : `bg-white border-b border-slate-100`}`}
         >
-          <div className="flex items-center gap-3 text-white">
-            <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDark ? "bg-slate-800 text-teal-400" : "bg-white text-teal-600"}`}
-            >
-              <span className="text-xl font-black">P</span>
-            </div>
-            {(isSidebarOpen || isMobileMenuOpen) && (
-              <span className="text-xl tracking-tighter leading-none">
-                PASARQU{" "}
-                <span
-                  className={`text-[9px] block opacity-80 uppercase ${isDark ? "text-slate-400" : "text-orange-300"}`}
-                >
-                  SUPER ADMIN ENGINE
+          <div className="flex items-center gap-1 text-white">
+            {isSidebarOpen || isMobileMenuOpen ? (
+              <>
+                <span className="text-2xl font-black tracking-tighter text-[#008080]">
+                  Pasar<span className="text-[#FF6600]">Qu</span>
                 </span>
+                <div className="ml-2 pl-2 border-l border-slate-200">
+                  <span
+                    className={`text-[9px] font-black uppercase leading-none block ${isDark ? "text-slate-400" : "text-slate-500"}`}
+                  >
+                    Super
+                  </span>
+                  <span
+                    className={`text-[9px] font-black uppercase leading-none block ${isDark ? "text-slate-400" : "text-slate-500"}`}
+                  >
+                    Admin
+                  </span>
+                </div>
+              </>
+            ) : (
+              // Logo Singkat jika sidebar ditutup (Desktop)
+              <span className="text-2xl font-black tracking-tighter text-[#008080] ml-2">
+                P<span className="text-[#FF6600]">Q</span>
               </span>
             )}
           </div>
 
           <button
             onClick={() => setIsMobileMenuOpen(false)}
-            className="md:hidden text-white/70 hover:text-white active:scale-90 transition-all p-1"
+            className="md:hidden text-slate-400 hover:text-slate-600 active:scale-90 transition-all p-1"
           >
             <X size={24} />
           </button>
@@ -207,7 +225,7 @@ export const SuperAdminDashboard: React.FC = () => {
             <div key={idx} className="px-3">
               {(isSidebarOpen || isMobileMenuOpen) && (
                 <p
-                  className={`text-[9px] px-4 mb-2 tracking-[0.2em] ${isDark ? "text-slate-500" : "text-slate-900 font-black"}`}
+                  className={`text-[9px] px-4 mb-2 tracking-[0.2em] uppercase ${isDark ? "text-slate-500 font-bold" : "text-slate-400 font-black"}`}
                 >
                   {group.group}
                 </p>
@@ -229,7 +247,7 @@ export const SuperAdminDashboard: React.FC = () => {
                             : `${brand.bgTosca} text-white shadow-lg shadow-teal-900/20`
                           : isDark
                             ? "text-slate-400 hover:bg-slate-800 hover:text-white"
-                            : "text-black hover:bg-slate-100"
+                            : "text-slate-800 hover:bg-slate-50 hover:text-teal-600" // 🛠️ Warna Abu-abu Gelap
                       }`}
                     >
                       <item.icon
@@ -237,7 +255,8 @@ export const SuperAdminDashboard: React.FC = () => {
                         className={`shrink-0 ${isActive && !isDark ? "text-white" : ""}`}
                       />
                       {(isSidebarOpen || isMobileMenuOpen) && (
-                        <span className="text-[12px] truncate">
+                        // 🛠️ Ukuran font diubah menjadi 12px
+                        <span className="text-[12px] font-black uppercase truncate tracking-tighter text-left">
                           {item.label}
                         </span>
                       )}
@@ -254,11 +273,13 @@ export const SuperAdminDashboard: React.FC = () => {
         >
           <button
             onClick={() => logout().then(() => navigate("/"))}
-            className={`w-full flex items-center gap-4 p-4 text-red-500 rounded-2xl transition-all ${isDark ? "hover:bg-red-500/10" : "hover:bg-red-50"}`}
+            className={`w-full flex items-center gap-4 p-4 text-red-500 rounded-2xl transition-all uppercase font-black ${isDark ? "hover:bg-red-500/10" : "hover:bg-red-50"}`}
           >
             <LogOut size={20} />
             {(isSidebarOpen || isMobileMenuOpen) && (
-              <span className="text-[12px]">KELUAR SISTEM</span>
+              <span className="text-[12px] tracking-tighter">
+                KELUAR SISTEM
+              </span>
             )}
           </button>
         </div>

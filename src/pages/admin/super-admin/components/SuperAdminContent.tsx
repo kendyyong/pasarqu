@@ -70,6 +70,13 @@ const FinancialLedger = lazy(() =>
   import("./FinancialLedger").then((m) => ({ default: m.FinancialLedger })),
 );
 
+// 🚀 MODUL BARU: PENGATURAN PAJAK & CSR (Dari Folder TaxCsr)
+const TaxAndCSRConfig = lazy(() =>
+  import("../TaxCsr/TaxAndCSRConfig").then((m) => ({
+    default: m.TaxAndCSRConfig,
+  })),
+);
+
 // --- KOMPONEN DI FOLDER TABS ---
 const UserManager = lazy(() =>
   import("../tabs/UserManager").then((m) => ({ default: m.UserManager })),
@@ -124,6 +131,9 @@ export const SuperAdminContent: React.FC<Props> = ({
     // 🚩 FINANCE SYSTEM (MANDIRI)
     "finance-master": <FinanceDashboard theme={theme} />,
     ledger: <FinancialLedger />,
+
+    // 🚀 INTEGRASI PAJAK & CSR
+    "tax-csr": <TaxAndCSRConfig />,
 
     "shipping-config": <ShippingConfig theme={theme} />,
     verification: (

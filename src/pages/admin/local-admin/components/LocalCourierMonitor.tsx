@@ -20,6 +20,8 @@ import {
   User,
   Edit3,
   Bot,
+  Wallet,
+  ShieldAlert,
 } from "lucide-react";
 import { useAuth } from "../../../../contexts/AuthContext";
 import { useToast } from "../../../../contexts/ToastContext";
@@ -380,6 +382,62 @@ export const LocalCourierMonitor = () => {
                   )}
                 </div>
               </div>
+
+              {/* --- MULAI TAMBAHAN: 03. STATUS KEUANGAN --- */}
+              <div className="bg-white border-4 border-slate-200 p-6 rounded-xl space-y-4 shadow-sm">
+                <h4 className="text-[12px] font-black bg-orange-500 text-white px-3 py-1 inline-block">
+                  03. STATUS KEUANGAN (DOMPET KURIR)
+                </h4>
+
+                <div className="flex flex-col md:flex-row items-center gap-4">
+                  <div className="p-4 rounded-xl bg-slate-50 border-2 border-slate-100 flex-1 flex items-center gap-4 w-full">
+                    <div
+                      className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 ${
+                        (selectedCourier.wallet_balance || 0) < 5000
+                          ? "bg-red-100 text-red-600"
+                          : "bg-[#008080]/10 text-[#008080]"
+                      }`}
+                    >
+                      <Wallet size={28} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 tracking-widest uppercase">
+                        Sisa Saldo Saat Ini
+                      </p>
+                      <h3
+                        className={`text-3xl font-black uppercase tracking-tighter ${
+                          (selectedCourier.wallet_balance || 0) < 5000
+                            ? "text-red-600"
+                            : "text-slate-800"
+                        }`}
+                      >
+                        Rp{" "}
+                        {(selectedCourier.wallet_balance || 0).toLocaleString(
+                          "id-ID",
+                        )}
+                      </h3>
+                    </div>
+                  </div>
+
+                  {/* Peringatan jika saldo kritis */}
+                  {(selectedCourier.wallet_balance || 0) < 5000 && (
+                    <div className="flex-1 p-4 bg-red-50 border-2 border-red-200 rounded-xl text-red-600 flex items-start gap-3 w-full h-full">
+                      <ShieldAlert size={24} className="shrink-0 mt-1" />
+                      <div>
+                        <h5 className="text-[11px] font-black uppercase tracking-widest mb-1">
+                          SALDO DIBEKUKAN!
+                        </h5>
+                        <p className="text-[9px] font-bold leading-relaxed uppercase">
+                          Saldo di bawah batas minimum (Rp 5.000). Kurir ini
+                          tidak dapat menerima pesanan baru dari pelanggan
+                          sampai melakukan Top Up.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* --- AKHIR TAMBAHAN --- */}
 
               <div className="bg-slate-900 p-6 border-l-[10px] border-[#008080] text-white shadow-lg">
                 <div className="flex items-center justify-between mb-4">

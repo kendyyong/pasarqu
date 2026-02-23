@@ -31,7 +31,7 @@ interface StatusItemProps {
   label: string;
   color: string;
   bgColor: string;
-  onClick: () => void; // 🚀 Menambahkan fungsi onClick
+  onClick: () => void;
 }
 
 interface DashboardTileProps {
@@ -90,7 +90,7 @@ export const CustomerDashboard = () => {
           ).length,
           reviewable: orders.filter(
             (o: any) => o.shipping_status === "COMPLETED",
-          ).length, // Idealnya cek juga apa sudah direview
+          ).length,
         });
       }
     } catch (err) {
@@ -116,11 +116,15 @@ export const CustomerDashboard = () => {
 
   return (
     <MobileLayout
+      /** 🚀 FIX: Mengubah "portal" menjadi "account"
+       * agar tab "SAYA" terlihat aktif di navigasi bawah.
+       */
       activeTab="account"
       onTabChange={(tab: string) => {
         if (tab === "home") navigate("/");
         if (tab === "search") navigate("/search");
         if (tab === "orders") navigate("/order-history");
+        if (tab === "mitra") navigate("/portal"); // Mengarah ke Portal Mitra
       }}
       onSearch={() => {}}
       onCartClick={() => navigate("/checkout")}
@@ -168,7 +172,7 @@ export const CustomerDashboard = () => {
                       size={12}
                       fill="currentColor"
                       className="opacity-30"
-                    />{" "}
+                    />
                     VERIFIED
                   </span>
                   <span className="bg-orange-50 text-[#FF6600] text-[10px] px-2 py-1 rounded-md border border-orange-100 font-black uppercase flex items-center gap-1">
@@ -231,7 +235,6 @@ export const CustomerDashboard = () => {
               </div>
 
               <div className="p-6 flex justify-around items-center h-full gap-2">
-                {/* 🚀 Mengirim fungsi onClick ke setiap StatusItem */}
                 <StatusItem
                   icon={<Wallet size={24} />}
                   count={stats.unpaid}
@@ -331,7 +334,6 @@ export const CustomerDashboard = () => {
 
 // --- KOMPONEN KECIL ---
 
-// 🚀 Menambahkan onClick pada elemen induk (div) agar bisa merespon klik
 const StatusItem: React.FC<StatusItemProps> = ({
   icon,
   count,
