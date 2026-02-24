@@ -1,15 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-/** 🚀 TAMBAHKAN Zap DAN ArrowRight */
-import {
-  Search,
-  ShoppingBag,
-  MessageCircle,
-  User,
-  MapPin,
-  Zap,
-  ArrowRight,
-} from "lucide-react";
+import { Search, ShoppingBag, MessageCircle, User, MapPin } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 
 interface AppHeaderProps {
@@ -63,7 +54,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           className="flex items-center cursor-pointer shrink-0 group active:scale-95 transition-all duration-200"
           onClick={() => navigate("/")}
         >
-          {/* 1. LOGO ICON (HP) */}
+          {/* 1. LOGO ICON (Tampilan Mobile) */}
           <div className="relative h-10 w-10 flex items-center justify-center bg-white rounded-xl shadow-xl border border-white/20 overflow-hidden p-0 md:hidden">
             <img
               src="/logo-pasarqu.png"
@@ -75,7 +66,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             />
           </div>
 
-          {/* 2. LOGO TULISAN (DESKTOP) */}
+          {/* 2. LOGO TULISAN (Tampilan Desktop) */}
           <div className="hidden md:flex flex-col text-left">
             <img
               src="/logo-text.png"
@@ -107,25 +98,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           </div>
         </div>
 
-        {/* 🚀 ACTION AREA: PORTAL + ICONS + PROFIL */}
+        {/* ACTION AREA: ICONS + PROFIL */}
         <div className="flex items-center gap-1 md:gap-3 shrink-0">
-          {/* 🛠️ TOMBOL MITRA (KHUSUS DESKTOP)
-              Ganti "Portal Mitra" menjadi "Mitra"
-          */}
-          <button
-            onClick={() => navigate("/portal")}
-            className="hidden lg:flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-full font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-orange-500 transition-all group border border-white/10"
-          >
-            <Zap
-              size={12}
-              className="text-orange-400 group-hover:text-white transition-colors"
-            />
-            Mitra
-            <ArrowRight
-              size={12}
-              className="group-hover:translate-x-1 transition-transform"
-            />
-          </button>
+          {/* ✅ REVISI: Tombol "Mitra" telah dihapus dari mode Desktop untuk menjaga kerapihan Header */}
 
           {/* Icon Chat */}
           <div

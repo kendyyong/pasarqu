@@ -13,6 +13,7 @@ import {
   Layers,
   Archive,
   ShieldCheck,
+  Camera,
 } from "lucide-react";
 
 const compressImage = (file: File): Promise<File> => {
@@ -85,7 +86,6 @@ export const ProductForm: React.FC<ProductFormProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
-
   const [normalFeePercent, setNormalFeePercent] = useState<number>(0);
   const [sembakoFeePercent, setSembakoFeePercent] = useState<number>(0);
 
@@ -105,7 +105,6 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     const fetchAdminRule = async () => {
       try {
         if (!merchantData?.market_id) return;
-
         const { data: market } = await supabase
           .from("markets")
           .select("district")
@@ -196,7 +195,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       } else {
         await supabase
           .from("products")
-          .insert([{ ...productData, status: "PENDING" }]);
+          .insert([{ ...productData, is_verified: false }]);
         showToast("BARANG DIDAFTARKAN", "success");
       }
       onSuccess();
@@ -212,48 +211,46 @@ export const ProductForm: React.FC<ProductFormProps> = ({
     (c: any) => c.id === newProduct.category_id,
   );
   const isSembako = selectedCategory?.name?.toLowerCase().includes("sembako");
-
   const activeAdminPercent = isSembako ? sembakoFeePercent : normalFeePercent;
   const adminCut = Math.round(inputPrice * (activeAdminPercent / 100));
   const netIncome = inputPrice - adminCut;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] animate-in fade-in duration-300 pb-24 text-left font-black uppercase tracking-tighter not-italic text-[12px] flex flex-col w-full">
-      <div className="bg-[#008080] px-4 py-4 flex items-center shadow-md w-full mb-6 relative z-10">
-        <div className="max-w-[1200px] mx-auto w-full flex items-center gap-4">
+    <div className="min-h-screen bg-[#F1F5F9] animate-in fade-in duration-300 pb-24 text-left font-[1000] uppercase tracking-tighter text-[12px] flex flex-col w-full overflow-x-hidden">
+      {/* HEADER */}
+      <div className="bg-[#008080] px-4 py-3.5 flex items-center shadow-md w-full sticky top-0 z-50">
+        <div className="max-w-[1200px] mx-auto w-full flex items-center gap-3">
           <button
             onClick={onBack}
-            className="p-2 text-white bg-white/10 hover:bg-white/20 rounded-md transition-all active:scale-90 flex items-center justify-center"
+            className="p-1.5 text-white bg-white/10 rounded-lg active:scale-90 transition-all"
           >
-            <ArrowLeft size={24} strokeWidth={3} />
+            <ArrowLeft size={22} strokeWidth={3} />
           </button>
-          <div className="flex flex-col text-left justify-center pt-1">
-            <span className="text-[10px] text-teal-200 tracking-widest leading-none mb-1">
-              {isEditMode ? "MODE EDIT" : "DATA BARU"}
-            </span>
-            <h2 className="text-[16px] font-[1000] text-white leading-none">
+          <div className="flex flex-col text-left justify-center pt-0.5">
+            <h2 className="text-[14px] md:text-[16px] font-[1000] text-white leading-none">
               {isEditMode ? "PERBARUI PRODUK" : "REGISTRASI PRODUK"}
             </h2>
           </div>
         </div>
       </div>
 
-      <div className="max-w-[1200px] mx-auto px-4 md:px-6 w-full flex-1">
+      <div className="max-w-[1200px] mx-auto px-2 md:px-6 w-full flex-1 mt-3">
         <form
           onSubmit={handleAddProduct}
-          className="flex flex-col lg:grid lg:grid-cols-12 gap-5 md:gap-6"
+          className="flex flex-col lg:grid lg:grid-cols-12 gap-3 md:gap-6"
         >
-          <div className="lg:col-span-7 space-y-5 md:space-y-6">
-            <div className="bg-white p-5 md:p-6 rounded-md border border-slate-200 shadow-sm space-y-4">
-              <label className="text-[11px] font-black text-slate-400 tracking-widest flex items-center gap-2">
-                <ImageIcon size={16} className="text-[#008080]" /> FOTO PRODUK
+          <div className="lg:col-span-7 space-y-3 md:space-y-6">
+            {/* 1. FOTO */}
+            <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 overflow-hidden">
+              <label className="text-[10px] font-[1000] text-slate-400 tracking-[0.2em] flex items-center gap-2">
+                <Camera size={14} className="text-[#008080]" /> FOTO PRODUK
                 (MAKS 2)
               </label>
-              <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+              <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
                 {existingImages.map((url, i) => (
                   <div
                     key={`ex-${i}`}
-                    className="min-w-[120px] w-[120px] h-[120px] md:min-w-[150px] md:h-[150px] rounded-md overflow-hidden border border-slate-200 relative group shadow-sm shrink-0"
+                    className="w-[110px] h-[110px] md:w-[150px] md:h-[150px] rounded-xl overflow-hidden border border-slate-100 relative shrink-0 shadow-sm"
                   >
                     <img
                       src={url}
@@ -268,9 +265,9 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                             prev.filter((_, idx) => idx !== i),
                           )
                         }
-                        className="absolute top-2 right-2 bg-red-500 text-white rounded-md p-1.5 shadow-md active:scale-90"
+                        className="absolute top-1.5 right-1.5 bg-red-500 text-white rounded-lg p-1.5 shadow-lg active:scale-90"
                       >
-                        <X size={16} strokeWidth={3} />
+                        <X size={14} strokeWidth={3} />
                       </button>
                     )}
                   </div>
@@ -278,7 +275,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                 {imageFiles.map((file, i) => (
                   <div
                     key={`nf-${i}`}
-                    className="min-w-[120px] w-[120px] h-[120px] md:min-w-[150px] md:h-[150px] rounded-md overflow-hidden border-2 border-[#FF6600] relative shadow-sm shrink-0"
+                    className="w-[110px] h-[110px] md:w-[150px] md:h-[150px] rounded-xl overflow-hidden border-2 border-[#FF6600] relative shrink-0 shadow-sm"
                   >
                     <img
                       src={URL.createObjectURL(file)}
@@ -292,17 +289,17 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                           prev.filter((_, idx) => idx !== i),
                         )
                       }
-                      className="absolute top-2 right-2 bg-red-500 text-white rounded-md p-1.5 shadow-md active:scale-90"
+                      className="absolute top-1.5 right-1.5 bg-red-500 text-white rounded-lg p-1.5 shadow-lg active:scale-90"
                     >
-                      <X size={16} strokeWidth={3} />
+                      <X size={14} strokeWidth={3} />
                     </button>
                   </div>
                 ))}
                 {imageFiles.length + existingImages.length < 2 && (
-                  <label className="min-w-[120px] w-[120px] h-[120px] md:min-w-[150px] md:h-[150px] bg-slate-50 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 rounded-md cursor-pointer hover:border-[#008080] hover:text-[#008080] transition-colors shrink-0">
-                    <Upload size={28} />
-                    <span className="text-[11px] font-black mt-3 tracking-widest">
-                      TAMBAH FOTO
+                  <label className="w-[110px] h-[110px] md:w-[150px] md:h-[150px] bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 rounded-xl cursor-pointer hover:border-[#008080] transition-all shrink-0">
+                    <Upload size={24} />
+                    <span className="text-[9px] font-black mt-2 tracking-widest">
+                      TAMBAH
                     </span>
                     <input
                       type="file"
@@ -312,11 +309,11 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                       onChange={(e) => {
                         if (e.target.files) {
                           const files = Array.from(e.target.files);
-                          const availableSlots =
+                          const slots =
                             2 - (imageFiles.length + existingImages.length);
                           setImageFiles((prev) => [
                             ...prev,
-                            ...files.slice(0, availableSlots),
+                            ...files.slice(0, slots),
                           ]);
                         }
                       }}
@@ -326,14 +323,15 @@ export const ProductForm: React.FC<ProductFormProps> = ({
               </div>
             </div>
 
-            <div className="bg-white p-5 md:p-6 rounded-md border border-slate-200 shadow-sm space-y-6">
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-slate-400 tracking-widest flex items-center gap-2">
-                  <Type size={16} className="text-[#008080]" /> NAMA BARANG
+            {/* 2. NAMA & DESKRIPSI */}
+            <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-5 overflow-hidden">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-[1000] text-slate-400 tracking-[0.2em] flex items-center gap-2">
+                  <Type size={14} className="text-[#008080]" /> NAMA BARANG
                 </label>
                 <input
                   required
-                  className="w-full p-4 md:p-5 rounded-md border border-slate-200 font-black text-[14px] md:text-[16px] uppercase outline-none focus:border-[#008080] transition-colors placeholder:text-slate-300 shadow-inner"
+                  className="w-full p-4 rounded-xl border border-slate-100 font-[1000] text-[13px] md:text-[15px] uppercase outline-none focus:border-[#008080] bg-slate-50/50 shadow-inner"
                   value={newProduct.name}
                   onChange={(e) =>
                     setNewProduct({
@@ -345,14 +343,14 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                 />
               </div>
 
-              <div className="space-y-2 pt-2">
-                <label className="text-[11px] font-black text-slate-400 tracking-widest flex items-center gap-2">
-                  <FileText size={16} className="text-[#008080]" /> DESKRIPSI
-                  BARANG
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-[1000] text-slate-400 tracking-[0.2em] flex items-center gap-2">
+                  <FileText size={14} className="text-[#008080]" /> DESKRIPSI
+                  DETAIL
                 </label>
                 <textarea
                   required
-                  className="w-full p-4 md:p-5 rounded-md border border-slate-200 font-black text-[12px] md:text-[14px] h-32 md:h-40 outline-none focus:border-[#008080] resize-none uppercase placeholder:text-slate-300 shadow-inner leading-snug"
+                  className="w-full p-4 rounded-xl border border-slate-100 font-[1000] text-[12px] h-28 md:h-40 outline-none focus:border-[#008080] resize-none uppercase bg-slate-50/50 shadow-inner leading-relaxed"
                   value={newProduct.description}
                   onChange={(e) =>
                     setNewProduct({
@@ -366,15 +364,16 @@ export const ProductForm: React.FC<ProductFormProps> = ({
             </div>
           </div>
 
-          <div className="lg:col-span-5 space-y-5 md:space-y-6">
-            <div className="bg-white p-5 md:p-6 rounded-md border border-slate-200 shadow-sm space-y-6">
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-slate-400 tracking-widest flex items-center gap-2">
-                  <Layers size={16} className="text-[#008080]" /> KATEGORI
+          <div className="lg:col-span-5 space-y-3 md:space-y-6">
+            {/* 3. KATEGORI & STOK (REVISI FIX OVERFLOW) */}
+            <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-5 overflow-hidden">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-[1000] text-slate-400 tracking-[0.2em] flex items-center gap-2">
+                  <Layers size={14} className="text-[#008080]" /> PILIH KATEGORI
                 </label>
                 <select
                   required
-                  className="w-full p-4 rounded-md border border-slate-200 font-black text-[12px] uppercase outline-none focus:border-[#008080] transition-colors bg-white shadow-inner"
+                  className="w-full p-4 rounded-xl border border-slate-100 font-[1000] text-[12px] uppercase outline-none focus:border-[#008080] bg-slate-50/50 shadow-inner appearance-none"
                   value={newProduct.category_id}
                   onChange={(e) =>
                     setNewProduct({
@@ -383,7 +382,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                     })
                   }
                 >
-                  <option value="">- PILIH KATEGORI -</option>
+                  <option value="">- KATEGORI PRODUK -</option>
                   {categories.map((c: any) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -392,17 +391,17 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                 </select>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-slate-400 tracking-widest flex items-center gap-2">
-                  <Archive size={16} className="text-[#008080]" /> STOK & SATUAN
-                  JUAL
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-[1000] text-slate-400 tracking-[0.2em] flex items-center gap-2">
+                  <Archive size={14} className="text-[#008080]" /> JUMLAH STOK &
+                  SATUAN
                 </label>
-                {/* 🚀 FIX: Menggunakan flex untuk menjamin kolom tidak akan jebol keluar batas */}
-                <div className="flex gap-3">
+                {/* 🚀 FIX: Menggunakan GRID responsif agar input tidak meluber keluar kotak */}
+                <div className="grid grid-cols-[1fr_80px] md:grid-cols-[1fr_90px] gap-2">
                   <input
                     type="number"
                     required
-                    className="flex-1 p-4 rounded-md border border-slate-200 font-sans font-black text-[16px] outline-none focus:border-[#008080] text-center shadow-inner"
+                    className="w-full p-3.5 rounded-xl border border-slate-100 font-sans font-[1000] text-[15px] outline-none focus:border-[#008080] text-center bg-slate-50/50 shadow-inner"
                     value={newProduct.stock}
                     onChange={(e) =>
                       setNewProduct({ ...newProduct, stock: e.target.value })
@@ -410,7 +409,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                     placeholder="0"
                   />
                   <input
-                    className="w-24 shrink-0 p-4 rounded-md border border-slate-200 font-black text-[12px] uppercase outline-none focus:border-[#008080] text-center placeholder:text-slate-300 shadow-inner"
+                    className="w-full p-3.5 rounded-xl border border-slate-100 font-[1000] text-[11px] uppercase outline-none focus:border-[#008080] text-center bg-slate-50/50 shadow-inner"
                     value={newProduct.unit}
                     onChange={(e) =>
                       setNewProduct({
@@ -424,16 +423,16 @@ export const ProductForm: React.FC<ProductFormProps> = ({
               </div>
             </div>
 
-            <div className="bg-white p-5 md:p-6 rounded-md border border-slate-200 shadow-sm space-y-6">
-              <div className="space-y-3 bg-slate-50 p-4 md:p-5 rounded-md border border-slate-200">
-                <label className="text-[11px] font-black text-slate-500 tracking-widest flex items-center gap-2">
-                  <Tag size={16} className="text-[#008080]" /> HARGA JUAL NORMAL
-                  (RP)
+            {/* 4. HARGA */}
+            <div className="bg-white p-4 md:p-6 rounded-xl border border-slate-200 shadow-sm space-y-5 overflow-hidden">
+              <div className="bg-teal-50/50 p-4 rounded-xl border border-teal-100">
+                <label className="text-[10px] font-[1000] text-teal-600 tracking-[0.2em] flex items-center gap-2 mb-2">
+                  <Tag size={14} /> HARGA JUAL NORMAL (RP)
                 </label>
                 <input
                   type="number"
                   required
-                  className="w-full p-4 rounded-md border border-slate-200 font-sans font-[1000] text-[20px] text-[#008080] outline-none focus:border-[#008080] shadow-sm bg-white"
+                  className="w-full p-4 rounded-xl border border-teal-200 font-sans font-[1000] text-[20px] text-[#008080] outline-none shadow-sm bg-white"
                   value={newProduct.price}
                   onChange={(e) =>
                     setNewProduct({ ...newProduct, price: e.target.value })
@@ -442,49 +441,30 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                 />
 
                 {inputPrice > 0 && activeAdminPercent > 0 && (
-                  <div className="bg-orange-50 p-4 rounded-md border border-orange-200 mt-4 animate-in slide-in-from-top-2 duration-300 shadow-sm">
-                    <div className="flex items-center gap-2 mb-4 border-b border-orange-200 pb-3">
-                      <ShieldCheck size={18} className="text-[#FF6600]" />
-                      <h4 className="text-[11px] md:text-[12px] font-[1000] text-[#FF6600] tracking-widest uppercase">
-                        SIMULASI PENDAPATAN
-                      </h4>
+                  <div className="mt-4 pt-4 border-t border-teal-200/50 space-y-2 uppercase text-[10px] font-[1000]">
+                    <div className="flex justify-between text-slate-400">
+                      <span>BIAYA SISTEM ({activeAdminPercent}%)</span>
+                      <span className="text-red-500">
+                        - RP {adminCut.toLocaleString()}
+                      </span>
                     </div>
-                    <div className="space-y-3 text-[12px] font-black uppercase">
-                      <div className="flex justify-between text-slate-500">
-                        <span>HARGA AWAL</span>
-                        <span className="font-sans">
-                          RP {inputPrice.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-red-500">
-                        <span>
-                          {isSembako ? "BIAYA SEMBAKO" : "BIAYA APP"} (
-                          {activeAdminPercent}%)
-                        </span>
-                        <span className="font-sans">
-                          - RP {adminCut.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-end pt-4 mt-2 border-t border-orange-200">
-                        <span className="text-[10px] md:text-[11px] text-[#008080] tracking-widest uppercase">
-                          BERSIH DITERIMA
-                        </span>
-                        <span className="text-[24px] md:text-[28px] font-[1000] text-[#008080] font-sans leading-none">
-                          RP {netIncome.toLocaleString()}
-                        </span>
-                      </div>
+                    <div className="flex justify-between items-end">
+                      <span className="text-teal-600">BERSIH DITERIMA</span>
+                      <span className="text-[18px] text-teal-700 font-sans">
+                        RP {netIncome.toLocaleString()}
+                      </span>
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-[#FF6600] tracking-widest flex items-center gap-2">
-                  <Percent size={16} /> HARGA PROMO CORET (RP)
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-[1000] text-[#FF6600] tracking-[0.2em] flex items-center gap-2">
+                  <Percent size={14} /> HARGA PROMO CORET (OPSIONAL)
                 </label>
                 <input
                   type="number"
-                  className="w-full p-4 rounded-md border border-orange-200 bg-orange-50 font-sans font-[1000] text-[16px] text-[#FF6600] outline-none focus:border-[#FF6600] placeholder:text-orange-300 shadow-inner"
+                  className="w-full p-4 rounded-xl border border-orange-100 bg-orange-50/30 font-sans font-[1000] text-[16px] text-[#FF6600] outline-none shadow-inner"
                   value={newProduct.promo_price}
                   onChange={(e) =>
                     setNewProduct({
@@ -492,26 +472,27 @@ export const ProductForm: React.FC<ProductFormProps> = ({
                       promo_price: e.target.value,
                     })
                   }
-                  placeholder="OPSIONAL"
+                  placeholder="0"
                 />
               </div>
             </div>
 
             <button
               disabled={isUploading}
-              className="w-full py-5 bg-[#FF6600] text-white rounded-md font-[1000] text-[14px] uppercase tracking-widest hover:bg-[#e65c00] active:scale-95 transition-all shadow-md disabled:bg-slate-300 flex items-center justify-center gap-3"
+              className="w-full py-5 bg-[#FF6600] text-white rounded-2xl font-[1000] text-[13px] uppercase tracking-[0.2em] hover:bg-[#e65c00] active:scale-[0.98] transition-all shadow-xl shadow-orange-500/20 disabled:bg-slate-300 flex items-center justify-center gap-3 mt-1"
             >
               {isUploading ? (
-                <Loader2 className="animate-spin" size={24} />
+                <Loader2 className="animate-spin" size={20} />
               ) : isEditMode ? (
                 "SIMPAN PERUBAHAN"
               ) : (
-                "PUBLIKASIKAN PRODUK SEKARANG"
+                "PUBLIKASIKAN BARANG"
               )}
             </button>
           </div>
         </form>
       </div>
+      <div className="h-10"></div>
     </div>
   );
 };

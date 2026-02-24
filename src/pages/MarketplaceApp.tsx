@@ -23,10 +23,10 @@ export const MarketplaceApp = () => {
   const selectedMarket = marketContext?.selectedMarket;
 
   /** * 🛠️ SYNC TYPE DATA:
-   * Menyesuaikan dengan 5 menu di MobileLayout: home, search, orders, mitra, account
+   * Kembali ke 4 menu utama: home, search, orders, account
    */
   const [activeTab, setActiveTab] = useState<
-    "home" | "search" | "orders" | "mitra" | "account"
+    "home" | "search" | "orders" | "account"
   >("home");
 
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -47,21 +47,25 @@ export const MarketplaceApp = () => {
 
   /** 🚀 HANDLE NAVIGASI TAB BAWAH */
   const handleTabChange = (tab: any) => {
-    if (tab === "mitra") {
-      navigate("/portal"); // Pintu masuk untuk penjual/kurir
-    } else if (tab === "account") {
-      navigate("/customer-dashboard"); // Pintu masuk untuk profil pembeli (SAYA)
+    if (tab === "account") {
+      /**
+       * 🛠️ LOGIKA BARU:
+       * Jika klik SAYA:
+       * 1. Jika sudah login -> ke Dashboard
+       * 2. Jika belum login -> ke Login (di mana tombol Mitra berada)
+       */
+      user ? navigate("/customer-dashboard") : navigate("/login");
     } else if (tab === "orders") {
-      navigate("/order-history"); // Pintu masuk riwayat pesanan
+      navigate("/order-history");
     } else {
-      setActiveTab(tab); // Home dan Search dikelola oleh state lokal
+      setActiveTab(tab);
     }
   };
 
   const handleCheckoutTrigger = () => {
     setIsCartOpen(false);
     if (!user) {
-      navigate("/register?redirect=checkout");
+      navigate("/login?redirect=checkout");
     } else {
       navigate("/checkout");
     }
@@ -90,17 +94,8 @@ export const MarketplaceApp = () => {
           }
         />
 
-        {/* 🛠️ AREA KONTEN UTAMA
-            pt-0: Karena Home.tsx sudah memiliki pt-[75px] sendiri untuk menghindari header.
-            pb-24: Memberi ruang agar konten tidak tertutup navigasi bawah.
-        */}
+        {/* 🛠️ AREA KONTEN UTAMA */}
         <div className="w-full max-w-[1200px] mx-auto bg-white pt-0 pb-24 text-left">
-          {/* KONTEN DINAMIS:
-              File Home.tsx sekarang sudah sangat cerdas:
-              - Menampilkan HeroOnboarding (Iklan)
-              - Menampilkan QuickActions (Navigasi Cepat)
-              - Menampilkan Katalog Produk (Bezel-less)
-          */}
           <div className="text-left overflow-hidden">
             <Home searchQuery={searchQuery} />
           </div>

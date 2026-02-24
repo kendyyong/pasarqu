@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "../../../../lib/supabaseClient";
 import {
   Plus,
@@ -7,28 +7,301 @@ import {
   Loader2,
   CheckCircle2,
   Image as ImageIcon,
-  Type,
-  Tag,
-  Link as LinkIcon,
-  Sparkles,
   Wand2,
   RefreshCw,
   Upload,
-  Info, // 🚀 Tambahan ikon Info untuk catatan
+  Info,
+  Sparkles,
+  Maximize,
+  Move,
+  Calendar,
+  Save,
 } from "lucide-react";
 import { useToast } from "../../../../contexts/ToastContext";
 import { useNavigate } from "react-router-dom";
 
+// ============================================================================
+// SUB-KOMPONEN: KARTU IKLAN (AD ITEM) - Mengelola Drag, Upload & Tanggal
+// ============================================================================
+const AdItem = ({ ad, onUpdate, onDelete, showToast }: any) => {
+  // State untuk Preview & Upload Manual
+  const [localFile, setLocalFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState(ad.image_url);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // State untuk Fitur Drag Posisi Gambar
+  const [pos, setPos] = useState({
+    x: ad.image_pos_x ?? 50,
+    y: ad.image_pos_y ?? 50,
+  });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Fungsi Pilih File (Hanya Preview, Belum Upload)
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setLocalFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
+  // Fungsi Eksekusi Upload (Tombol Simpan Gambar)
+  const executeUpload = async () => {
+    if (!localFile) return;
+    setIsUploading(true);
+    try {
+      const fileExt = localFile.name.split(".").pop();
+      const fileName = `${ad.id}-${Date.now()}.${fileExt}`;
+      const filePath = `banners/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("ads")
+        .upload(filePath, localFile);
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from("ads").getPublicUrl(filePath);
+
+      await onUpdate(ad.id, { image_url: data.publicUrl });
+      setLocalFile(null); // Reset file lokal karena sudah online
+      showToast("GAMBAR BERHASIL DIUNGGAH", "success");
+    } catch (err: any) {
+      showToast("GAGAL MENGUNGGAH", "error");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // --- LOGIKA DRAG (MOUSE & TOUCH) ---
+  const startDrag = (clientX: number, clientY: number) => {
+    if (ad.image_fit !== "cover" && !localFile) return; // Drag hanya berguna di mode cover
+    setIsDragging(true);
+    dragRef.current = { x: clientX, y: clientY };
+  };
+
+  const doDrag = (clientX: number, clientY: number) => {
+    if (!isDragging) return;
+    const dx = clientX - dragRef.current.x;
+    const dy = clientY - dragRef.current.y;
+    dragRef.current = { x: clientX, y: clientY };
+
+    setPos((prev: any) => ({
+      x: Math.max(0, Math.min(100, prev.x - dx * 0.3)), // 0.3 = Sensitivitas geser
+      y: Math.max(0, Math.min(100, prev.y - dy * 0.3)),
+    }));
+  };
+
+  const stopDrag = () => {
+    if (isDragging) {
+      setIsDragging(false);
+      onUpdate(ad.id, { image_pos_x: pos.x, image_pos_y: pos.y }); // Simpan posisi ke DB
+    }
+  };
+
+  const fitClass =
+    ad.image_fit === "contain"
+      ? "object-contain"
+      : ad.image_fit === "fill"
+        ? "object-fill"
+        : "object-cover";
+
+  return (
+    <div
+      className={`bg-white p-5 rounded-2xl shadow-sm border-2 flex flex-col xl:flex-row gap-6 transition-all relative ${ad.is_active ? "border-[#008080]" : "border-slate-200 opacity-75"}`}
+    >
+      {/* 1. AREA PREVIEW GAMBAR & DRAG */}
+      <div className="flex flex-col gap-3 w-full xl:w-[320px] shrink-0">
+        <div
+          ref={containerRef}
+          className="relative w-full h-[160px] rounded-xl overflow-hidden bg-slate-100 border-2 border-slate-200 group cursor-grab active:cursor-grabbing select-none shadow-inner"
+          onMouseDown={(e) => startDrag(e.clientX, e.clientY)}
+          onMouseMove={(e) => doDrag(e.clientX, e.clientY)}
+          onMouseUp={stopDrag}
+          onMouseLeave={stopDrag}
+          onTouchStart={(e) =>
+            startDrag(e.touches[0].clientX, e.touches[0].clientY)
+          }
+          onTouchMove={(e) =>
+            doDrag(e.touches[0].clientX, e.touches[0].clientY)
+          }
+          onTouchEnd={stopDrag}
+        >
+          <img
+            src={previewUrl}
+            className={`w-full h-full ${fitClass} bg-slate-200 pointer-events-none`}
+            style={{ objectPosition: `${pos.x}% ${pos.y}%` }}
+            alt="Preview"
+          />
+
+          {/* OVERLAY TEKS IKLAN */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex flex-col justify-end p-4 pointer-events-none">
+            <span className="text-[9px] font-[1000] bg-[#FF6600] text-white px-2 py-1 rounded-md w-fit mb-1.5 shadow-sm tracking-widest uppercase">
+              {ad.promo_tag}
+            </span>
+            <h4 className="text-white font-[1000] text-[13px] uppercase truncate drop-shadow-md tracking-tight">
+              {ad.title}
+            </h4>
+          </div>
+
+          {/* INDIKATOR DRAG */}
+          {ad.image_fit === "cover" && (
+            <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md text-white px-2 py-1 rounded-md text-[8px] font-[1000] flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              <Move size={10} /> GESER UNTUK POSISI
+            </div>
+          )}
+        </div>
+
+        {/* 🚀 TOMBOL PILIH FILE & UPLOAD EKSPLISIT */}
+        <div className="flex flex-col gap-2">
+          <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-[10px] font-[1000] flex items-center justify-center gap-2 transition-all tracking-widest border-2 border-slate-200 active:scale-95">
+            <ImageIcon size={14} strokeWidth={3} /> PILIH GAMBAR BARU
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+          </label>
+
+          {localFile && (
+            <button
+              onClick={executeUpload}
+              disabled={isUploading}
+              className="bg-[#FF6600] hover:bg-[#e65c00] text-white px-4 py-3 rounded-xl text-[10px] font-[1000] flex items-center justify-center gap-2 transition-all tracking-widest shadow-lg shadow-orange-500/30 active:scale-95"
+            >
+              {isUploading ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Upload size={16} strokeWidth={3} />
+              )}
+              {isUploading ? "MENGUNGGAH..." : "UPLOAD SEKARANG"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 2. FORM EDIT DATA & DURASI */}
+      <div className="flex-1 w-full space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-[1000] text-slate-400 uppercase tracking-widest">
+              JUDUL IKLAN
+            </label>
+            <input
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 text-[12px] font-[1000] uppercase focus:border-[#008080] focus:bg-white transition-all outline-none"
+              defaultValue={ad.title}
+              onBlur={(e) =>
+                onUpdate(ad.id, { title: e.target.value.toUpperCase() })
+              }
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-[1000] text-slate-400 uppercase tracking-widest">
+              LABEL PROMO
+            </label>
+            <input
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 text-[12px] font-[1000] uppercase focus:border-[#008080] focus:bg-white transition-all outline-none"
+              defaultValue={ad.promo_tag}
+              onBlur={(e) =>
+                onUpdate(ad.id, { promo_tag: e.target.value.toUpperCase() })
+              }
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-[1000] text-slate-400 uppercase tracking-widest">
+              TARGET LINK KLIK
+            </label>
+            <input
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 text-[12px] font-[1000] lowercase focus:border-[#008080] focus:bg-white transition-all outline-none"
+              defaultValue={ad.link_to}
+              placeholder="/contoh-link"
+              onBlur={(e) => onUpdate(ad.id, { link_to: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-[1000] text-slate-400 uppercase tracking-widest">
+              MODE TAMPILAN
+            </label>
+            <select
+              className="w-full bg-slate-50 border-2 border-slate-100 text-slate-700 rounded-xl px-4 py-3 text-[12px] font-[1000] uppercase focus:border-[#008080] transition-all outline-none appearance-none"
+              defaultValue={ad.image_fit || "cover"}
+              onChange={(e) => onUpdate(ad.id, { image_fit: e.target.value })}
+            >
+              <option value="cover">PENUH (BISA DIGESER)</option>
+              <option value="contain">PAS KOTAK (ADA CELAH)</option>
+              <option value="fill">DIPAKSA PENUH (TERTARIK)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* 🚀 SETTING DURASI WAKTU TAYANG */}
+        <div className="p-4 bg-teal-50 border-2 border-teal-100 rounded-xl space-y-3">
+          <label className="text-[10px] font-[1000] text-[#008080] uppercase tracking-widest flex items-center gap-1.5">
+            <Calendar size={14} strokeWidth={3} /> DURASI TAYANG IKLAN
+          </label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold text-teal-700 uppercase">
+                MULAI TAYANG
+              </label>
+              <input
+                type="datetime-local"
+                className="w-full bg-white border-2 border-teal-200 rounded-lg px-3 py-2 text-[11px] font-bold outline-none focus:border-[#008080]"
+                defaultValue={ad.start_date ? ad.start_date.slice(0, 16) : ""}
+                onBlur={(e) =>
+                  onUpdate(ad.id, { start_date: e.target.value || null })
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold text-teal-700 uppercase">
+                BERAKHIR PADA
+              </label>
+              <input
+                type="datetime-local"
+                className="w-full bg-white border-2 border-teal-200 rounded-lg px-3 py-2 text-[11px] font-bold outline-none focus:border-[#008080]"
+                defaultValue={ad.end_date ? ad.end_date.slice(0, 16) : ""}
+                onBlur={(e) =>
+                  onUpdate(ad.id, { end_date: e.target.value || null })
+                }
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. AKSI TOMBOL KANAN */}
+      <div className="flex xl:flex-col gap-3 border-t-2 xl:border-t-0 pt-5 xl:pt-0 xl:border-l-2 pl-0 xl:pl-5 border-slate-100 justify-center w-full xl:w-[140px] shrink-0">
+        <button
+          onClick={() => onUpdate(ad.id, { is_active: !ad.is_active })}
+          className={`w-full py-3.5 rounded-xl font-[1000] text-[10px] tracking-widest flex flex-col items-center justify-center gap-1.5 transition-all border-2 active:scale-95 ${ad.is_active ? "text-[#008080] bg-teal-50 border-teal-200 shadow-sm" : "text-slate-400 bg-slate-50 border-slate-200"}`}
+        >
+          <CheckCircle2 size={20} strokeWidth={3} />{" "}
+          {ad.is_active ? "TAYANG" : "NONAKTIF"}
+        </button>
+        <button
+          onClick={() => onDelete(ad.id)}
+          className="w-full py-3.5 rounded-xl text-red-500 bg-red-50 hover:bg-red-500 hover:text-white font-[1000] text-[10px] tracking-widest flex flex-col items-center justify-center gap-1.5 transition-all border-2 border-red-100 active:scale-95"
+        >
+          <Trash2 size={20} strokeWidth={3} /> HAPUS
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// MAIN COMPONENT: MANAGE ADS
+// ============================================================================
 export const ManageAds = () => {
   const [ads, setAds] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isUploading, setIsUploading] = useState<string | null>(null);
   const [aiIdea, setAiIdea] = useState("");
   const { showToast } = useToast();
   const navigate = useNavigate();
 
-  // --- FETCH DATA IKLAN ---
   const fetchAds = async () => {
     setIsLoading(true);
     try {
@@ -36,7 +309,6 @@ export const ManageAds = () => {
         .from("ads")
         .select("*")
         .order("sort_order", { ascending: true });
-
       if (error) throw error;
       setAds(data || []);
     } catch (err: any) {
@@ -50,7 +322,6 @@ export const ManageAds = () => {
     fetchAds();
   }, []);
 
-  // --- FUNGSI TAMBAH MANUAL BARU ---
   const handleAddManual = async () => {
     try {
       const { error } = await supabase.from("ads").insert([
@@ -62,19 +333,19 @@ export const ManageAds = () => {
           link_to: "/",
           sort_order: ads.length + 1,
           is_active: false,
+          image_fit: "cover",
+          image_pos_x: 50,
+          image_pos_y: 50,
         },
       ]);
-
       if (error) throw error;
       showToast("DRAF IKLAN DIBUAT", "success");
       fetchAds();
     } catch (err) {
-      console.error(err);
       showToast("GAGAL MENAMBAH IKLAN", "error");
     }
   };
 
-  // --- FUNGSI GENERATE AI ---
   const generateAdWithAI = async () => {
     if (!aiIdea) return showToast("MASUKKAN TOPIK PROMO", "error");
     setIsGenerating(true);
@@ -85,7 +356,6 @@ export const ManageAds = () => {
         { title: `✨ SPESIAL: ${aiIdea.toUpperCase()}`, tag: "TERBATAS" },
       ];
       const result = variations[Math.floor(Math.random() * variations.length)];
-
       const { error } = await supabase.from("ads").insert([
         {
           title: result.title,
@@ -95,9 +365,11 @@ export const ManageAds = () => {
           link_to: "/",
           sort_order: ads.length + 1,
           is_active: true,
+          image_fit: "cover",
+          image_pos_x: 50,
+          image_pos_y: 50,
         },
       ]);
-
       if (error) throw error;
       showToast("AI BERHASIL MEMBUAT IKLAN", "success");
       setAiIdea("");
@@ -109,133 +381,105 @@ export const ManageAds = () => {
     }
   };
 
-  // --- FUNGSI UPLOAD GAMBAR ---
-  const handleImageUpload = async (id: string, file: File) => {
-    if (!file) return;
-    setIsUploading(id);
-
-    try {
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${id}-${Date.now()}.${fileExt}`;
-      const filePath = `banners/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("ads")
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage.from("ads").getPublicUrl(filePath);
-
-      await handleUpdate(id, { image_url: data.publicUrl });
-      showToast("GAMBAR BERHASIL DIUNGGAH", "success");
-    } catch (err: any) {
-      console.error(err);
-      showToast("GAGAL MENGUNGGAH GAMBAR", "error");
-    } finally {
-      setIsUploading(null);
-    }
-  };
-
-  // --- FUNGSI UPDATE DATA ---
   const handleUpdate = async (id: string, updates: any) => {
     const { error } = await supabase.from("ads").update(updates).eq("id", id);
     if (!error) {
-      showToast("TERSIMPAN", "success");
-      fetchAds();
+      showToast("PERUBAHAN TERSIMPAN", "success");
+      // Update state lokal agar UI langsung responsif tanpa perlu fetch ulang
+      setAds((prev) =>
+        prev.map((ad) => (ad.id === id ? { ...ad, ...updates } : ad)),
+      );
+    } else {
+      showToast("GAGAL MENYIMPAN", "error");
     }
   };
 
-  // --- FUNGSI HAPUS ---
   const handleDelete = async (id: string) => {
-    if (window.confirm("HAPUS IKLAN?")) {
+    if (window.confirm("HAPUS IKLAN INI?")) {
       const { error } = await supabase.from("ads").delete().eq("id", id);
       if (!error) {
-        fetchAds();
-        showToast("DIHAPUS", "success");
+        setAds((prev) => prev.filter((ad) => ad.id !== id));
+        showToast("IKLAN DIHAPUS", "success");
       }
     }
   };
 
   return (
-    <div className="p-4 md:p-6 font-black uppercase tracking-tighter text-left bg-slate-50">
+    <div className="p-4 md:p-6 font-[1000] uppercase tracking-tighter text-left bg-slate-50 min-h-screen">
       <div className="max-w-[1200px] mx-auto">
         {/* HEADER AREA */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 border-b-4 border-[#008080] pb-4">
           <div>
             <button
               onClick={() => navigate("/")}
-              className="flex items-center gap-2 text-slate-400 hover:text-[#008080] text-[9px] tracking-widest mb-2 transition-all"
+              className="flex items-center gap-2 text-slate-400 hover:text-[#008080] text-[10px] tracking-widest mb-2 transition-all active:scale-95"
             >
-              <ArrowLeft size={12} /> KEMBALI
+              <ArrowLeft size={14} strokeWidth={3} /> KEMBALI
             </button>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-slate-900 rounded-md text-white shadow-md">
-                <ImageIcon size={20} />
+              <div className="p-2.5 bg-slate-900 rounded-xl text-white shadow-lg">
+                <ImageIcon size={24} strokeWidth={2.5} />
               </div>
-              <h1 className="text-xl font-black text-slate-900 leading-none">
+              <h1 className="text-2xl font-[1000] text-slate-900 leading-none tracking-tight">
                 MANAJEMEN <span className="text-[#FF6600]">IKLAN</span>
               </h1>
             </div>
           </div>
           <button
             onClick={handleAddManual}
-            className="bg-slate-900 hover:bg-[#008080] text-white px-6 py-2.5 rounded-md font-black text-[11px] flex items-center gap-2 border-b-4 border-black/20 transition-all active:scale-95"
+            className="bg-slate-900 hover:bg-[#008080] text-white px-6 py-3.5 rounded-xl font-[1000] text-[12px] flex items-center gap-2 shadow-lg transition-all active:scale-95 tracking-widest"
           >
-            <Plus size={16} /> TAMBAH MANUAL
+            <Plus size={18} strokeWidth={3} /> TAMBAH MANUAL
           </button>
         </div>
 
-        {/* 🚀 CATATAN UKURAN GAMBAR (NEW) */}
-        <div className="mb-4 bg-orange-50 border border-orange-200 p-4 rounded-md flex items-start gap-3">
-          <Info size={20} className="text-[#FF6600] shrink-0 mt-0.5" />
+        {/* CATATAN PANDUAN */}
+        <div className="mb-6 bg-orange-50 border-2 border-orange-200 p-4 rounded-xl flex items-start gap-3 shadow-sm">
+          <Info
+            size={24}
+            strokeWidth={2.5}
+            className="text-[#FF6600] shrink-0 mt-0.5"
+          />
           <div>
-            <h4 className="text-[11px] text-[#FF6600] font-black tracking-widest">
-              PANDUAN UKURAN GAMBAR IKLAN
+            <h4 className="text-[12px] text-[#FF6600] font-[1000] tracking-widest mb-1.5">
+              PANDUAN UKURAN & POSISI GAMBAR
             </h4>
-            <p className="text-[10px] text-slate-600 font-bold mt-1 leading-relaxed">
-              Untuk tampilan slider yang sempurna dan tidak terpotong di
-              aplikasi, gunakan gambar dengan rasio melebar (Landscape){" "}
-              <strong>2:1</strong>. <br />
-              Ukuran resolusi terbaik yang direkomendasikan adalah:{" "}
-              <span className="bg-white px-2 py-0.5 rounded text-[#008080] border border-slate-200">
-                1200 x 600 Pixels
-              </span>{" "}
-              atau{" "}
-              <span className="bg-white px-2 py-0.5 rounded text-[#008080] border border-slate-200">
-                800 x 400 Pixels
-              </span>
-              .
+            <p className="text-[10px] text-slate-600 font-bold leading-relaxed tracking-wider">
+              Gunakan rasio <strong>2:1</strong>. Pilih mode{" "}
+              <strong>PENUH</strong> lalu klik & geser{" "}
+              <Move size={10} className="inline inline-block mx-0.5" /> gambar
+              untuk mengatur posisi titik fokus agar tidak terpotong saat tayang
+              di aplikasi pelanggan.
             </p>
           </div>
         </div>
 
         {/* AI PANEL */}
-        <div className="mb-6 bg-indigo-900 p-5 rounded-md shadow-lg relative overflow-hidden border-b-4 border-indigo-500">
+        <div className="mb-8 bg-indigo-900 p-5 md:p-6 rounded-2xl shadow-xl relative overflow-hidden border-b-4 border-indigo-500">
           <div className="relative z-10 flex flex-col md:flex-row gap-4 items-center">
             <div className="flex items-center gap-2 shrink-0">
-              <Wand2 className="text-indigo-400" size={18} />
-              <h3 className="font-black text-white text-[10px]">
+              <Wand2 className="text-indigo-400" size={20} strokeWidth={3} />
+              <h3 className="font-[1000] text-white text-[12px] tracking-widest">
                 AI COPYWRITER
               </h3>
             </div>
             <input
               type="text"
-              placeholder="IDE PROMO..."
-              className="flex-1 bg-white/10 border border-white/20 rounded-md px-4 py-2.5 text-white placeholder:text-indigo-300 font-black text-[11px] outline-none"
+              placeholder="CONTOH: PROMO SEMBAKO MURAH..."
+              className="flex-1 w-full bg-white/10 border-2 border-white/20 rounded-xl px-5 py-3.5 text-white placeholder:text-indigo-300 font-[1000] text-[12px] outline-none focus:border-indigo-400 transition-all"
               value={aiIdea}
               onChange={(e) => setAiIdea(e.target.value)}
             />
             <button
               onClick={generateAdWithAI}
               disabled={isGenerating}
-              className="bg-white text-indigo-900 px-6 py-2.5 rounded-md font-black text-[10px] flex items-center gap-2 border-b-4 border-indigo-200 active:scale-95 transition-all"
+              className="w-full md:w-auto bg-white text-indigo-900 px-8 py-3.5 rounded-xl font-[1000] text-[11px] flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all tracking-widest"
             >
               {isGenerating ? (
-                <RefreshCw className="animate-spin" size={14} />
+                <RefreshCw className="animate-spin" size={16} strokeWidth={3} />
               ) : (
-                <Sparkles size={14} />
-              )}
+                <Sparkles size={16} strokeWidth={3} />
+              )}{" "}
               GENERATE
             </button>
           </div>
@@ -243,166 +487,32 @@ export const ManageAds = () => {
 
         {/* LIST IKLAN */}
         {isLoading ? (
-          <div className="py-20 text-center">
+          <div className="py-24 text-center flex flex-col items-center justify-center">
             <Loader2
-              className="animate-spin text-[#008080] mx-auto"
-              size={40}
+              className="animate-spin text-[#008080] mb-4"
+              size={48}
+              strokeWidth={3}
             />
-            <p className="mt-4 text-[10px] text-slate-400 font-black tracking-widest">
-              MEMUAT DATA IKLAN...
+            <p className="text-[12px] text-slate-400 font-[1000] tracking-[0.3em]">
+              MENARIK DATA IKLAN...
             </p>
           </div>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-5">
             {ads.map((ad, index) => (
-              <div
+              <AdItem
                 key={ad.id}
-                className={`bg-white p-4 rounded-md shadow-sm border flex flex-col xl:flex-row items-center gap-6 transition-all relative ${
-                  ad.is_active
-                    ? "border-[#008080]"
-                    : "border-slate-200 opacity-70"
-                }`}
-              >
-                {/* Lencana Urutan */}
-                <div className="absolute -left-2 -top-2 bg-slate-900 text-white w-6 h-6 rounded flex items-center justify-center text-[10px] font-black shadow-md z-10">
-                  {index + 1}
-                </div>
-
-                {/* PREVIEW GAMBAR - Menggunakan object-contain agar menyesuaikan frame tanpa dipotong */}
-                <div className="relative w-full xl:w-[280px] h-[140px] rounded-md overflow-hidden bg-slate-200 shrink-0 border border-slate-300 group">
-                  <img
-                    src={ad.image_url}
-                    className="w-full h-full object-contain"
-                    alt="Preview Iklan"
-                  />
-
-                  {/* Overlay gradien untuk memperjelas teks preview */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-3 pointer-events-none">
-                    <span className="text-[8px] font-black bg-[#FF6600] text-white px-1.5 py-0.5 rounded w-fit mb-1 shadow-sm">
-                      {ad.promo_tag}
-                    </span>
-                    <h4 className="text-white font-black text-[11px] uppercase truncate drop-shadow-md">
-                      {ad.title}
-                    </h4>
-                  </div>
-
-                  {/* TOMBOL UPLOAD CEPAT DI ATAS GAMBAR */}
-                  <div className="absolute inset-0 bg-slate-900/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                    <label className="cursor-pointer bg-[#008080] hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-[10px] font-black flex items-center gap-2 shadow-xl transform transition-transform active:scale-95">
-                      {isUploading === ad.id ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <Upload size={14} />
-                      )}
-                      {isUploading === ad.id ? "MENGUNGGAH..." : "GANTI GAMBAR"}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            handleImageUpload(ad.id, e.target.files[0]);
-                          }
-                        }}
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                {/* FORM EDIT DATA */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 w-full">
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black text-slate-400 uppercase">
-                      JUDUL
-                    </label>
-                    <input
-                      className="w-full bg-slate-50 border border-slate-100 rounded-md px-3 py-2 text-[11px] font-black uppercase focus:outline-none focus:border-[#008080]"
-                      defaultValue={ad.title}
-                      onBlur={(e) =>
-                        handleUpdate(ad.id, {
-                          title: e.target.value.toUpperCase(),
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black text-slate-400 uppercase">
-                      TAG PROMO
-                    </label>
-                    <input
-                      className="w-full bg-slate-50 border border-slate-100 rounded-md px-3 py-2 text-[11px] font-black uppercase focus:outline-none focus:border-[#008080]"
-                      defaultValue={ad.promo_tag}
-                      onBlur={(e) =>
-                        handleUpdate(ad.id, {
-                          promo_tag: e.target.value.toUpperCase(),
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black text-slate-400 uppercase flex items-center justify-between">
-                      <span>IMAGE URL (MANUAL)</span>
-                      <a
-                        href={ad.image_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[#008080] hover:underline"
-                      >
-                        LIHAT ASLI
-                      </a>
-                    </label>
-                    <input
-                      className="w-full bg-slate-50 border border-slate-100 rounded-md px-3 py-2 text-[11px] font-black focus:outline-none focus:border-[#008080]"
-                      defaultValue={ad.image_url}
-                      onBlur={(e) =>
-                        handleUpdate(ad.id, { image_url: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black text-slate-400 uppercase">
-                      TARGET LINK (KLIK IKLAN)
-                    </label>
-                    <input
-                      className="w-full bg-slate-50 border border-slate-100 rounded-md px-3 py-2 text-[11px] font-black focus:outline-none focus:border-[#008080]"
-                      defaultValue={ad.link_to}
-                      onBlur={(e) =>
-                        handleUpdate(ad.id, { link_to: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-
-                {/* AKSI TOMBOL KANAN */}
-                <div className="flex xl:flex-col gap-2 border-t xl:border-t-0 pt-4 xl:pt-0 xl:border-l pl-0 xl:pl-4 border-slate-100 justify-end w-full xl:w-auto">
-                  <button
-                    onClick={() =>
-                      handleUpdate(ad.id, { is_active: !ad.is_active })
-                    }
-                    className={`px-4 xl:px-2 py-2 rounded-md font-black text-[10px] flex items-center gap-2 justify-center transition-all border ${
-                      ad.is_active
-                        ? "text-teal-700 bg-teal-50 hover:bg-teal-100 border-teal-200"
-                        : "text-slate-500 bg-slate-100 hover:bg-slate-200 border-slate-200"
-                    }`}
-                  >
-                    <CheckCircle2 size={16} />{" "}
-                    {ad.is_active ? "AKTIF TAYANG" : "NONAKTIF"}
-                  </button>
-                  <button
-                    onClick={() => handleDelete(ad.id)}
-                    className="px-4 xl:px-2 py-2 rounded-md text-red-600 bg-red-50 hover:bg-red-100 font-black text-[10px] flex items-center gap-2 justify-center transition-all border border-red-200"
-                  >
-                    <Trash2 size={16} /> HAPUS IKLAN
-                  </button>
-                </div>
-              </div>
+                ad={{ ...ad, index }}
+                onUpdate={handleUpdate}
+                onDelete={handleDelete}
+                showToast={showToast}
+              />
             ))}
           </div>
         )}
 
-        {/* FOOTER NOTICE */}
-        <div className="mt-6 bg-slate-900 p-3 rounded-md text-center border-b-4 border-[#FF6600]">
-          <p className="text-[9px] text-white/50 font-black tracking-widest uppercase">
+        <div className="mt-8 bg-slate-900 p-4 rounded-xl text-center border-b-4 border-[#FF6600] shadow-lg">
+          <p className="text-[10px] text-white/70 font-[1000] tracking-[0.4em] uppercase">
             SINKRONISASI GLOBAL KE APLIKASI PASARQU AKTIF
           </p>
         </div>

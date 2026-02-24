@@ -6,13 +6,14 @@ import {
   ChevronRight,
   UserPlus,
   Shield,
+  Zap,
 } from "lucide-react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 export const PortalLoginPage = () => {
   const navigate = useNavigate();
 
-  // --- LOGIKA RAHASIA SUPER ADMIN (GOD MODE) ---
+  // --- LOGIKA RAHASIA SUPER ADMIN (TETAP AMAN) ---
   const [clickCount, setClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
 
@@ -23,7 +24,6 @@ export const PortalLoginPage = () => {
     } else {
       const newCount = clickCount + 1;
       setClickCount(newCount);
-
       if (newCount === 5) {
         navigate("/login/master");
         setClickCount(0);
@@ -33,194 +33,212 @@ export const PortalLoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-6 font-sans relative overflow-hidden text-left">
-      {/* BACKGROUND DECORATION */}
-      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-teal-500/10 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-slate-900/[0.03] rounded-full blur-[120px] pointer-events-none"></div>
+    // BACKGROUND: Deep Tosca Galactic
+    <div className="h-[100dvh] w-screen bg-gradient-to-br from-[#004d4d] via-[#003333] to-[#002222] flex flex-col items-center px-5 font-sans relative overflow-hidden text-left transition-colors duration-700">
+      {/* --- DEKORASI BACKGROUND --- */}
+      <div
+        className="absolute inset-0 opacity-[0.08] pointer-events-none"
+        style={{
+          backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.8) 1px, transparent 0)`,
+          backgroundSize: "24px 24px",
+        }}
+      ></div>
+      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#008080]/30 rounded-full blur-[120px] pointer-events-none mix-blend-screen"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-[#FF6600]/20 rounded-full blur-[120px] pointer-events-none mix-blend-screen"></div>
 
-      {/* TOP NAVIGATION */}
-      <div className="absolute top-0 left-0 w-full p-8 flex justify-between items-center z-20 max-w-7xl mx-auto">
-        <Link
-          to="/"
-          className="flex items-center gap-2 text-slate-400 hover:text-teal-600 transition-all text-[10px] font-black uppercase tracking-[0.2em] group"
+      {/* --- TOP NAVIGATION --- */}
+      <div className="absolute top-0 left-0 w-full p-5 z-20">
+        <button
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 border border-white/20 rounded-full text-white/80 hover:text-white hover:bg-white/20 backdrop-blur-md transition-all text-[10px] font-black uppercase tracking-[0.2em] group active:scale-95"
         >
           <ArrowLeft
             size={16}
             className="group-hover:-translate-x-1 transition-transform"
           />
-          Kembali ke Beranda
-        </Link>
+          <span className="hidden sm:inline">KEMBALI</span>
+        </button>
       </div>
 
-      <div className="relative z-10 w-full max-w-[440px] flex flex-col items-center">
-        {/* HERO SECTION */}
-        <div className="text-center mb-10">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] mb-4">
-            Ekosistem Digital
-          </p>
-          <h1 className="text-4xl md:text-5xl font-black uppercase tracking-tighter text-slate-900 leading-none">
-            <span className="text-orange-500">MITRA</span>{" "}
-            <span className="text-teal-500">PASARQU</span>
-          </h1>
-          <p className="mt-4 text-slate-400 text-[10px] font-bold uppercase tracking-widest leading-relaxed max-w-[320px] mx-auto">
-            Solusi Terpadu Untuk Pertumbuhan Ekonomi Lokal Kalimantan.
-          </p>
+      {/* --- KONTEN UTAMA --- */}
+      <div className="relative z-10 w-full max-w-[460px] h-full flex flex-col justify-between pt-24 pb-10 animate-in slide-in-from-bottom-8 duration-700">
+        {/* BLOK 1: ATAS (LOGO & VISI) */}
+        <div className="flex flex-col items-center flex-shrink-0 w-full">
+          {/* LOGO PASARQU (RAKSASA) */}
+          <div
+            onClick={handleSecretClick}
+            className="mb-6 select-none outline-none cursor-default"
+            style={{ WebkitTapHighlightColor: "transparent" }}
+          >
+            <img
+              src="/logo-text.png"
+              alt="PasarQu Logo"
+              className="h-16 md:h-24 w-auto object-contain"
+              style={{
+                filter:
+                  "drop-shadow(1.5px 1.5px 0px white) drop-shadow(-1.5px -1.5px 0px white) drop-shadow(1.5px -1.5px 0px white) drop-shadow(-1.5px 1.5px 0px white)",
+              }}
+            />
+          </div>
+
+          <div className="w-full">
+            <div className="flex justify-center w-full">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 mb-4 backdrop-blur-md">
+                <Zap size={12} className="text-[#FF6600]" fill="currentColor" />
+                <span className="text-[9px] md:text-[10px] font-black text-white/80 uppercase tracking-[0.3em]">
+                  EKOSISTEM DIGITAL
+                </span>
+              </div>
+            </div>
+
+            {/* ✅ REVISI: Teks dilebarkan sesuai garis luar kolom (Full Width) & Rata Kanan Kiri */}
+            <p className="w-full text-teal-100/80 text-[10px] md:text-[12px] font-black uppercase tracking-[0.1em] md:tracking-widest leading-relaxed border-l-2 border-[#FF6600] pl-3 text-justify">
+              SOLUSI TERPADU UNTUK MEMAJUKAN PERTUMBUHAN EKONOMI LOKAL DAN UMKM.
+            </p>
+          </div>
         </div>
 
-        {/* MAIN CARDS */}
-        <div className="w-full space-y-4">
+        {/* BLOK 2: TENGAH (KARTU AKSES) */}
+        <div className="w-full flex-1 flex flex-col justify-center gap-4 md:gap-5">
           <PortalCard
-            icon={<Store size={26} />}
-            title="Akses Mitra Toko"
-            desc="Kelola operasional, stok, dan pesanan"
+            icon={<Store className="w-6 h-6" />}
+            title="AKSES MITRA TOKO"
+            desc="KELOLA OPERASIONAL, STOK, DAN PESANAN"
             theme="teal"
             onClick={() => navigate("/login/toko")}
           />
 
           <PortalCard
-            icon={<Truck size={26} />}
-            title="Akses Mitra Kurir"
-            desc="Pantau pengiriman dan raih pendapatan"
+            icon={<Truck className="w-6 h-6" />}
+            title="AKSES MITRA KURIR"
+            desc="PANTAU PENGIRIMAN DAN RAIH PENDAPATAN"
             theme="orange"
             onClick={() => navigate("/login/kurir")}
           />
 
-          {/* DUAL ACTION: DAFTAR */}
-          <div className="mt-8 grid grid-cols-2 gap-3">
-            {/* ✅ FIXED: Arahkan ke /merchant-promo sesuai file yang Juragan berikan */}
+          <div className="mt-2 grid grid-cols-2 gap-4">
             <button
               onClick={() => navigate("/merchant-promo")}
-              className="flex items-center justify-center gap-2 p-4 bg-white border border-slate-100 rounded-2xl hover:bg-teal-50 hover:border-teal-100 transition-all group shadow-sm active:scale-95"
+              className="flex items-center justify-center gap-2 p-4 bg-[#008080] rounded-[1.2rem] md:rounded-2xl hover:bg-teal-600 transition-all group shadow-[0_0_20px_-5px_rgba(0,128,128,0.5)] active:scale-95 border border-teal-500/50"
             >
-              <UserPlus size={14} className="text-teal-600" />
-              <span className="text-[9px] font-black uppercase text-slate-600 tracking-tighter">
-                Daftar Toko
+              <UserPlus size={14} className="text-white" />
+              <span className="text-[10px] md:text-[11px] font-black uppercase text-white tracking-widest">
+                DAFTAR TOKO
               </span>
             </button>
 
-            {/* ✅ FIXED: Arahkan ke /promo/kurir */}
             <button
               onClick={() => navigate("/promo/kurir")}
-              className="flex items-center justify-center gap-2 p-4 bg-white border border-slate-100 rounded-2xl hover:bg-orange-50 hover:border-orange-100 transition-all group shadow-sm active:scale-95"
+              className="flex items-center justify-center gap-2 p-4 bg-[#FF6600] rounded-[1.2rem] md:rounded-2xl hover:bg-orange-500 transition-all group shadow-[0_0_20px_-5px_rgba(255,102,0,0.5)] active:scale-95 border border-orange-500/50"
             >
-              <UserPlus size={14} className="text-orange-600" />
-              <span className="text-[9px] font-black uppercase text-slate-600 tracking-tighter">
-                Daftar Kurir
+              <UserPlus size={14} className="text-white" />
+              <span className="text-[10px] md:text-[11px] font-black uppercase text-white tracking-widest">
+                DAFTAR KURIR
               </span>
             </button>
           </div>
         </div>
 
-        {/* STATS SECTION */}
-        <div className="mt-12 w-full flex justify-between px-4 py-6 bg-slate-50/50 rounded-[2rem] border border-white/50 backdrop-blur-sm shadow-inner">
-          <div className="text-center">
-            <div className="text-[12px] font-black text-slate-800">500+</div>
-            <div className="text-[7px] font-black text-slate-400 uppercase tracking-widest">
-              Mitra Toko
+        {/* BLOK 3: BAWAH (STATISTIK) */}
+        <div className="flex flex-col flex-shrink-0 w-full mt-4">
+          <div className="w-full flex justify-between px-4 py-4 md:py-5 bg-white/5 rounded-[1.5rem] md:rounded-[2rem] border border-white/10 backdrop-blur-md shadow-2xl mb-6">
+            <div className="text-center flex-1">
+              <div className="text-[16px] md:text-[20px] font-[1000] text-white tracking-tighter">
+                500+
+              </div>
+              <div className="text-[8px] font-black text-[#FF6600] uppercase tracking-[0.2em] mt-0.5">
+                MITRA TOKO
+              </div>
+            </div>
+            <div className="w-[1px] bg-white/10"></div>
+            <div className="text-center flex-1">
+              <div className="text-[16px] md:text-[20px] font-[1000] text-white tracking-tighter">
+                24/7
+              </div>
+              <div className="text-[8px] font-black text-[#008080] uppercase tracking-[0.2em] mt-0.5">
+                SUPPORT
+              </div>
+            </div>
+            <div className="w-[1px] bg-white/10"></div>
+            <div className="text-center flex-1">
+              <div className="text-[16px] md:text-[20px] font-[1000] text-white tracking-tighter">
+                100%
+              </div>
+              <div className="text-[8px] font-black text-teal-100/60 uppercase tracking-[0.2em] mt-0.5">
+                UMKM LOKAL
+              </div>
             </div>
           </div>
-          <div className="w-[1px] bg-slate-200"></div>
-          <div className="text-center">
-            <div className="text-[12px] font-black text-slate-800">24/7</div>
-            <div className="text-[7px] font-black text-slate-400 uppercase tracking-widest">
-              Support
-            </div>
-          </div>
-          <div className="w-[1px] bg-slate-200"></div>
-          <div className="text-center">
-            <div className="text-[12px] font-black text-slate-800">100%</div>
-            <div className="text-[7px] font-black text-slate-400 uppercase tracking-widest">
-              Lokal Kaltim
-            </div>
-          </div>
-        </div>
 
-        {/* FOOTER INFO & SECRET ACCESS */}
-        <div className="mt-10 text-center w-full">
-          <div className="flex justify-center items-center gap-6 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+          <div className="flex justify-center items-center gap-4 text-[9px] font-black text-teal-100/60 uppercase tracking-[0.2em]">
             <button
               onClick={() => navigate("/info/bantuan")}
-              className="hover:text-teal-600 transition-colors"
+              className="hover:text-white transition-colors"
             >
-              Bantuan
+              BANTUAN
             </button>
-            <span className="text-slate-200">•</span>
-
+            <span className="text-white/20">•</span>
             <button
               onClick={() => navigate("/login/admin-wilayah")}
-              className="flex items-center gap-1.5 hover:text-slate-900 transition-all opacity-40 hover:opacity-100 group"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 rounded-lg border border-white/10 hover:border-[#008080]/50 hover:bg-[#008080]/20 hover:text-white transition-all group backdrop-blur-sm"
             >
               <Shield
-                size={12}
-                className="group-hover:text-teal-600 transition-colors"
+                size={10}
+                className="text-teal-100/60 group-hover:text-[#008080] transition-colors"
               />
-              Admin Wilayah
+              ADMIN WILAYAH
             </button>
-
-            <span className="text-slate-200">•</span>
+            <span className="text-white/20">•</span>
             <button
               onClick={() => navigate("/info/legal")}
-              className="hover:text-teal-600 transition-colors"
+              className="hover:text-white transition-colors"
             >
-              Legalitas
+              LEGALITAS
             </button>
           </div>
-
-          {/* TOMBOL RAHASIA SUPER ADMIN */}
-          <button
-            onClick={handleSecretClick}
-            className="mt-8 text-[8px] font-bold text-slate-300 hover:text-slate-400 uppercase tracking-[0.5em] cursor-pointer select-none active:scale-95 transition-all"
-          >
-            PASARQU PORTAL{" "}
-            <span className={clickCount > 0 ? "text-teal-500/50" : ""}>
-              v2.0
-            </span>
-          </button>
         </div>
       </div>
     </div>
   );
 };
 
+// --- KOMPONEN KARTU PORTAL ---
 const PortalCard = ({ icon, title, desc, onClick, theme }: any) => {
   const isTeal = theme === "teal";
+  const colorAccent = isTeal ? "text-[#008080]" : "text-[#FF6600]";
+  const bgIcon = isTeal ? "bg-[#008080]/10" : "bg-[#FF6600]/10";
+  const bgHover = isTeal
+    ? "group-hover:bg-[#008080]"
+    : "group-hover:bg-[#FF6600]";
+  const borderCardHover = isTeal
+    ? "group-hover:border-[#008080]/50"
+    : "group-hover:border-[#FF6600]/50";
+
   return (
     <button
       onClick={onClick}
-      className={`
-        w-full p-6 bg-white border border-slate-100 rounded-[2rem] 
-        flex items-center gap-5 transition-all duration-300 
-        hover:shadow-[0_20px_50px_rgba(0,0,0,0.05)] hover:-translate-y-1 
-        active:scale-[0.98] group relative overflow-hidden
-      `}
+      className={`w-full p-5 md:p-6 bg-white/5 backdrop-blur-md border border-white/10 rounded-[1.5rem] md:rounded-[2rem] flex items-center gap-4 transition-all duration-300 active:scale-[0.98] group relative overflow-hidden ${borderCardHover} hover:-translate-y-1 shadow-lg`}
     >
       <div
-        className={`absolute -right-4 -top-4 w-20 h-20 blur-3xl rounded-full opacity-0 group-hover:opacity-20 transition-opacity ${isTeal ? "bg-teal-500" : "bg-orange-500"}`}
+        className={`absolute left-0 top-0 bottom-0 w-1.5 ${isTeal ? "bg-[#008080]" : "bg-[#FF6600]"} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}
       ></div>
       <div
-        className={`
-        w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500
-        ${isTeal ? "bg-teal-50 text-teal-600 group-hover:bg-teal-600 group-hover:text-white" : "bg-orange-50 text-orange-600 group-hover:bg-orange-600 group-hover:text-white"}
-      `}
+        className={`w-12 h-12 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center transition-all duration-300 border ${colorAccent} ${bgIcon} ${bgHover} group-hover:text-white group-hover:scale-110 shadow-sm group-hover:border-transparent`}
       >
         {icon}
       </div>
       <div className="text-left flex-1">
-        <h3 className="font-black uppercase text-slate-800 tracking-tight text-sm mb-1 group-hover:text-teal-950 transition-colors">
+        <h3 className="font-[1000] uppercase text-white tracking-tighter text-[13px] md:text-[15px] mb-0.5 group-hover:translate-x-1 transition-transform duration-300">
           {title}
         </h3>
-        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide leading-tight group-hover:text-slate-500">
+        <p className="text-[9px] md:text-[10px] text-teal-100/70 font-black uppercase tracking-widest leading-relaxed">
           {desc}
         </p>
       </div>
       <div
-        className={`
-        w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300
-        bg-slate-50 text-slate-300 group-hover:scale-110 
-        ${isTeal ? "group-hover:bg-teal-50 group-hover:text-teal-600" : "group-hover:bg-orange-50 group-hover:text-orange-600"}
-      `}
+        className={`w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center bg-white/5 border border-white/10 text-white/50 transition-all duration-300 group-hover:scale-110 ${isTeal ? "group-hover:bg-[#008080]/20 group-hover:text-[#008080] group-hover:border-[#008080]/50" : "group-hover:bg-[#FF6600]/20 group-hover:text-[#FF6600] group-hover:border-[#FF6600]/50"}`}
       >
-        <ChevronRight size={18} strokeWidth={3} />
+        <ChevronRight size={18} strokeWidth={4} />
       </div>
     </button>
   );
