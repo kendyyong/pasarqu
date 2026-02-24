@@ -10,7 +10,9 @@ import { PasarQuPay } from "../../pages/customer/components/PasarQuPay";
 import { TermsCashback } from "../../pages/customer/components/TermsCashback";
 import { CheckoutPaymentPage } from "../../pages/checkout/CheckoutPaymentPage";
 import { ProtectedRoute } from "../../components/layout/ProtectedRoute";
+import { ChatRoom } from "../../pages/chat/ChatRoom";
 
+// WAJIB MENGGUNAKAN "export const" DI SINI AGAR TIDAK ERROR SYNTAX
 export const CustomerRoutes = () => [
   <Route
     key="product-detail"
@@ -19,6 +21,15 @@ export const CustomerRoutes = () => [
   />,
   <Route key="shop-detail" path="/shop/:merchantId" element={<ShopDetail />} />,
   <Route key="terms-cash" path="/terms-cashback" element={<TermsCashback />} />,
+  <Route
+    key="chat-room"
+    path="/chat/:roomId"
+    element={
+      <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN"]}>
+        <ChatRoom />
+      </ProtectedRoute>
+    }
+  />,
   <Route
     key="cust-dash"
     path="/customer-dashboard"

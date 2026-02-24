@@ -16,6 +16,8 @@ import {
   Move,
   Calendar,
   Save,
+  MapPin, // 🚀 Ikon untuk target lokasi
+  Globe, // 🚀 Ikon untuk target global
 } from "lucide-react";
 import { useToast } from "../../../../contexts/ToastContext";
 import { useNavigate } from "react-router-dom";
@@ -23,7 +25,7 @@ import { useNavigate } from "react-router-dom";
 // ============================================================================
 // SUB-KOMPONEN: KARTU IKLAN (AD ITEM) - Mengelola Drag, Upload & Tanggal
 // ============================================================================
-const AdItem = ({ ad, onUpdate, onDelete, showToast }: any) => {
+const AdItem = ({ ad, markets, onUpdate, onDelete, showToast }: any) => {
   // State untuk Preview & Upload Manual
   const [localFile, setLocalFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState(ad.image_url);
@@ -136,9 +138,21 @@ const AdItem = ({ ad, onUpdate, onDelete, showToast }: any) => {
 
           {/* OVERLAY TEKS IKLAN */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex flex-col justify-end p-4 pointer-events-none">
-            <span className="text-[9px] font-[1000] bg-[#FF6600] text-white px-2 py-1 rounded-md w-fit mb-1.5 shadow-sm tracking-widest uppercase">
-              {ad.promo_tag}
-            </span>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <span className="text-[9px] font-[1000] bg-[#FF6600] text-white px-2 py-1 rounded-md shadow-sm tracking-widest uppercase">
+                {ad.promo_tag}
+              </span>
+              {/* 🚀 INDIKATOR LOKAL / GLOBAL DI PREVIEW */}
+              {ad.market_id ? (
+                <span className="text-[8px] font-[1000] bg-[#008080] text-white px-1.5 py-1 rounded-md shadow-sm flex items-center gap-1">
+                  <MapPin size={10} /> LOKAL
+                </span>
+              ) : (
+                <span className="text-[8px] font-[1000] bg-indigo-600 text-white px-1.5 py-1 rounded-md shadow-sm flex items-center gap-1">
+                  <Globe size={10} /> GLOBAL
+                </span>
+              )}
+            </div>
             <h4 className="text-white font-[1000] text-[13px] uppercase truncate drop-shadow-md tracking-tight">
               {ad.title}
             </h4>
@@ -152,7 +166,7 @@ const AdItem = ({ ad, onUpdate, onDelete, showToast }: any) => {
           )}
         </div>
 
-        {/* 🚀 TOMBOL PILIH FILE & UPLOAD EKSPLISIT */}
+        {/* TOMBOL PILIH FILE & UPLOAD EKSPLISIT */}
         <div className="flex flex-col gap-2">
           <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl text-[10px] font-[1000] flex items-center justify-center gap-2 transition-all tracking-widest border-2 border-slate-200 active:scale-95">
             <ImageIcon size={14} strokeWidth={3} /> PILIH GAMBAR BARU
@@ -183,6 +197,29 @@ const AdItem = ({ ad, onUpdate, onDelete, showToast }: any) => {
 
       {/* 2. FORM EDIT DATA & DURASI */}
       <div className="flex-1 w-full space-y-4">
+        {/* 🚀 DROPDOWN TARGET LOKASI (HYPER-LOCAL ADS) */}
+        <div className="p-3 bg-indigo-50 border-2 border-indigo-100 rounded-xl">
+          <label className="text-[10px] font-[1000] text-indigo-700 uppercase tracking-widest flex items-center gap-1.5 mb-2">
+            <MapPin size={14} strokeWidth={3} /> TARGET AUDIENS (AREA TAYANG)
+          </label>
+          <select
+            className="w-full bg-white border-2 border-indigo-200 text-indigo-900 rounded-lg px-4 py-2.5 text-[11px] font-[1000] uppercase focus:border-indigo-500 transition-all outline-none appearance-none cursor-pointer shadow-sm"
+            defaultValue={ad.market_id || ""}
+            onChange={(e) =>
+              onUpdate(ad.id, {
+                market_id: e.target.value === "" ? null : e.target.value,
+              })
+            }
+          >
+            <option value="">🌍 SEMUA PASAR (TAMPIL GLOBAL)</option>
+            {markets?.map((m: any) => (
+              <option key={m.id} value={m.id}>
+                📍 HANYA UNTUK AREA: {m.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-[10px] font-[1000] text-slate-400 uppercase tracking-widest">
@@ -235,7 +272,7 @@ const AdItem = ({ ad, onUpdate, onDelete, showToast }: any) => {
           </div>
         </div>
 
-        {/* 🚀 SETTING DURASI WAKTU TAYANG */}
+        {/* SETTING DURASI WAKTU TAYANG */}
         <div className="p-4 bg-teal-50 border-2 border-teal-100 rounded-xl space-y-3">
           <label className="text-[10px] font-[1000] text-[#008080] uppercase tracking-widest flex items-center gap-1.5">
             <Calendar size={14} strokeWidth={3} /> DURASI TAYANG IKLAN
@@ -296,30 +333,38 @@ const AdItem = ({ ad, onUpdate, onDelete, showToast }: any) => {
 // ============================================================================
 export const ManageAds = () => {
   const [ads, setAds] = useState<any[]>([]);
+  const [markets, setMarkets] = useState<any[]>([]); // 🚀 State List Pasar
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiIdea, setAiIdea] = useState("");
   const { showToast } = useToast();
   const navigate = useNavigate();
 
-  const fetchAds = async () => {
+  // 🚀 FETCH ADS + FETCH MARKETS
+  const fetchInitialData = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data: adsData, error: adsError } = await supabase
         .from("ads")
         .select("*")
         .order("sort_order", { ascending: true });
-      if (error) throw error;
-      setAds(data || []);
+      if (adsError) throw adsError;
+      setAds(adsData || []);
+
+      const { data: marketData } = await supabase
+        .from("markets")
+        .select("id, name")
+        .order("name");
+      if (marketData) setMarkets(marketData);
     } catch (err: any) {
-      showToast("GAGAL MEMUAT IKLAN", "error");
+      showToast("GAGAL MEMUAT DATA", "error");
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAds();
+    fetchInitialData();
   }, []);
 
   const handleAddManual = async () => {
@@ -336,11 +381,12 @@ export const ManageAds = () => {
           image_fit: "cover",
           image_pos_x: 50,
           image_pos_y: 50,
+          market_id: null, // 🚀 Default Global
         },
       ]);
       if (error) throw error;
       showToast("DRAF IKLAN DIBUAT", "success");
-      fetchAds();
+      fetchInitialData();
     } catch (err) {
       showToast("GAGAL MENAMBAH IKLAN", "error");
     }
@@ -368,12 +414,13 @@ export const ManageAds = () => {
           image_fit: "cover",
           image_pos_x: 50,
           image_pos_y: 50,
+          market_id: null, // 🚀 Default Global
         },
       ]);
       if (error) throw error;
       showToast("AI BERHASIL MEMBUAT IKLAN", "success");
       setAiIdea("");
-      fetchAds();
+      fetchInitialData();
     } catch (err: any) {
       showToast("AI GAGAL", "error");
     } finally {
@@ -385,7 +432,6 @@ export const ManageAds = () => {
     const { error } = await supabase.from("ads").update(updates).eq("id", id);
     if (!error) {
       showToast("PERUBAHAN TERSIMPAN", "success");
-      // Update state lokal agar UI langsung responsif tanpa perlu fetch ulang
       setAds((prev) =>
         prev.map((ad) => (ad.id === id ? { ...ad, ...updates } : ad)),
       );
@@ -433,23 +479,22 @@ export const ManageAds = () => {
           </button>
         </div>
 
-        {/* CATATAN PANDUAN */}
-        <div className="mb-6 bg-orange-50 border-2 border-orange-200 p-4 rounded-xl flex items-start gap-3 shadow-sm">
-          <Info
+        {/* 🚀 CATATAN PANDUAN BARU */}
+        <div className="mb-6 bg-indigo-50 border-2 border-indigo-200 p-4 rounded-xl flex items-start gap-3 shadow-sm">
+          <Globe
             size={24}
             strokeWidth={2.5}
-            className="text-[#FF6600] shrink-0 mt-0.5"
+            className="text-indigo-600 shrink-0 mt-0.5"
           />
           <div>
-            <h4 className="text-[12px] text-[#FF6600] font-[1000] tracking-widest mb-1.5">
-              PANDUAN UKURAN & POSISI GAMBAR
+            <h4 className="text-[12px] text-indigo-700 font-[1000] tracking-widest mb-1.5">
+              FITUR HYPER-LOCAL ADS AKTIF
             </h4>
             <p className="text-[10px] text-slate-600 font-bold leading-relaxed tracking-wider">
-              Gunakan rasio <strong>2:1</strong>. Pilih mode{" "}
-              <strong>PENUH</strong> lalu klik & geser{" "}
-              <Move size={10} className="inline inline-block mx-0.5" /> gambar
-              untuk mengatur posisi titik fokus agar tidak terpotong saat tayang
-              di aplikasi pelanggan.
+              Gunakan kotak{" "}
+              <strong className="text-indigo-700">"TARGET AUDIENS"</strong>{" "}
+              warna ungu di bawah untuk memilih di Pasar mana iklan ini akan
+              muncul. Biarkan "Semua Pasar" untuk iklan Global.
             </p>
           </div>
         </div>
@@ -494,7 +539,7 @@ export const ManageAds = () => {
               strokeWidth={3}
             />
             <p className="text-[12px] text-slate-400 font-[1000] tracking-[0.3em]">
-              MENARIK DATA IKLAN...
+              MENARIK DATA IKLAN & PASAR...
             </p>
           </div>
         ) : (
@@ -503,6 +548,7 @@ export const ManageAds = () => {
               <AdItem
                 key={ad.id}
                 ad={{ ...ad, index }}
+                markets={markets} // 🚀 Passing data markets ke komponen Item
                 onUpdate={handleUpdate}
                 onDelete={handleDelete}
                 showToast={showToast}

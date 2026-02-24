@@ -1,37 +1,115 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../contexts/AuthContext";
-import { Send, ArrowLeft, User, Loader2, ShieldCheck } from "lucide-react";
+import {
+  ArrowLeft,
+  Send,
+  Loader2,
+  Store,
+  AlertCircle,
+  X,
+  Lock,
+} from "lucide-react";
 
-export const ChatRoom = () => {
-  const { roomId } = useParams();
+interface ChatRoomProps {
+  embeddedRoomId?: string;
+  initialMessage?: string;
+  onClose?: () => void;
+}
+
+export const ChatRoom: React.FC<ChatRoomProps> = ({
+  embeddedRoomId,
+  initialMessage,
+  onClose,
+}) => {
+  const params = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+
+  const roomId = embeddedRoomId || params.roomId;
+
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [sending, setSending] = useState(false);
+  const [partner, setPartner] = useState<any>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!roomId) return;
+    if (initialMessage) {
+      setNewMessage(initialMessage);
+    } else {
+      const searchParams = new URLSearchParams(location.search);
+      const autoText = searchParams.get("text");
+      if (autoText) setNewMessage(autoText);
+    }
+  }, [initialMessage, location]);
 
-    const fetchMessages = async () => {
+  useEffect(() => {
+    if (!roomId || !user) return;
+
+    const fetchChatData = async () => {
       setLoading(true);
-      const { data } = await supabase
-        .from("chat_messages")
-        .select("*")
-        .eq("room_id", roomId)
-        .order("created_at", { ascending: true });
-      setMessages(data || []);
-      setLoading(false);
+      setErrorMsg(null);
+      try {
+        const { data: roomData, error: roomError } = await supabase
+          .from("chat_rooms")
+          .select("*")
+          .eq("id", roomId)
+          .maybeSingle();
+
+        if (roomError || !roomData)
+          throw new Error("Ruang obrolan tidak ditemukan");
+
+        const partnerId =
+          roomData.participant_1_id === user.id
+            ? roomData.participant_2_id
+            : roomData.participant_1_id;
+
+        const { data: partnerProfile, error: profileError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", partnerId)
+          .maybeSingle();
+
+        if (profileError) {
+          console.error("Gagal mengambil profil partner:", profileError);
+        }
+
+        setPartner({
+          name:
+            partnerProfile?.name ||
+            partnerProfile?.full_name ||
+            partnerProfile?.username ||
+            "Pengguna PasarQu",
+          avatar_url: partnerProfile?.avatar_url || null,
+        });
+
+        const { data: msgData, error: msgError } = await supabase
+          .from("chat_messages")
+          .select("*")
+          .eq("room_id", roomId)
+          .order("created_at", { ascending: true });
+
+        if (msgError) throw msgError;
+
+        setMessages(msgData || []);
+      } catch (err: any) {
+        console.error("Fetch chat error:", err);
+        setErrorMsg(err.message || "Gagal memuat pesan");
+      } finally {
+        setLoading(false);
+      }
     };
 
-    fetchMessages();
+    fetchChatData();
 
-    // Kabel Instant (Realtime)
-    const channel = supabase
-      .channel(`room-${roomId}`)
+    const subscription = supabase
+      .channel(`chat_room_${roomId}`)
       .on(
         "postgres_changes",
         {
@@ -47,126 +125,165 @@ export const ChatRoom = () => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(subscription);
     };
-  }, [roomId]);
+  }, [roomId, user]);
 
   useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user || !roomId) return;
 
-    const content = newMessage.trim();
-    setNewMessage("");
+    setSending(true);
+    try {
+      const { error } = await supabase.from("chat_messages").insert([
+        {
+          room_id: roomId,
+          sender_id: user.id,
+          message: newMessage.trim(),
+          created_at: new Date().toISOString(),
+        },
+      ]);
 
-    const { error } = await supabase.from("chat_messages").insert([
-      {
-        room_id: roomId,
-        sender_id: user.id,
-        content: content,
-      },
-    ]);
-
-    if (!error) {
-      await supabase
-        .from("chat_rooms")
-        .update({ updated_at: new Date() })
-        .eq("id", roomId);
+      if (error) throw error;
+      setNewMessage("");
+    } catch (err) {
+      console.error("Gagal mengirim pesan:", err);
+      alert("Pesan gagal terkirim. Periksa koneksi Anda.");
+    } finally {
+      setSending(false);
     }
   };
 
-  if (loading)
+  if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-white">
-        <Loader2 className="animate-spin text-teal-600" size={32} />
+      <div className="h-[100dvh] md:h-full w-full flex items-center justify-center bg-[#e5ddd5]">
+        <Loader2 className="animate-spin text-[#008080]" size={40} />
       </div>
     );
+  }
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50 font-black uppercase tracking-tighter text-left overflow-hidden">
-      {/* --- HEADER: RAPI & SINKRON --- */}
-      <header className="bg-white border-b-2 border-slate-100 p-4 flex items-center justify-between shrink-0 sticky top-0 z-50 shadow-sm">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate("/chat")}
-            className="p-2 hover:bg-slate-50 rounded-2xl transition-all"
-          >
-            <ArrowLeft size={24} className="text-slate-600" />
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-teal-600 flex items-center justify-center text-white shadow-lg shadow-teal-100">
-              <User size={24} />
-            </div>
-            <div>
-              <h2 className="text-sm font-black text-slate-800 leading-none">
-                RUANG OBROLAN
-              </h2>
-              <p className="text-[9px] text-teal-600 mt-1 flex items-center gap-1 uppercase tracking-widest">
-                <ShieldCheck size={10} /> TERVERIFIKASI
-              </p>
-            </div>
+    // Menggunakan h-[100dvh] untuk mencegah bug ruang putih di bagian bawah browser HP
+    <div className="flex flex-col h-[100dvh] md:h-full w-full bg-[#e5ddd5] font-sans relative">
+      {/* HEADER */}
+      <header className="bg-[#008080] text-white h-[60px] flex items-center px-3 shadow-md z-10 shrink-0 sticky top-0">
+        <button
+          onClick={() => (onClose ? onClose() : navigate(-1))}
+          className="p-2 -ml-1 mr-1 active:scale-90 transition-transform hover:bg-white/10 rounded-full"
+        >
+          {onClose ? <X size={22} /> : <ArrowLeft size={22} />}
+        </button>
+
+        <div className="flex items-center gap-3 flex-1 overflow-hidden">
+          <div className="w-9 h-9 bg-white rounded-full overflow-hidden flex items-center justify-center shrink-0 shadow-sm border border-teal-600">
+            {partner?.avatar_url ? (
+              <img
+                src={partner.avatar_url}
+                alt="avatar"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <Store size={18} className="text-[#008080]" />
+            )}
+          </div>
+          <div className="flex flex-col truncate">
+            <span className="font-bold text-[15px] leading-tight truncate tracking-wide">
+              {partner?.name}
+            </span>
+            <span className="text-[11px] font-medium text-teal-100 tracking-wider">
+              Online
+            </span>
           </div>
         </div>
       </header>
 
-      {/* --- PESAN-PESAN: LUAS & TENGAH --- */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-10 space-y-6 scrollbar-hide">
-        <div className="max-w-[900px] mx-auto w-full space-y-6">
-          {messages.map((msg) => {
-            const isMe = msg.sender_id === user?.id;
-            return (
-              <div
-                key={msg.id}
-                className={`flex ${isMe ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[85%] md:max-w-[70%] p-5 rounded-[2.5rem] text-[13px] font-black shadow-sm transition-all border-2 ${
-                    isMe
-                      ? "bg-teal-600 border-teal-500 text-white rounded-tr-none shadow-teal-100"
-                      : "bg-white border-white text-slate-800 rounded-tl-none"
-                  }`}
-                >
-                  {msg.content}
-                  <div
-                    className={`text-[8px] mt-2 font-bold opacity-50 font-sans ${isMe ? "text-right" : "text-left"}`}
-                  >
-                    {new Date(msg.created_at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          <div ref={scrollRef} />
-        </div>
-      </div>
+      {/* AREA PESAN */}
+      <main className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 relative">
+        {errorMsg && (
+          <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md flex items-start gap-2 text-[12px] font-medium shadow-sm">
+            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            <p>{errorMsg}</p>
+          </div>
+        )}
 
-      {/* --- INPUT BOX: MELAYANG (FLOATING) --- */}
-      <div className="p-4 md:p-8 bg-transparent shrink-0">
+        {/* Notifikasi Enkripsi */}
+        <div className="text-center my-4 flex justify-center">
+          <div className="bg-[#FFF5C4] text-slate-600 text-[11px] px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 max-w-[90%] md:max-w-[70%]">
+            <Lock size={10} className="shrink-0 text-slate-500" />
+            <span className="font-medium leading-relaxed">
+              Pesan dilindungi enkripsi end-to-end. Tidak ada yang dapat
+              membacanya selain Anda dan penjual.
+            </span>
+          </div>
+        </div>
+
+        {/* Bubble Chat */}
+        {messages.map((msg) => {
+          const isMe = msg.sender_id === user?.id;
+          return (
+            <div
+              key={msg.id}
+              className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                className={`flex flex-col max-w-[85%] md:max-w-[75%] p-2 px-3 rounded-xl shadow-sm relative ${isMe ? "bg-[#dcf8c6] rounded-tr-sm" : "bg-white rounded-tl-sm"}`}
+              >
+                {/* Isi Pesan (Hapus font-bold, gunakan text-slate-800 agar nyaman dibaca) */}
+                <p className="text-[14px] text-slate-800 whitespace-pre-wrap leading-relaxed break-words font-normal">
+                  {msg.message}
+                </p>
+
+                {/* Waktu Pesan (Merapatkan jarak dengan teks) */}
+                <span className="text-[10px] text-slate-400 font-medium self-end mt-0.5 select-none tracking-tight">
+                  {new Date(msg.created_at).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+        <div ref={messagesEndRef} className="h-1" />
+      </main>
+
+      {/* INPUT AREA */}
+      <footer className="bg-[#f0f0f0] p-2 shrink-0">
         <form
           onSubmit={handleSendMessage}
-          className="max-w-[900px] mx-auto bg-white p-2 rounded-[2.5rem] shadow-2xl border-2 border-slate-100 flex gap-2"
+          className="max-w-[1200px] mx-auto flex items-end gap-2"
         >
-          <input
-            type="text"
+          <textarea
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="KETIK PESAN JURAGAN..."
-            className="flex-1 bg-transparent px-6 py-4 text-[12px] font-black outline-none"
+            placeholder="Ketik pesan..."
+            className="flex-1 bg-white border-none rounded-2xl py-2.5 px-4 outline-none text-[14px] text-slate-800 resize-none max-h-[100px] min-h-[44px] shadow-sm leading-relaxed"
+            rows={newMessage.split("\n").length > 2 ? 3 : 1}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage(e);
+              }
+            }}
           />
+
           <button
             type="submit"
-            className="w-14 h-14 bg-teal-600 rounded-full flex items-center justify-center text-white shadow-xl hover:bg-slate-900 transition-all active:scale-90"
+            disabled={!newMessage.trim() || sending}
+            className="w-[44px] h-[44px] bg-[#008080] text-white rounded-full flex items-center justify-center shrink-0 shadow-sm active:scale-95 transition-all disabled:opacity-50 disabled:bg-slate-400 disabled:active:scale-100"
           >
-            <Send size={20} />
+            {sending ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : (
+              <Send size={18} className="ml-0.5 mt-0.5" />
+            )}
           </button>
         </form>
-      </div>
+      </footer>
     </div>
   );
 };

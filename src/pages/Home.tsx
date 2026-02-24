@@ -16,8 +16,8 @@ import { useMarket } from "../contexts/MarketContext";
 import { useToast } from "../contexts/ToastContext";
 
 /** 🚀 IMPORT KOMPONEN PENDUKUNG */
-import { HeroOnboarding } from "./home/components/HeroOnboarding";
-import { HomeMenuGrid } from "./home/components/HomeMenuGrid";
+import { HeroOnboarding } from "./home/components/HeroOnboarding"; // Pastikan path ini benar di komputer Juragan
+import { HomeMenuGrid } from "./home/components/HomeMenuGrid"; // Pastikan path ini benar di komputer Juragan
 
 interface HomeProps {
   searchQuery: string;
@@ -56,16 +56,28 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Fetch Iklan
-      const { data: adData } = await supabase
-        .from("ads")
-        .select("*")
-        .eq("is_active", true)
-        .order("sort_order", { ascending: true });
+      // 🚀 1. FETCH IKLAN (HYPER-LOCAL ADS LOGIC)
+      let adQuery = supabase.from("ads").select("*").eq("is_active", true);
+
+      if (selectedMarket?.id) {
+        // Jika pembeli sudah berada di dalam suatu Pasar (Misal: Pasar Senen)
+        // Maka tampilkan Iklan Global (market_id is null) ATAU Iklan Pasar Senen (market_id = selectedMarket.id)
+        adQuery = adQuery.or(
+          `market_id.is.null,market_id.eq.${selectedMarket.id}`,
+        );
+      } else {
+        // Jika pembeli belum pilih pasar sama sekali, HANYA tampilkan Iklan Global
+        adQuery = adQuery.is("market_id", null);
+      }
+
+      // Eksekusi tarikan data iklan
+      const { data: adData } = await adQuery.order("sort_order", {
+        ascending: true,
+      });
       setAds(adData || []);
 
-      // Fetch Produk
-      let query = supabase
+      // 🚀 2. FETCH PRODUK
+      let prodQuery = supabase
         .from("products")
         .select("*, merchants:merchant_id(shop_name)")
         .eq("status", "APPROVED")
@@ -73,9 +85,10 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
         .order("created_at", { ascending: false });
 
       if (selectedMarket?.id) {
-        query = query.eq("market_id", selectedMarket.id);
+        prodQuery = prodQuery.eq("market_id", selectedMarket.id);
       }
-      const { data: prodData } = await query;
+
+      const { data: prodData } = await prodQuery;
       setProducts(prodData || []);
     } catch (err) {
       console.error("Gagal memuat data:", err);
@@ -84,6 +97,7 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
     }
   };
 
+  // Trigger fetchData ulang setiap kali `selectedMarket` berubah
   useEffect(() => {
     fetchData();
   }, [selectedMarket, searchQuery]);
@@ -93,22 +107,15 @@ export const Home: React.FC<HomeProps> = ({ searchQuery }) => {
   );
 
   return (
-    /**
-     * 🚀 UPDATE SPACING:
-     * pt-[65px]: Jarak aman dari AppHeader di mobile.
-     * md:pt-[80px]: Jarak aman untuk desktop.
-     */
     <div className="w-full font-sans text-left bg-white min-h-screen pb-24 pt-[65px] md:pt-[80px] overflow-x-hidden relative">
       <div className="max-w-[1200px] mx-auto">
         {/* --- 1. IKLAN SLIDE --- */}
         {!searchQuery && <HeroOnboarding banners={ads} isLoading={isLoading} />}
 
-        {/* --- 2. MENU GRID (NAVIGASI CEPAT) --- 
-            Memanggil komponen HomeMenuGrid yang mengambil data dari 'app_menus'
-        */}
+        {/* --- 2. MENU GRID (NAVIGASI CEPAT) --- */}
         {!searchQuery && <HomeMenuGrid />}
 
-        {/* --- 3. PRODUK GRID (BEZEL-LESS) --- */}
+        {/* --- 3. PRODUK GRID --- */}
         <div className="mt-4 mb-8">
           <div className="flex items-center justify-between mb-4 px-5 md:px-1 text-left">
             <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">

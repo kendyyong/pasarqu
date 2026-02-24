@@ -154,3 +154,31 @@ export const findNearestCourier = async (
 
   return sortedCouriers[0];
 };
+
+// --- 4. DAPATKAN LOKASI PEMBELI (CATCH & LOCK) ---
+export const getUserLocation = (): Promise<{ lat: number; lng: number }> => {
+  return new Promise((resolve, reject) => {
+    const cachedLat = localStorage.getItem("buyer_lat");
+    const cachedLng = localStorage.getItem("buyer_lng");
+
+    if (cachedLat && cachedLng) {
+      resolve({ lat: parseFloat(cachedLat), lng: parseFloat(cachedLng) });
+      return;
+    }
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          localStorage.setItem("buyer_lat", lat.toString());
+          localStorage.setItem("buyer_lng", lng.toString());
+          resolve({ lat, lng });
+        },
+        (error) => reject("Akses lokasi ditolak")
+      );
+    } else {
+      reject("GPS tidak didukung");
+    }
+  });
+};
