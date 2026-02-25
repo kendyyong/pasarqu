@@ -9,6 +9,7 @@ import {
   Power,
   Plus,
   MessageSquare,
+  Settings,
 } from "lucide-react";
 
 interface Props {
@@ -57,7 +58,6 @@ export const MerchantSidebar: React.FC<Props> = ({
             isDarkMode ? "border-slate-800" : "border-slate-100"
           }`}
         >
-          {/* 🚀 LOGO PASARQU DARI PUBLIC FOLDER */}
           <div className="flex flex-col gap-3 mb-6">
             <div className="h-10 w-full flex items-center">
               <img
@@ -75,7 +75,6 @@ export const MerchantSidebar: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* LOKASI PICKER SHORTCUT */}
           <button
             onClick={onLocationClick}
             className={`w-full p-3 rounded-xl border text-left group transition-all ${
@@ -162,9 +161,16 @@ export const MerchantSidebar: React.FC<Props> = ({
             active={activeTab === "finance"}
             onClick={() => setActiveTab("finance")}
           />
+          <NavItem
+            isDarkMode={isDarkMode}
+            icon={<Settings size={18} />}
+            label="PENGATURAN"
+            active={activeTab === "settings"}
+            onClick={() => setActiveTab("settings")}
+          />
         </nav>
 
-        {/* BOTTOM ACTION (LOGOUT & STATUS) */}
+        {/* BOTTOM ACTION */}
         <div
           className={`p-5 border-t space-y-3 transition-colors ${
             isDarkMode
@@ -219,7 +225,7 @@ export const MerchantSidebar: React.FC<Props> = ({
           onClick={() => setActiveTab("messages")}
         />
 
-        {/* 🚀 TOMBOL SAKTI + (TENGAH): LANGSUNG KE HALAMAN TAMBAH PRODUK */}
+        {/* TOMBOL SAKTI + (TENGAH) */}
         <div className="relative -top-6">
           <button
             onClick={onAddProduct}
@@ -240,6 +246,7 @@ export const MerchantSidebar: React.FC<Props> = ({
           count={orderCount}
         />
 
+        {/* 🚀 FIX: Tombol PRODUK kembali ada di bawah */}
         <MobileItem
           isDarkMode={isDarkMode}
           icon={<Package size={20} />}
@@ -327,3 +334,5 @@ const MobileItem = ({
     </span>
   </button>
 );
+
+export default MerchantSidebar;

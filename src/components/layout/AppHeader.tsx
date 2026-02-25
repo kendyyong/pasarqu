@@ -46,39 +46,52 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     }
   };
 
+  // 🚀 FUNGSI GANTI PASAR
+  const handleMarketChange = () => {
+    navigate("/select-market");
+  };
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-[1000] bg-[#008080] border-b border-white/10 shadow-lg transition-all duration-300">
+    <header className="fixed top-0 left-0 right-0 z-[1000] bg-[#008080] border-b border-white/[0.02] transition-all duration-300">
       <div className="max-w-[1200px] mx-auto px-4 h-[60px] md:h-[70px] flex items-center gap-3 md:gap-6">
-        {/* AREA LOGO */}
+        {/* 🚀 AREA LOGO (SEKARANG BERFUNGSI SEBAGAI TOMBOL PILIH PASAR) */}
         <div
           className="flex items-center cursor-pointer shrink-0 group active:scale-95 transition-all duration-200"
-          onClick={() => navigate("/")}
+          onClick={handleMarketChange}
         >
           {/* 1. LOGO ICON (Tampilan Mobile) */}
           <div className="relative h-10 w-10 flex items-center justify-center bg-white rounded-xl shadow-xl border border-white/20 overflow-hidden p-0 md:hidden">
             <img
               src="/logo-pasarqu.png"
-              alt="Icon"
+              alt="Ganti Pasar"
               className="h-full w-full object-cover"
               onError={(e) => {
-                e.currentTarget.src = "https://via.placeholder.com/100?text=P";
+                e.currentTarget.src =
+                  "https://ui-avatars.com/api/?name=Toko&background=008080&color=fff&size=100?text=P";
               }}
             />
+            {/* Tooltip kecil untuk mobile agar user tahu ini bisa diklik */}
+            <div className="absolute inset-0 bg-black/5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <MapPin size={12} className="text-[#008080]" />
+            </div>
           </div>
 
           {/* 2. LOGO TULISAN (Tampilan Desktop) */}
           <div className="hidden md:flex flex-col text-left">
             <img
               src="/logo-text.png"
-              alt="PASARQU"
+              alt="PASARQU - GANTI PASAR"
               className="h-10 w-auto object-contain group-hover:opacity-90 transition-all"
               style={{
                 filter: `drop-shadow(1px 0px 1px white) drop-shadow(-1px 0px 1px white) drop-shadow(0px 1px 1px white) drop-shadow(0px -1px 1px white)`,
               }}
             />
-            <div className="flex items-center gap-1.5 mt-1 opacity-90 border-l-2 border-orange-400 pl-2">
-              <MapPin size={10} className="text-orange-400" />
-              <p className="text-[10px] text-teal-50 font-black uppercase tracking-[0.15em]">
+            <div className="flex items-center gap-1.5 mt-1 opacity-90 border-l-2 border-orange-400 pl-2 group-hover:border-white transition-colors">
+              <MapPin
+                size={10}
+                className="text-orange-400 group-hover:text-white"
+              />
+              <p className="text-[10px] text-teal-50 font-black uppercase tracking-[0.15em] group-hover:text-white">
                 {regionName || "PILIH PASAR"}
               </p>
             </div>
@@ -98,11 +111,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           </div>
         </div>
 
-        {/* ACTION AREA: ICONS + PROFIL */}
+        {/* ACTION AREA */}
         <div className="flex items-center gap-1 md:gap-3 shrink-0">
-          {/* ✅ REVISI: Tombol "Mitra" telah dihapus dari mode Desktop untuk menjaga kerapihan Header */}
-
-          {/* Icon Chat */}
           <div
             className="p-2 text-white cursor-pointer hover:bg-white/10 rounded-xl transition-all active:scale-90"
             onClick={handleChatClick}
@@ -110,7 +120,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             <MessageCircle size={22} />
           </div>
 
-          {/* Icon Cart */}
           <div
             className={`relative p-2 text-white cursor-pointer hover:bg-white/10 rounded-xl transition-all ${isBump ? "scale-110" : ""}`}
             onClick={onCartClick}
@@ -123,7 +132,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             )}
           </div>
 
-          {/* Profil (Hanya Desktop) */}
           <div
             onClick={onUserClick}
             className="hidden md:flex items-center gap-2 cursor-pointer bg-white/10 p-1.5 pr-3 rounded-xl border border-white/10 transition-all active:scale-95 hover:bg-white/20 ml-2"

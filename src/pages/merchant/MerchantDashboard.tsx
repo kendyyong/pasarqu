@@ -12,9 +12,10 @@ import { MerchantOrders } from "./components/MerchantOrders";
 import { MerchantFinanceDashboard } from "./components/MerchantFinanceDashboard";
 import { MerchantMessages } from "./components/MerchantMessages";
 import { LocationPickerModal } from "./components/LocationPickerModal";
+import { MerchantSettings } from "./components/MerchantSettings";
 
 // --- ICONS ---
-import { Moon, Sun, Loader2 } from "lucide-react";
+import { Moon, Sun, Loader2, Settings } from "lucide-react";
 
 type TabType =
   | "overview"
@@ -23,13 +24,12 @@ type TabType =
   | "wallet"
   | "messages"
   | "finance"
-  | "location";
+  | "location"
+  | "settings";
 
 export const MerchantDashboard: React.FC = () => {
   const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>("overview");
-
-  // 🚀 MENGGUNAKAN COUNTER AGAR SINYAL STABIL
   const [triggerAddProduct, setTriggerAddProduct] = useState(0);
 
   const [visitedTabs, setVisitedTabs] = useState<Record<string, boolean>>({
@@ -73,20 +73,15 @@ export const MerchantDashboard: React.FC = () => {
     ? orders.filter((o: any) => o && o.id).length
     : 0;
 
-  // 🚀 FUNGSI KLIK + (TENGAH)
   const handleAddProductShortcut = () => {
-    setTriggerAddProduct((prev) => prev + 1); // Tambah counter sinyal
+    setTriggerAddProduct((prev) => prev + 1);
     setActiveTab("products");
   };
 
   if (!merchantProfile) {
     return (
       <div
-        className={`min-h-screen flex flex-col items-center justify-center font-bold text-[12px] uppercase tracking-[0.3em] transition-colors duration-300 ${
-          isDarkMode
-            ? "bg-slate-950 text-slate-700"
-            : "bg-slate-50 text-slate-300"
-        }`}
+        className={`min-h-screen flex flex-col items-center justify-center font-bold text-[12px] uppercase tracking-[0.3em] transition-colors duration-300 ${isDarkMode ? "bg-slate-950 text-slate-700" : "bg-slate-50 text-slate-300"}`}
       >
         <Loader2 className="animate-spin mb-4" size={32} />
         MENYIAPKAN DASHBOARD...
@@ -96,23 +91,17 @@ export const MerchantDashboard: React.FC = () => {
 
   return (
     <div
-      className={`min-h-screen flex flex-col md:flex-row font-sans text-left overflow-hidden transition-colors duration-500 ${
-        isDarkMode ? "bg-slate-950" : "bg-slate-50"
-      }`}
+      className={`min-h-screen flex flex-col md:flex-row font-sans text-left overflow-hidden transition-colors duration-500 ${isDarkMode ? "bg-slate-950" : "bg-slate-50"}`}
     >
       {/* SIDEBAR DESKTOP */}
       <aside
-        className={`hidden md:flex w-64 h-screen fixed left-0 top-0 z-50 border-r transition-colors duration-300 ${
-          isDarkMode
-            ? "bg-slate-900 border-slate-800 shadow-2xl"
-            : "bg-white border-slate-200 shadow-sm"
-        }`}
+        className={`hidden md:flex w-64 h-screen fixed left-0 top-0 z-50 border-r transition-colors duration-300 ${isDarkMode ? "bg-slate-900 border-slate-800 shadow-2xl" : "bg-white border-slate-200 shadow-sm"}`}
       >
         <MerchantSidebar
           activeTab={activeTab}
           setActiveTab={(tab: any) => {
             setActiveTab(tab as TabType);
-            setTriggerAddProduct(0); // Reset sinyal jika klik tab manual
+            setTriggerAddProduct(0);
           }}
           merchantProfile={merchantProfile}
           onLocationClick={() => setActiveTab("location")}
@@ -127,12 +116,9 @@ export const MerchantDashboard: React.FC = () => {
 
       {/* MAIN CONTENT AREA */}
       <div className="flex-1 flex flex-col min-w-0 md:ml-64 w-full h-screen overflow-hidden">
+        {/* HEADER / TOP BAR */}
         <div
-          className={`border-b sticky top-0 z-40 shadow-sm flex items-center h-[70px] px-4 md:px-8 transition-colors duration-300 ${
-            isDarkMode
-              ? "bg-slate-900 border-slate-800"
-              : "bg-white border-slate-200"
-          }`}
+          className={`border-b sticky top-0 z-40 shadow-sm flex items-center h-[70px] px-4 md:px-8 transition-colors duration-300 ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}
         >
           <div className="flex-1">
             <MerchantHeader
@@ -142,28 +128,39 @@ export const MerchantDashboard: React.FC = () => {
             />
           </div>
 
-          <button
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className={`p-2.5 rounded-xl transition-all active:scale-90 shadow-sm border ${
-              isDarkMode
-                ? "bg-slate-800 border-slate-700 text-yellow-400 hover:bg-slate-700"
-                : "bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100"
-            }`}
-          >
-            {isDarkMode ? (
-              <Sun size={18} strokeWidth={2.5} />
-            ) : (
-              <Moon size={18} strokeWidth={2.5} />
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* 🚀 TOMBOL SETTING (HANYA MOBILE) */}
+            <button
+              onClick={() => setActiveTab("settings")}
+              className={`md:hidden p-2.5 rounded-xl transition-all active:scale-90 border ${
+                activeTab === "settings"
+                  ? "bg-[#008080] text-white border-[#008080]"
+                  : isDarkMode
+                    ? "bg-slate-800 border-slate-700 text-slate-400"
+                    : "bg-slate-50 border-slate-100 text-slate-500"
+              }`}
+            >
+              <Settings size={18} strokeWidth={2.5} />
+            </button>
+
+            {/* DARK MODE TOGGLE */}
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className={`p-2.5 rounded-xl transition-all active:scale-90 shadow-sm border ${isDarkMode ? "bg-slate-800 border-slate-700 text-yellow-400" : "bg-slate-50 border-slate-100 text-slate-500"}`}
+            >
+              {isDarkMode ? (
+                <Sun size={18} strokeWidth={2.5} />
+              ) : (
+                <Moon size={18} strokeWidth={2.5} />
+              )}
+            </button>
+          </div>
         </div>
 
         <main
-          className={`flex-1 overflow-y-auto no-scrollbar pb-24 md:pb-10 transition-colors duration-300 ${
-            isDarkMode ? "bg-slate-950" : "bg-slate-50/50"
-          } p-4 md:p-8`}
+          className={`flex-1 overflow-y-auto no-scrollbar pb-24 md:pb-10 transition-colors duration-300 ${isDarkMode ? "bg-slate-950" : "bg-slate-50/50"} p-4 md:p-8`}
         >
-          <div className="w-full max-w-[1400px] mx-auto relative">
+          <div className="w-full max-w-[1400px] mx-auto relative text-left">
             <div
               className={
                 activeTab === "overview"
@@ -190,7 +187,7 @@ export const MerchantDashboard: React.FC = () => {
               >
                 <MerchantProducts
                   merchantProfile={merchantProfile}
-                  autoOpenTrigger={triggerAddProduct} // 🚀 Gunakan trigger baru
+                  autoOpenTrigger={triggerAddProduct}
                 />
               </div>
             )}
@@ -231,6 +228,21 @@ export const MerchantDashboard: React.FC = () => {
               </div>
             )}
 
+            {visitedTabs["settings"] && (
+              <div
+                className={
+                  activeTab === "settings"
+                    ? "block animate-in fade-in duration-500"
+                    : "hidden"
+                }
+              >
+                <MerchantSettings
+                  merchantProfile={merchantProfile}
+                  onUpdate={fetchBaseData}
+                />
+              </div>
+            )}
+
             {activeTab === "location" && (
               <div className="border rounded-[2rem] shadow-xl p-4 md:p-8 transition-colors bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                 <LocationPickerModal
@@ -245,17 +257,13 @@ export const MerchantDashboard: React.FC = () => {
 
         {/* BOTTOM NAV MOBILE */}
         <div
-          className={`md:hidden fixed bottom-0 left-0 right-0 z-50 border-t transition-colors duration-300 ${
-            isDarkMode
-              ? "bg-slate-900 border-slate-800 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]"
-              : "bg-white border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]"
-          }`}
+          className={`md:hidden fixed bottom-0 left-0 right-0 z-50 border-t transition-colors duration-300 ${isDarkMode ? "bg-slate-900 border-slate-800 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]" : "bg-white border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]"}`}
         >
           <MerchantSidebar
             activeTab={activeTab}
             setActiveTab={(tab: any) => {
               setActiveTab(tab as TabType);
-              setTriggerAddProduct(0); // 🚀 Reset sinyal jika klik tab manual (Katalog dll)
+              setTriggerAddProduct(0);
             }}
             merchantProfile={merchantProfile}
             onLocationClick={() => setActiveTab("location")}
@@ -285,8 +293,6 @@ export const MerchantDashboard: React.FC = () => {
         .dark .border-slate-200, .dark .border-slate-100 { border-color: #1e293b !important; }
         .dark .bg-slate-50, .dark .bg-slate-100 { background-color: #020617 !important; }
         .dark input, .dark select, .dark textarea { background-color: #1e293b !important; border-color: #334155 !important; color: white !important; }
-        
-        * { font-style: normal !important; }
         h1, h2, h3, h4, h5, button, label, span, p, input { font-weight: 800 !important; text-transform: uppercase !important; }
       `}</style>
     </div>

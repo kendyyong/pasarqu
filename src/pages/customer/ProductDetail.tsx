@@ -52,6 +52,7 @@ export const ProductDetail = () => {
   const [isDesktopChatOpen, setIsDesktopChatOpen] = useState(false);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [chatInitialMsg, setChatInitialMsg] = useState("");
+  const [chatAttachedProduct, setChatAttachedProduct] = useState<any>(null);
 
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
   const [shippingCost, setShippingCost] = useState<number | null>(null);
@@ -66,26 +67,38 @@ export const ProductDetail = () => {
     0,
   );
 
+  // 🚀 FIX: LOGIKA SHARE YANG LEBIH HANDAL
   const handleShare = async () => {
-    const shareData = {
-      title: product?.name || "Produk PasarQu",
-      text: `Lihat produk keren ini di PasarQu: ${product?.name}`,
-      url: window.location.href,
-    };
+    const url = window.location.href;
+    const title = product?.name || "Produk Pilihan di PasarQu";
+    const text = `Lihat ${title} di PasarQu sekarang! Harga terbaik menantimu.`;
 
-    if (navigator.canShare && navigator.canShare(shareData)) {
+    if (navigator.share) {
       try {
-        await navigator.share(shareData);
-      } catch (err) {
-        console.log("Share dibatalkan user");
+        await navigator.share({
+          title: title,
+          text: text,
+          url: url,
+        });
+        // Tidak perlu toast jika share berhasil dibuka
+      } catch (err: any) {
+        if (err.name !== "AbortError") {
+          // Fallback jika API Share gagal (selain karena dibatalkan user)
+          fallbackCopyText(url);
+        }
       }
     } else {
-      try {
-        await navigator.clipboard.writeText(window.location.href);
-        showToast("Link produk berhasil disalin!", "success");
-      } catch (err) {
-        showToast("Gagal menyalin link", "error");
-      }
+      // Fallback untuk browser yang tidak dukung Web Share API (seperti Chrome Desktop)
+      fallbackCopyText(url);
+    }
+  };
+
+  const fallbackCopyText = async (textToCopy: string) => {
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      showToast("Link produk berhasil disalin!", "success");
+    } catch (err) {
+      showToast("Gagal menyalin link produk.", "error");
     }
   };
 
@@ -195,17 +208,31 @@ export const ProductDetail = () => {
 
       if (!roomId) throw new Error("ID Ruang Chat tidak ditemukan.");
 
-      // 🚀 FITUR BARU: Menyertakan Tautan Produk ke dalam Teks
       const productLink = `${window.location.origin}/product/${product.id}`;
-      const autoMessageRaw = `Halo, saya tertarik dengan produk ini:\n${product.name}\n(Varian: ${selectedVariant})\n\nTautan Produk:\n${productLink}\n\nApakah masih tersedia?`;
+      const miniProductData = {
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        image:
+          product.image_url || (product.image_urls && product.image_urls[0]),
+        variant: selectedVariant,
+        link: productLink,
+      };
 
-      if (window.innerWidth >= 768) {
+      const autoMessageRaw = `Halo Kak, saya tertarik dengan produk ini:\n*${product.name}*\n(Varian: ${selectedVariant})\n\nApakah stoknya masih tersedia?`;
+
+      if (window.innerWidth >= 1024) {
         setActiveRoomId(roomId);
-        setChatInitialMsg(autoMessageRaw); // Desktop menggunakan data mentah
+        setChatInitialMsg(autoMessageRaw);
+        setChatAttachedProduct(miniProductData);
         setIsDesktopChatOpen(true);
       } else {
-        // Mobile menggunakan URL Parameter (Encode)
-        navigate(`/chat/${roomId}?text=${encodeURIComponent(autoMessageRaw)}`);
+        const encodedProd = btoa(
+          unescape(encodeURIComponent(JSON.stringify(miniProductData))),
+        );
+        navigate(
+          `/chat/${roomId}?text=${encodeURIComponent(autoMessageRaw)}&p=${encodedProd}`,
+        );
       }
     } catch (err: any) {
       console.error("Chat Error:", err.message || err);
@@ -365,34 +392,44 @@ export const ProductDetail = () => {
   const productWithVariant = { ...product, selected_variant: selectedVariant };
 
   return (
-    <div className="bg-[#F5F5F5] min-h-screen text-left pb-24 md:pb-12 font-sans relative">
-      <header className="fixed top-0 left-0 right-0 z-50 w-full bg-white border-b border-slate-200 shadow-sm h-[60px] flex items-center justify-center">
+    <div className="bg-[#F5F5F5] min-h-screen text-left pb-24 md:pb-12 font-sans relative text-slate-900">
+      {/* 🚀 FIX: HEADER HIJAU TOSCA, TEKS PUTIH, LOGO TEXT */}
+      <header className="fixed top-0 left-0 right-0 z-[100] w-full bg-[#008080] border-b border-white/10 shadow-md h-[60px] flex items-center justify-center transition-all">
         <div className="w-full max-w-[1200px] flex items-center justify-between px-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 -ml-2 text-[#008080] active:scale-90 transition-transform"
+              className="p-1 -ml-1 text-white active:scale-90 transition-transform"
             >
               <ArrowLeft size={24} strokeWidth={2.5} />
             </button>
-            <span className="font-black text-[#008080] text-[16px] uppercase tracking-widest hidden md:block">
-              PasarQu
-            </span>
+            {/* Logo PasarQu dengan Outline Putih */}
+            <div className="flex items-center">
+              <img
+                src="/logo-text.png"
+                alt="PASARQU"
+                className="h-7 md:h-8 w-auto object-contain"
+                style={{
+                  filter: `drop-shadow(1px 0px 0px white) drop-shadow(-1px 0px 0px white) drop-shadow(0px 1px 0px white) drop-shadow(0px -1px 0px white)`,
+                }}
+              />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center gap-1">
             <button
               onClick={handleShare}
-              className="p-2 text-[#008080] hover:bg-slate-50 rounded-full active:scale-90 transition-all"
+              className="p-2 text-white hover:bg-white/20 rounded-full active:scale-90 transition-all"
             >
               <Share2 size={22} strokeWidth={2.5} />
             </button>
             <button
               onClick={() => navigate("/")}
-              className="relative p-2 text-[#008080] hover:bg-slate-50 rounded-full active:scale-90 transition-all"
+              className="relative p-2 text-white hover:bg-white/20 rounded-full active:scale-90 transition-all"
             >
               <ShoppingBag size={22} strokeWidth={2.5} />
               {totalCartItems > 0 && (
-                <div className="absolute top-0 right-0 bg-[#FF6600] text-white text-[12px] font-black min-w-[20px] h-[20px] px-1 flex items-center justify-center rounded-full border border-white shadow-sm">
+                <div className="absolute top-0 right-0 bg-[#FF6600] text-white text-[10px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-[#008080] shadow-sm">
                   {totalCartItems}
                 </div>
               )}
@@ -401,6 +438,7 @@ export const ProductDetail = () => {
         </div>
       </header>
 
+      {/* --- SIDEBAR CHAT (DESKTOP) --- */}
       <div
         className={`fixed inset-0 z-[200] transition-all duration-300 ${isDesktopChatOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
       >
@@ -415,6 +453,7 @@ export const ProductDetail = () => {
             <ChatRoom
               embeddedRoomId={activeRoomId}
               initialMessage={chatInitialMsg}
+              attachedProduct={chatAttachedProduct}
               onClose={() => setIsDesktopChatOpen(false)}
             />
           )}
@@ -422,6 +461,7 @@ export const ProductDetail = () => {
       </div>
 
       <main className="w-full max-w-[1200px] mx-auto pt-[76px] px-0 md:px-4">
+        {/* Breadcrumb Desktop */}
         <div className="hidden md:flex items-center gap-2 mb-2 px-2">
           <button
             onClick={() => navigate("/")}
@@ -500,7 +540,6 @@ export const ProductDetail = () => {
                     onClick={handleContactSeller}
                     disabled={chatLoading}
                     className="p-2 md:p-2.5 rounded-full text-[#008080] bg-teal-50 border border-teal-100 hover:bg-teal-100 transition-all active:scale-90 flex items-center justify-center shadow-sm"
-                    title="Tanya Produk Ini"
                   >
                     {chatLoading ? (
                       <Loader2 size={20} className="animate-spin" />
@@ -512,7 +551,6 @@ export const ProductDetail = () => {
                     disabled={isWishlistLoading}
                     onClick={toggleWishlist}
                     className={`hidden md:flex p-2.5 rounded-full transition-all active:scale-90 border shadow-sm items-center justify-center ${isWishlisted ? "text-red-500 bg-red-50 border-red-100" : "text-slate-400 hover:text-red-500 bg-slate-50 border-slate-200"}`}
-                    title="Favorit"
                   >
                     <Heart
                       size={20}

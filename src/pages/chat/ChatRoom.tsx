@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -10,17 +10,20 @@ import {
   AlertCircle,
   X,
   Lock,
+  ShoppingCart,
 } from "lucide-react";
 
 interface ChatRoomProps {
   embeddedRoomId?: string;
   initialMessage?: string;
+  attachedProduct?: any;
   onClose?: () => void;
 }
 
 export const ChatRoom: React.FC<ChatRoomProps> = ({
   embeddedRoomId,
   initialMessage,
+  attachedProduct,
   onClose,
 }) => {
   const params = useParams();
@@ -29,6 +32,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const { user } = useAuth();
 
   const roomId = embeddedRoomId || params.roomId;
+  const isEmbedded = !!embeddedRoomId;
 
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -36,71 +40,80 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const [sending, setSending] = useState(false);
   const [partner, setPartner] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [activeAttachment, setActiveAttachment] = useState<any>(
+    attachedProduct || null,
+  );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // 1. PROTEKSI DESKTOP: Jika dibuka via URL langsung di layar lebar, lempar ke Home
   useEffect(() => {
-    if (initialMessage) {
-      setNewMessage(initialMessage);
-    } else {
-      const searchParams = new URLSearchParams(location.search);
-      const autoText = searchParams.get("text");
-      if (autoText) setNewMessage(autoText);
+    if (!isEmbedded && window.innerWidth >= 1024) {
+      navigate("/");
     }
-  }, [initialMessage, location]);
+  }, [isEmbedded, navigate]);
 
+  // 2. TANGKAP PESAN & PRODUK DARI URL ATAU PROPS
+  useEffect(() => {
+    if (initialMessage) setNewMessage(initialMessage);
+    if (attachedProduct) setActiveAttachment(attachedProduct);
+
+    const searchParams = new URLSearchParams(location.search);
+    const autoText = searchParams.get("text");
+    const productParam = searchParams.get("p");
+
+    if (autoText) setNewMessage(autoText);
+    if (productParam) {
+      try {
+        const decodedProd = JSON.parse(atob(productParam));
+        setActiveAttachment(decodedProd);
+      } catch (e) {
+        console.error("Gagal decode data produk");
+      }
+    }
+  }, [location, initialMessage, attachedProduct]);
+
+  // 3. AMBIL DATA PESAN & PROFIL
   useEffect(() => {
     if (!roomId || !user) return;
 
     const fetchChatData = async () => {
       setLoading(true);
-      setErrorMsg(null);
       try {
-        const { data: roomData, error: roomError } = await supabase
+        const { data: roomData } = await supabase
           .from("chat_rooms")
           .select("*")
           .eq("id", roomId)
           .maybeSingle();
-
-        if (roomError || !roomData)
-          throw new Error("Ruang obrolan tidak ditemukan");
+        if (!roomData) return;
 
         const partnerId =
           roomData.participant_1_id === user.id
             ? roomData.participant_2_id
             : roomData.participant_1_id;
-
-        const { data: partnerProfile, error: profileError } = await supabase
+        const { data: partnerProfile } = await supabase
           .from("profiles")
           .select("*")
           .eq("id", partnerId)
           .maybeSingle();
 
-        if (profileError) {
-          console.error("Gagal mengambil profil partner:", profileError);
-        }
-
         setPartner({
           name:
             partnerProfile?.name ||
             partnerProfile?.full_name ||
-            partnerProfile?.username ||
             "Pengguna PasarQu",
           avatar_url: partnerProfile?.avatar_url || null,
         });
 
-        const { data: msgData, error: msgError } = await supabase
+        const { data: msgData } = await supabase
           .from("chat_messages")
           .select("*")
           .eq("room_id", roomId)
           .order("created_at", { ascending: true });
 
-        if (msgError) throw msgError;
-
         setMessages(msgData || []);
       } catch (err: any) {
-        console.error("Fetch chat error:", err);
-        setErrorMsg(err.message || "Gagal memuat pesan");
+        setErrorMsg(err.message);
       } finally {
         setLoading(false);
       }
@@ -144,46 +157,42 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
           room_id: roomId,
           sender_id: user.id,
           message: newMessage.trim(),
+          product_data: activeAttachment,
           created_at: new Date().toISOString(),
         },
       ]);
 
       if (error) throw error;
       setNewMessage("");
+      setActiveAttachment(null);
     } catch (err) {
-      console.error("Gagal mengirim pesan:", err);
-      alert("Pesan gagal terkirim. Periksa koneksi Anda.");
+      alert("Gagal mengirim pesan");
     } finally {
       setSending(false);
     }
   };
 
-  if (loading) {
+  if (loading)
     return (
-      <div className="h-[100dvh] md:h-full w-full flex items-center justify-center bg-[#e5ddd5]">
+      <div className="h-full w-full flex items-center justify-center bg-[#e5ddd5]">
         <Loader2 className="animate-spin text-[#008080]" size={40} />
       </div>
     );
-  }
 
   return (
-    // Menggunakan h-[100dvh] untuk mencegah bug ruang putih di bagian bawah browser HP
-    <div className="flex flex-col h-[100dvh] md:h-full w-full bg-[#e5ddd5] font-sans relative">
-      {/* HEADER */}
+    <div className="flex flex-col h-[100dvh] md:h-full w-full bg-[#e5ddd5] font-sans relative overflow-hidden text-left">
       <header className="bg-[#008080] text-white h-[60px] flex items-center px-3 shadow-md z-10 shrink-0 sticky top-0">
         <button
           onClick={() => (onClose ? onClose() : navigate(-1))}
-          className="p-2 -ml-1 mr-1 active:scale-90 transition-transform hover:bg-white/10 rounded-full"
+          className="p-2 -ml-1 mr-1 active:scale-90 hover:bg-white/10 rounded-full transition-all"
         >
           {onClose ? <X size={22} /> : <ArrowLeft size={22} />}
         </button>
-
-        <div className="flex items-center gap-3 flex-1 overflow-hidden">
-          <div className="w-9 h-9 bg-white rounded-full overflow-hidden flex items-center justify-center shrink-0 shadow-sm border border-teal-600">
+        <div className="flex items-center gap-3 flex-1 overflow-hidden ml-1">
+          <div className="w-9 h-9 bg-white rounded-full overflow-hidden flex items-center justify-center shrink-0 border border-teal-600">
             {partner?.avatar_url ? (
               <img
                 src={partner.avatar_url}
-                alt="avatar"
                 className="w-full h-full object-cover"
               />
             ) : (
@@ -191,37 +200,26 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
             )}
           </div>
           <div className="flex flex-col truncate">
-            <span className="font-bold text-[15px] leading-tight truncate tracking-wide">
+            <span className="font-bold text-[15px] leading-tight truncate">
               {partner?.name}
             </span>
-            <span className="text-[11px] font-medium text-teal-100 tracking-wider">
+            <span className="text-[11px] font-medium text-teal-100 uppercase tracking-wider">
               Online
             </span>
           </div>
         </div>
       </header>
 
-      {/* AREA PESAN */}
-      <main className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 relative">
-        {errorMsg && (
-          <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-md flex items-start gap-2 text-[12px] font-medium shadow-sm">
-            <AlertCircle size={16} className="shrink-0 mt-0.5" />
-            <p>{errorMsg}</p>
-          </div>
-        )}
-
-        {/* Notifikasi Enkripsi */}
+      <main className="flex-1 overflow-y-auto p-3 space-y-3 relative">
         <div className="text-center my-4 flex justify-center">
-          <div className="bg-[#FFF5C4] text-slate-600 text-[11px] px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 max-w-[90%] md:max-w-[70%]">
-            <Lock size={10} className="shrink-0 text-slate-500" />
-            <span className="font-medium leading-relaxed">
-              Pesan dilindungi enkripsi end-to-end. Tidak ada yang dapat
-              membacanya selain Anda dan penjual.
+          <div className="bg-[#FFF5C4] text-slate-600 text-[11px] px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 max-w-[90%]">
+            <Lock size={10} className="shrink-0" />{" "}
+            <span className="font-medium">
+              Pesan dilindungi enkripsi end-to-end.
             </span>
           </div>
         </div>
 
-        {/* Bubble Chat */}
         {messages.map((msg) => {
           const isMe = msg.sender_id === user?.id;
           return (
@@ -230,15 +228,37 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
               className={`flex ${isMe ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`flex flex-col max-w-[85%] md:max-w-[75%] p-2 px-3 rounded-xl shadow-sm relative ${isMe ? "bg-[#dcf8c6] rounded-tr-sm" : "bg-white rounded-tl-sm"}`}
+                className={`flex flex-col max-w-[85%] p-2 px-3 rounded-xl shadow-sm relative ${isMe ? "bg-[#dcf8c6] rounded-tr-sm" : "bg-white rounded-tl-sm"}`}
               >
-                {/* Isi Pesan (Hapus font-bold, gunakan text-slate-800 agar nyaman dibaca) */}
-                <p className="text-[14px] text-slate-800 whitespace-pre-wrap leading-relaxed break-words font-normal">
+                {msg.product_data && (
+                  <Link
+                    to={`/product/${msg.product_data.id}`}
+                    className="block mb-2 bg-black/5 border border-black/10 rounded-lg p-2 hover:bg-black/10 transition-all"
+                  >
+                    <div className="flex gap-2 items-center">
+                      <img
+                        src={msg.product_data.image}
+                        className="w-10 h-10 object-cover rounded-md"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-slate-800 truncate uppercase">
+                          {msg.product_data.name}
+                        </p>
+                        <p className="text-[10px] font-black text-[#FF6600]">
+                          Rp {msg.product_data.price.toLocaleString()}
+                        </p>
+                      </div>
+                      <ShoppingCart
+                        size={14}
+                        className="text-[#008080] shrink-0"
+                      />
+                    </div>
+                  </Link>
+                )}
+                <p className="text-[14px] text-slate-800 leading-relaxed font-normal break-words">
                   {msg.message}
                 </p>
-
-                {/* Waktu Pesan (Merapatkan jarak dengan teks) */}
-                <span className="text-[10px] text-slate-400 font-medium self-end mt-0.5 select-none tracking-tight">
+                <span className="text-[9px] text-slate-400 font-medium self-end mt-0.5 tracking-tight">
                   {new Date(msg.created_at).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
@@ -251,7 +271,29 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         <div ref={messagesEndRef} className="h-1" />
       </main>
 
-      {/* INPUT AREA */}
+      {activeAttachment && (
+        <div className="mx-2 mb-1 bg-white border border-[#008080]/20 rounded-xl p-2 flex items-center gap-3 relative animate-in slide-in-from-bottom-2 shadow-md">
+          <button
+            onClick={() => setActiveAttachment(null)}
+            className="absolute -top-2 -right-2 bg-red-500 text-white w-5 h-5 rounded-full text-[10px] shadow-lg flex items-center justify-center font-bold"
+          >
+            X
+          </button>
+          <img
+            src={activeAttachment.image}
+            className="w-10 h-10 object-cover rounded-lg"
+          />
+          <div className="flex-1 overflow-hidden">
+            <p className="text-[10px] font-bold truncate uppercase">
+              {activeAttachment.name}
+            </p>
+            <p className="text-[9px] text-[#FF6600] font-black">
+              Rp {activeAttachment.price.toLocaleString()}
+            </p>
+          </div>
+        </div>
+      )}
+
       <footer className="bg-[#f0f0f0] p-2 shrink-0">
         <form
           onSubmit={handleSendMessage}
@@ -262,24 +304,17 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Ketik pesan..."
             className="flex-1 bg-white border-none rounded-2xl py-2.5 px-4 outline-none text-[14px] text-slate-800 resize-none max-h-[100px] min-h-[44px] shadow-sm leading-relaxed"
-            rows={newMessage.split("\n").length > 2 ? 3 : 1}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage(e);
-              }
-            }}
+            rows={1}
           />
-
           <button
             type="submit"
             disabled={!newMessage.trim() || sending}
-            className="w-[44px] h-[44px] bg-[#008080] text-white rounded-full flex items-center justify-center shrink-0 shadow-sm active:scale-95 transition-all disabled:opacity-50 disabled:bg-slate-400 disabled:active:scale-100"
+            className="w-[44px] h-[44px] bg-[#008080] text-white rounded-full flex items-center justify-center shadow-md active:scale-95 disabled:bg-slate-400 transition-all"
           >
             {sending ? (
               <Loader2 size={18} className="animate-spin" />
             ) : (
-              <Send size={18} className="ml-0.5 mt-0.5" />
+              <Send size={18} className="ml-0.5" />
             )}
           </button>
         </form>

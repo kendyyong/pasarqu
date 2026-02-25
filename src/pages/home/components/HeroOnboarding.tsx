@@ -25,11 +25,9 @@ export const HeroOnboarding: React.FC<HeroOnboardingProps> = ({
   // TAMPILAN SAAT LOADING
   if (isLoading) {
     return (
-      <div className="w-full flex justify-center mt-2 md:mt-4">
-        {/* Kunci Lebar Maksimal 1200px di Desktop */}
-        <div className="w-full px-[1px] md:px-0 md:max-w-[1200px]">
-          {/* Rasio Mobile 2:1 | Desktop 3:1 */}
-          <div className="w-full aspect-[2/1] md:aspect-[3/1] bg-slate-200 animate-pulse rounded-xl md:rounded-2xl border border-slate-200"></div>
+      <div className="w-full flex justify-center -mt-1 md:-mt-[1px]">
+        <div className="w-full md:max-w-[1200px]">
+          <div className="w-full aspect-[2/1] md:aspect-[3/1] bg-slate-200 animate-pulse border-none"></div>
         </div>
       </div>
     );
@@ -49,21 +47,18 @@ export const HeroOnboarding: React.FC<HeroOnboardingProps> = ({
   };
 
   return (
-    <div className="w-full flex justify-center mt-2 md:mt-4">
-      {/* 🚀 PEMBATAS UKURAN DESKTOP (Maksimal 1200px) */}
-      <div className="w-full px-[1px] md:px-0 md:max-w-[1200px] overflow-hidden">
-        {/* JENDELA BANNER 
-            Di HP (aspect-[2/1]): Lebar full, tinggi setengah lebar.
-            Di Desktop (md:aspect-[3/1]): Lebar max 1200px, Tinggi proporsional 400px.
-        */}
-        <div className="relative w-full aspect-[2/1] md:aspect-[3/1] overflow-hidden group rounded-xl md:rounded-2xl shadow-sm bg-slate-50 border border-slate-100">
+    /* 🚀 FIX: Menggunakan Negative Margin untuk memaksa iklan naik menempel/menutup garis bawah header */
+    <div className="w-full flex justify-center -mt-1 md:-mt-[1px] relative z-0">
+      {/* 🚀 PEMBATAS UKURAN DESKTOP */}
+      <div className="w-full md:max-w-[1200px] overflow-hidden">
+        {/* 🚀 FIX: Menghapus total padding, rounded, dan border di mobile agar rapat sempurna */}
+        <div className="relative w-full aspect-[2/1] md:aspect-[3/1] overflow-hidden group md:rounded-2xl shadow-sm bg-slate-50 border-none">
           {/* TRACK SLIDER */}
           <div
             className="w-full h-full flex transition-transform duration-700 ease-in-out"
             style={{ transform: `translateX(-${currentIndex * 100}%)` }}
           >
             {banners.map((banner) => {
-              // BACA PENGATURAN DARI SUPER ADMIN
               const fitMode =
                 banner.image_fit === "contain"
                   ? "object-contain"
@@ -71,7 +66,6 @@ export const HeroOnboarding: React.FC<HeroOnboardingProps> = ({
                     ? "object-fill"
                     : "object-cover";
 
-              // Posisi Fokus Gambar
               const posX =
                 banner.image_pos_x !== undefined ? banner.image_pos_x : 50;
               const posY =
@@ -93,14 +87,14 @@ export const HeroOnboarding: React.FC<HeroOnboardingProps> = ({
                     className={`w-full h-full block border-none outline-none ${fitMode}`}
                     style={{ objectPosition: `${posX}% ${posY}%` }}
                   />
-                  {/* Efek Gelap Tipis Agar Terlihat Premium */}
-                  <div className="absolute inset-0 bg-black/5 pointer-events-none"></div>
+                  {/* Overlay tipis agar transisi header ke iklan lebih smooth */}
+                  <div className="absolute inset-0 bg-black/[0.03] pointer-events-none"></div>
                 </div>
               );
             })}
           </div>
 
-          {/* TOMBOL NAVIGASI KIRI/KANAN (Hanya Desktop) */}
+          {/* TOMBOL NAVIGASI (Hanya Desktop) */}
           {banners.length > 1 && (
             <>
               <button
@@ -128,10 +122,10 @@ export const HeroOnboarding: React.FC<HeroOnboardingProps> = ({
                     e.stopPropagation();
                     setCurrentIndex(index);
                   }}
-                  className={`h-1.5 md:h-2 rounded-full transition-all duration-500 ${
+                  className={`h-1.2 md:h-2 rounded-full transition-all duration-500 ${
                     currentIndex === index
-                      ? "bg-[#008080] w-6 md:w-8 shadow-md"
-                      : "bg-white/70 hover:bg-white w-2 md:w-2 shadow-sm"
+                      ? "bg-[#008080] w-5 md:w-8 shadow-md"
+                      : "bg-white/60 w-1.2 md:w-2 shadow-sm"
                   }`}
                 />
               ))}

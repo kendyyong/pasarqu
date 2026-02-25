@@ -27,7 +27,6 @@ export const MerchantPromoPage: React.FC = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
 
-  // ✅ LOGIKA ANTI-GAGAL: Langsung ambil nama dari memori mana pun yang ada
   const savedMarketName =
     localStorage.getItem("selected_market_name") ||
     localStorage.getItem("market_name") ||
@@ -54,18 +53,21 @@ export const MerchantPromoPage: React.FC = () => {
     longitude: 106.8,
   });
 
-  // Sinkronisasi data detail koordinat pasar dari database
+  // 🚀 FIX: Logika Sinkronisasi Super Aman (Tahan Error 400)
   useEffect(() => {
     const syncMarketDetails = async () => {
-      if (savedMarketId) {
+      if (!savedMarketId) return;
+
+      try {
+        // Gunakan "id" karena ini standar Supabase.
+        // maybeSingle() akan mencegah error jika data tidak ditemukan.
         const { data, error } = await supabase
           .from("markets")
           .select("name, latitude, longitude")
           .eq("id", savedMarketId)
-          .single();
+          .maybeSingle();
 
         if (data && !error) {
-          // Update nama jika di database berbeda, dan ambil titik koordinat pusat pasar
           setDetectedMarketName(data.name);
           setFormData((prev) => ({
             ...prev,
@@ -73,9 +75,19 @@ export const MerchantPromoPage: React.FC = () => {
             longitude: Number(data.longitude) || 106.8,
           }));
         }
+      } catch (err) {
+        // Jika masuk ke sini, berarti ID salah format (misal UUID dilempar ke Int).
+        // Kita tangkap errornya agar tidak muncul pesan merah di layar user.
+        console.warn(
+          "ID Pasar tidak cocok dengan format Database. Menggunakan data lokal.",
+        );
       }
     };
-    syncMarketDetails();
+
+    // Hanya fetch jika ID tidak kosong
+    if (savedMarketId) {
+      syncMarketDetails();
+    }
   }, [savedMarketId]);
 
   const handleAutoDetect = () => {
@@ -87,7 +99,7 @@ export const MerchantPromoPage: React.FC = () => {
             latitude: Number(position.coords.latitude),
             longitude: Number(position.coords.longitude),
           }));
-          showToast("Lokasi toko berhasil dideteksi!", "success");
+          showToast("Lokasi lapak berhasil dideteksi!", "success");
         },
         () =>
           showToast("Gagal akses GPS. Pastikan izin lokasi aktif.", "error"),
@@ -103,7 +115,7 @@ export const MerchantPromoPage: React.FC = () => {
     try {
       if (!formData.market_id)
         throw new Error(
-          "Data pasar hilang. Silakan kembali ke Beranda dan pilih pasar Muara Jawa lagi.",
+          "Data pasar tidak ditemukan. Silakan kembali ke Beranda dan pilih pasar kembali.",
         );
 
       const { data, error } = await supabase.auth.signUp({
@@ -144,57 +156,75 @@ export const MerchantPromoPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 lg:bg-white flex flex-col font-sans text-left">
-      <nav className="border-b sticky top-0 bg-white z-50 shadow-sm">
+    <div className="min-h-screen bg-gradient-to-br from-[#004d4d] via-[#003333] to-[#002222] flex flex-col font-sans text-left relative overflow-x-hidden">
+      {/* DEKORASI LATAR BELAKANG */}
+      <div
+        className="absolute inset-0 opacity-[0.05] pointer-events-none"
+        style={{
+          backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.8) 1px, transparent 0)`,
+          backgroundSize: "24px 24px",
+        }}
+      ></div>
+      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-[#008080]/20 rounded-full blur-[120px] pointer-events-none mix-blend-screen"></div>
+      <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-[#FF6600]/10 rounded-full blur-[120px] pointer-events-none mix-blend-screen"></div>
+
+      {/* TOP BAR */}
+      <nav className="border-b border-white/10 sticky top-0 bg-[#002222]/80 backdrop-blur-lg z-50 shadow-sm">
         <div className="max-w-[1200px] mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <div
             onClick={() => navigate("/")}
-            className="cursor-pointer flex items-center gap-2"
+            className="cursor-pointer flex items-center"
           >
-            <div className="text-xl md:text-2xl font-black text-teal-600 tracking-tighter flex items-center gap-1">
-              <span className="bg-teal-600 text-white px-1.5 rounded">P</span>{" "}
-              PASARQU
-            </div>
-            <div className="text-slate-800 font-bold text-lg hidden md:block border-l pl-2 ml-2 border-slate-200 uppercase tracking-tight">
-              Seller Portal
-            </div>
+            <img
+              src="/logo-text.png"
+              alt="PasarQu"
+              className="h-8 md:h-10 w-auto object-contain"
+              style={{
+                filter:
+                  "drop-shadow(1px 1px 0px white) drop-shadow(-1px -1px 0px white) drop-shadow(1px -1px 0px white) drop-shadow(-1px 1px 0px white)",
+              }}
+            />
           </div>
           <button
-            onClick={() => navigate("/portal")}
-            className="text-slate-500 hover:text-teal-600 flex items-center gap-1 font-bold text-xs md:text-sm"
+            onClick={() => navigate("/login")}
+            className="text-white/70 hover:text-white flex items-center gap-1 font-black uppercase tracking-widest text-[10px] md:text-[12px] bg-white/5 px-3 py-1.5 rounded-full border border-white/10 transition-all active:scale-95"
           >
-            <ChevronLeft size={18} /> <span>Kembali</span>
+            <ChevronLeft size={16} />{" "}
+            <span className="hidden md:block">KEMBALI KE LOGIN</span>
+            <span className="md:hidden">KEMBALI</span>
           </button>
         </div>
       </nav>
 
-      <main className="flex-1 flex flex-col lg:flex-row max-w-[1200px] mx-auto w-full p-4 md:p-12 gap-12 lg:gap-20 justify-center">
-        {/* INFO KIRI */}
-        <div className="hidden lg:block flex-1 space-y-10 text-left">
+      {/* KONTEN UTAMA - FORM LEBAR DI MOBILE */}
+      <main className="flex-1 flex flex-col lg:flex-row max-w-[1200px] mx-auto w-full p-0 md:p-12 gap-6 lg:gap-20 justify-center relative z-10 mt-6 md:mt-0">
+        {/* INFO KIRI (Desktop & Tablet Saja) */}
+        <div className="hidden lg:block flex-1 space-y-10 text-left pt-4">
           <div className="space-y-6">
-            <div className="inline-flex items-center gap-2 bg-orange-50 text-orange-600 px-4 py-1.5 rounded-full border border-orange-100">
-              <Star size={14} className="fill-orange-500" />
+            <div className="inline-flex items-center gap-2 bg-[#FF6600]/20 text-[#FF6600] px-4 py-1.5 rounded-full border border-[#FF6600]/30 shadow-inner">
+              <Star size={14} fill="currentColor" />
               <span className="text-xs font-black uppercase tracking-widest">
                 Kesempatan Terbatas
               </span>
             </div>
-            <h1 className="text-5xl font-black text-slate-900 leading-[1.1] uppercase tracking-tighter">
+            <h1 className="text-5xl font-black text-white leading-[1.1] uppercase tracking-tighter">
               Buka Toko Digital, <br />
-              <span className="text-teal-600">Jangkau Satu Wilayah.</span>
+              <span className="text-[#FF6600]">Jangkau Satu Wilayah.</span>
             </h1>
-            <p className="text-lg text-slate-500 leading-relaxed max-w-md font-medium">
+            <p className="text-lg text-teal-100/70 leading-relaxed max-w-md font-bold tracking-wide">
               Daftarkan lapak Anda sekarang. Kelola stok, harga, dan pesanan
               pelanggan pasar secara otomatis dalam satu genggaman.
             </p>
           </div>
+
           <div className="grid grid-cols-2 gap-8">
             <BenefitItem
-              icon={<BarChart3 className="text-teal-600" />}
+              icon={<BarChart3 className="text-[#008080]" />}
               title="Analisis Akurat"
               desc="Pantau performa harian."
             />
             <BenefitItem
-              icon={<Zap className="text-orange-500" />}
+              icon={<Zap className="text-[#FF6600]" />}
               title="Pencairan Cepat"
               desc="Tarik hasil jualan harian."
             />
@@ -204,41 +234,41 @@ export const MerchantPromoPage: React.FC = () => {
               desc="Tampil di seluruh aplikasi warga."
             />
             <BenefitItem
-              icon={<ShieldCheck className="text-green-600" />}
+              icon={<ShieldCheck className="text-green-500" />}
               title="Verifikasi Aman"
               desc="Sistem resmi Admin Lokal."
             />
           </div>
         </div>
 
-        {/* FORMULIR KANAN */}
-        <div className="w-full lg:w-[480px] shrink-0">
-          <div className="bg-white rounded-xl shadow-xl border border-slate-100 p-6 md:p-10 sticky top-24">
-            <div className="text-center mb-8">
-              <div className="inline-flex p-4 bg-teal-50 rounded-2xl mb-4 text-teal-600 border border-teal-100">
+        {/* FORMULIR KANAN (Dibuat Full Width & Membulat di Atas untuk HP) */}
+        <div className="w-full lg:w-[480px] shrink-0 mt-4 md:mt-0">
+          <div className="bg-white/95 backdrop-blur-xl rounded-t-[2.5rem] md:rounded-[2rem] shadow-[0_-10px_40px_rgba(0,128,128,0.15)] md:shadow-2xl md:shadow-teal-900/40 border-t md:border border-white/50 p-6 md:p-10 sticky top-24 min-h-[80vh] md:min-h-0">
+            <div className="text-center mb-8 pt-2 md:pt-0">
+              <div className="inline-flex p-4 bg-teal-50 rounded-2xl mb-4 text-[#008080] border border-teal-100 shadow-sm">
                 <Store size={32} />
               </div>
-              <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase">
+              <h2 className="text-2xl font-black text-slate-800 tracking-tighter uppercase">
                 Daftar Seller
               </h2>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-2">
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-1">
                 Lengkapi Data Lapak Anda
               </p>
             </div>
 
             <form onSubmit={handleRegister} className="space-y-4">
-              {/* ✅ AREA TERKUNCI - DIJAMIN MUNCUL MUARA JAWA */}
+              {/* AREA TERKUNCI */}
               <div className="space-y-1 text-left">
                 <label className="text-[10px] font-black text-slate-500 uppercase ml-1 tracking-widest">
                   Wilayah Operasional
                 </label>
-                <div className="w-full px-4 py-3 bg-teal-50 border border-teal-200 rounded-xl text-sm font-black text-teal-900 flex justify-between items-center shadow-inner">
-                  <span className="flex items-center gap-2">
-                    <MapIcon size={16} className="text-teal-600" />
-                    {detectedMarketName || "MUARA JAWA"}
+                <div className="w-full px-4 py-3 bg-teal-50 border border-teal-200 rounded-xl text-sm font-black text-[#008080] flex justify-between items-center shadow-inner">
+                  <span className="flex items-center gap-2 uppercase">
+                    <MapIcon size={16} className="text-[#008080]" />
+                    {detectedMarketName || "LOKASI PASAR"}
                   </span>
-                  <div className="flex items-center gap-1 bg-teal-200 px-2 py-1 rounded text-[8px] font-black tracking-tighter">
-                    <Lock size={8} /> AREA TERKUNCI
+                  <div className="flex items-center gap-1 bg-teal-200/50 text-[#008080] px-2 py-1 rounded text-[9px] font-black tracking-widest uppercase border border-teal-300">
+                    <Lock size={10} /> TERKUNCI
                   </div>
                 </div>
               </div>
@@ -274,13 +304,13 @@ export const MerchantPromoPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleAutoDetect}
-                    className="flex items-center gap-1 text-[9px] font-black bg-teal-50 text-teal-600 px-2 py-1 rounded-full border border-teal-100 hover:bg-teal-100 transition-all"
+                    className="flex items-center gap-1 text-[9px] font-black bg-teal-50 text-[#008080] px-3 py-1.5 rounded-full border border-teal-200 hover:bg-teal-100 transition-all shadow-sm active:scale-95"
                   >
                     <Crosshair size={10} /> AKURASI GPS
                   </button>
                 </div>
 
-                <div className="w-full h-[280px] rounded-xl overflow-hidden border-2 border-slate-200 relative shadow-inner bg-slate-100">
+                <div className="w-full h-[200px] md:h-[280px] rounded-2xl overflow-hidden border-2 border-slate-200 relative shadow-inner bg-slate-100">
                   {isLoaded ? (
                     <GoogleMap
                       mapContainerStyle={{ width: "100%", height: "100%" }}
@@ -315,20 +345,20 @@ export const MerchantPromoPage: React.FC = () => {
                     </GoogleMap>
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center gap-2">
-                      <Loader2 className="animate-spin text-teal-600" />
+                      <Loader2 className="animate-spin text-[#008080]" />
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                         Mengaktifkan Radar...
                       </span>
                     </div>
                   )}
-                  <div className="absolute top-2 right-2 bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg text-[9px] font-black text-slate-600 border shadow-sm pointer-events-none z-10 uppercase">
-                    Geser Pin ke Lokasi Lapak
+                  <div className="absolute top-2 right-2 bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-700 border shadow-sm pointer-events-none z-10 uppercase tracking-widest">
+                    Geser Pin ke Lapak Anda
                   </div>
                 </div>
               </div>
 
               <InputGroup
-                placeholder="Alamat Detail (No. Lapak / Nama Jalan)"
+                placeholder="Alamat Detail (No. Lapak / Jalan)"
                 icon={<MapPin size={18} />}
                 value={formData.address}
                 onChange={(v) => setFormData({ ...formData, address: v })}
@@ -353,7 +383,7 @@ export const MerchantPromoPage: React.FC = () => {
 
               <button
                 disabled={isLoading}
-                className="w-full py-4 bg-orange-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl shadow-orange-500/20 hover:bg-orange-600 active:scale-95 transition-all flex items-center justify-center gap-2 mt-4"
+                className="w-full py-4 bg-[#FF6600] text-white rounded-2xl font-[1000] text-[12px] uppercase tracking-[0.2em] shadow-lg shadow-orange-500/20 hover:bg-orange-600 active:scale-95 transition-all flex items-center justify-center gap-2 mt-4 border border-orange-400"
               >
                 {isLoading ? (
                   <Loader2 className="animate-spin" />
@@ -368,8 +398,8 @@ export const MerchantPromoPage: React.FC = () => {
         </div>
       </main>
 
-      <footer className="py-8 md:py-10 bg-slate-50 border-t border-slate-100 text-center">
-        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">
+      <footer className="py-6 border-t border-white/10 text-center relative z-10 mt-0 md:mt-10">
+        <p className="text-[10px] text-white/30 font-black uppercase tracking-[0.3em] leading-none">
           © 2026 PASARQU - Ekosistem Pasar Digital
         </p>
       </footer>
@@ -377,16 +407,17 @@ export const MerchantPromoPage: React.FC = () => {
   );
 };
 
+// Komponen BenefitItem
 const BenefitItem = ({ icon, title, desc }: any) => (
-  <div className="flex gap-5 text-left items-start">
-    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shrink-0 shadow-md border border-slate-50">
+  <div className="flex gap-4 text-left items-start group">
+    <div className="w-12 h-12 bg-white/5 backdrop-blur-md rounded-2xl flex items-center justify-center shrink-0 border border-white/10 group-hover:bg-white/10 transition-colors">
       {icon}
     </div>
-    <div className="text-left">
-      <h3 className="font-black text-slate-800 text-sm uppercase tracking-tight leading-none mb-1.5">
+    <div className="text-left pt-0.5">
+      <h3 className="font-[1000] text-white text-[14px] uppercase tracking-tighter leading-none mb-1.5">
         {title}
       </h3>
-      <p className="text-xs text-slate-500 leading-relaxed font-medium">
+      <p className="text-[11px] text-teal-100/50 font-bold uppercase tracking-wider leading-relaxed">
         {desc}
       </p>
     </div>
@@ -407,7 +438,7 @@ const InputGroup = ({
   onChange: (v: string) => void;
 }) => (
   <div className="relative group flex-1 text-left">
-    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-teal-600 transition-colors pointer-events-none">
+    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#008080] transition-colors pointer-events-none">
       {icon}
     </div>
     <input
@@ -415,8 +446,10 @@ const InputGroup = ({
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:border-teal-600 focus:bg-white outline-none text-sm font-bold transition-all placeholder:text-slate-300 shadow-inner text-left"
+      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#008080] focus:ring-2 focus:ring-[#008080]/20 focus:bg-white outline-none text-[12px] font-bold uppercase tracking-widest transition-all placeholder:text-slate-400 placeholder:tracking-widest shadow-inner text-left text-slate-800"
       required
     />
   </div>
 );
+
+export default MerchantPromoPage;

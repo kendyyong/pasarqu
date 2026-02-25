@@ -1,37 +1,51 @@
 import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { useToast } from "../../contexts/ToastContext";
 import {
+  ArrowLeft,
   Mail,
   Lock,
   Eye,
   EyeOff,
-  LogIn,
-  ChevronRight,
-  Zap,
-  ArrowLeft,
   Loader2,
+  User,
+  Store,
+  Bike,
 } from "lucide-react";
-import { GoogleLoginButton } from "../../components/ui/GoogleLoginButton";
 
 export const LoginPage = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
+
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ identifier: "", password: "" });
+
+  // --- LOGIKA RAHASIA SUPER ADMIN ---
+  const [clickCount, setClickCount] = useState(0);
+  const [lastClickTime, setLastClickTime] = useState(0);
+
+  const handleSecretClick = () => {
+    const currentTime = Date.now();
+    if (currentTime - lastClickTime > 1000) {
+      setClickCount(1);
+    } else {
+      const newCount = clickCount + 1;
+      setClickCount(newCount);
+      if (newCount === 5) {
+        navigate("/login/master");
+        setClickCount(0);
+      }
+    }
+    setLastClickTime(currentTime);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       let finalEmail = formData.identifier.trim();
-      const isPhone = /^\d+$/.test(finalEmail);
-      if (isPhone) {
-        if (finalEmail.startsWith("0")) finalEmail = finalEmail.substring(1);
-        finalEmail = `${finalEmail}@pasarqu.com`;
-      }
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email: finalEmail,
@@ -41,159 +55,183 @@ export const LoginPage = () => {
       if (error) throw error;
 
       if (data.user) {
-        showToast("SELAMAT DATANG DI PASARQU!", "success");
+        showToast("Login Berhasil!", "success");
         navigate("/");
       }
     } catch (error: any) {
-      showToast("EMAIL ATAU PASSWORD SALAH", "error");
+      showToast("Email atau Password salah", "error");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    // ✅ TEMA: DEEP TOSCA GALACTIC
-    <div className="h-[100dvh] w-screen flex flex-col font-sans relative overflow-hidden transition-colors duration-700 bg-gradient-to-br from-[#004d4d] via-[#003333] to-[#002222] text-left">
-      {/* --- DEKORASI BACKGROUND --- */}
-      <div
-        className="absolute inset-0 opacity-[0.08] pointer-events-none"
-        style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.8) 1px, transparent 0)`,
-          backgroundSize: "24px 24px",
-        }}
-      ></div>
-      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#008080]/30 rounded-full blur-[120px] pointer-events-none mix-blend-screen"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-[#FF6600]/20 rounded-full blur-[120px] pointer-events-none mix-blend-screen"></div>
+    <div className="min-h-[100dvh] w-screen flex flex-col font-sans relative overflow-hidden bg-slate-50 text-left">
+      {/* DEKORASI BACKGROUND ELEGAN */}
+      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#008080]/15 rounded-full blur-[100px] pointer-events-none"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-[#FF6600]/10 rounded-full blur-[100px] pointer-events-none"></div>
 
-      {/* --- TOP NAVIGATION --- */}
-      <div className="absolute top-0 left-0 w-full p-4 z-20"></div>
+      {/* HEADER: KEMBALI */}
+      <header className="absolute top-0 left-0 p-4 z-50 w-full flex justify-between items-center">
+        <button
+          onClick={() => navigate(-1)}
+          className="p-2 text-slate-500 hover:text-slate-800 rounded-full bg-white/60 shadow-sm border border-slate-200 transition-all backdrop-blur-md active:scale-90"
+        >
+          <ArrowLeft size={20} />
+        </button>
+      </header>
 
-      {/* --- KONTEN UTAMA (Dibuat Lebih Rapat agar Masuk Satu Layar) --- */}
-      <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-6 relative z-10">
-        <div className="w-full max-w-[400px] flex flex-col justify-center gap-4 animate-in slide-in-from-bottom-8 duration-700">
-          {/* BLOK 1: IDENTITAS (Logo Diperkecil Sedikit) */}
-          <div className="flex flex-col items-center">
-            <img
-              src="/logo-text.png"
-              alt="PasarQu Logo"
-              className="h-10 md:h-12 w-auto object-contain mb-4"
-              style={{
-                filter:
-                  "drop-shadow(1px 1px 0px white) drop-shadow(-1px -1px 0px white) drop-shadow(1px -1px 0px white) drop-shadow(-1px 1px 0px white)",
-              }}
-            />
-            <h1 className="text-[26px] font-[1000] text-white uppercase tracking-tighter text-center leading-none mb-1">
-              SELAMAT <span className="text-white">DATANG</span>
+      <div className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 w-full max-w-[420px] mx-auto mt-6 md:mt-0 pb-12">
+        <div className="w-full animate-in slide-in-from-bottom-8 duration-700">
+          {/* BAGIAN LOGO (RAHASIA) */}
+          <div className="flex flex-col items-center mb-6">
+            <div
+              onClick={handleSecretClick}
+              className="mb-3 select-none outline-none cursor-default"
+              style={{ WebkitTapHighlightColor: "transparent" }}
+            >
+              <img
+                src="/logo-text.png"
+                alt="PasarQu Logo"
+                className="h-16 md:h-20 w-auto object-contain"
+                style={{
+                  filter:
+                    "drop-shadow(1.5px 1.5px 0px white) drop-shadow(-1.5px -1.5px 0px white) drop-shadow(1.5px -1.5px 0px white) drop-shadow(-1.5px 1.5px 0px white)",
+                }}
+              />
+            </div>
+            <h1 className="text-[22px] font-[1000] text-slate-800 uppercase tracking-tighter text-center leading-none mb-1">
+              MASUK KE SISTEM
             </h1>
-            <p className="text-[9px] font-black text-teal-100/50 uppercase tracking-[0.3em] text-center border-b border-white/10 pb-1.5 px-6">
-              MASUK KE EKOSISTEM DIGITAL PASARQU
+            <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest text-center px-6">
+              Akses Pembeli dan Mitra PasarQu
             </p>
           </div>
 
-          {/* BLOK 2: FORM LOGIN (Padding Dikurangi) */}
-          <div className="w-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 md:p-8 shadow-2xl relative overflow-hidden">
-            <form onSubmit={handleLogin} className="space-y-4 relative z-10">
-              <div className="space-y-1.5">
-                <div className="relative group">
-                  <Mail
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-[#008080] transition-colors"
-                    size={16}
-                  />
-                  <input
-                    type="text"
-                    placeholder="EMAIL ATAU NOMOR HP"
-                    className="w-full pl-11 pr-4 py-3.5 bg-black/20 border border-white/10 rounded-xl text-white text-xs font-bold focus:border-[#008080]/50 focus:bg-black/50 outline-none transition-all uppercase tracking-widest"
-                    onChange={(e) =>
-                      setFormData({ ...formData, identifier: e.target.value })
-                    }
-                    required
-                  />
-                </div>
+          {/* FORM LOGIN */}
+          <div className="w-full bg-white/80 backdrop-blur-xl border border-white/40 rounded-[2rem] p-6 md:p-8 shadow-2xl shadow-teal-900/5 mb-6">
+            <form onSubmit={handleLogin} className="space-y-4">
+              {/* INPUT EMAIL */}
+              <div className="relative group">
+                <Mail
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-800 transition-colors"
+                  size={18}
+                />
+                <input
+                  type="email"
+                  placeholder="EMAIL ANDA"
+                  className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-slate-800 text-[12px] font-bold focus:border-slate-800 focus:ring-2 focus:ring-slate-800/20 outline-none transition-all uppercase tracking-widest shadow-inner"
+                  onChange={(e) =>
+                    setFormData({ ...formData, identifier: e.target.value })
+                  }
+                  required
+                />
               </div>
 
-              <div className="space-y-1.5">
-                <div className="relative group">
-                  <Lock
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-[#008080] transition-colors"
-                    size={16}
-                  />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="KATA SANDI"
-                    className="w-full pl-11 pr-11 py-3.5 bg-black/20 border border-white/10 rounded-xl text-white text-xs font-bold focus:border-[#008080]/50 focus:bg-black/50 outline-none transition-all"
-                    onChange={(e) =>
-                      setFormData({ ...formData, password: e.target.value })
-                    }
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 hover:text-white"
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
+              {/* INPUT PASSWORD */}
+              <div className="relative group">
+                <Lock
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-800 transition-colors"
+                  size={18}
+                />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="KATA SANDI"
+                  className="w-full pl-12 pr-12 py-4 bg-white border border-slate-200 rounded-2xl text-slate-800 text-[12px] font-bold focus:border-slate-800 focus:ring-2 focus:ring-slate-800/20 outline-none transition-all shadow-inner"
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
 
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  className="text-[10px] font-black text-[#FF6600] uppercase tracking-widest hover:underline"
+                >
+                  Lupa Kata Sandi?
+                </button>
+              </div>
+
+              {/* 🚀 FIX: TOMBOL LOGIN SLATE/MIDNIGHT BLUE (ELEGAN & PRO) */}
               <button
                 disabled={loading}
-                className="w-full py-3.5 bg-[#008080] hover:bg-teal-600 text-white rounded-xl font-[1000] uppercase tracking-[0.2em] text-[10px] shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2 border border-teal-400/30"
+                className="w-full mt-2 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-[1000] uppercase tracking-[0.2em] text-[12px] shadow-xl shadow-slate-900/20 active:scale-95 transition-all flex justify-center items-center gap-2 border border-slate-800"
               >
                 {loading ? (
-                  <Loader2 className="animate-spin" size={16} />
+                  <Loader2 className="animate-spin" size={18} />
                 ) : (
-                  <>
-                    MASUK SEKARANG <LogIn size={16} />
-                  </>
+                  "LOGIN SEKARANG"
                 )}
               </button>
             </form>
-
-            <div className="w-full relative my-5 text-center">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-white/10"></div>
-              </div>
-              <span className="relative bg-[#003333] px-3 text-[8px] font-black text-white/30 uppercase tracking-[0.4em]">
-                ATAU
-              </span>
-            </div>
-
-            <div className="mb-5">
-              <GoogleLoginButton />
-            </div>
-
-            <div className="text-center">
-              <p className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em] mb-1">
-                BELUM PUNYA AKUN?
-              </p>
-              <button
-                onClick={() => navigate("/register")}
-                className="text-[10px] font-[1000] text-[#FF6600] uppercase tracking-widest hover:text-orange-400 transition-colors"
-              >
-                DAFTAR AKUN BARU
-              </button>
-            </div>
           </div>
 
-          {/* BLOK 3: MITRA LINK (Lebih Ringkas) */}
-          <div
-            onClick={() => navigate("/portal")}
-            className="w-full bg-white/5 p-4 rounded-[1.5rem] border border-white/10 cursor-pointer active:scale-95 transition-all flex items-center justify-between group shadow-xl"
-          >
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2 mb-0.5">
-                <Zap size={14} className="text-[#FF6600]" fill="currentColor" />
-                <h3 className="text-white text-[13px] font-[1000] uppercase tracking-tighter">
-                  MITRA
-                </h3>
-              </div>
-              <p className="text-[8px] text-white/40 uppercase font-black tracking-widest leading-none">
-                INGIN BERJUALAN ATAU MENJADI KURIR?
-              </p>
+          {/* BAGIAN DAFTAR BARU */}
+          <div className="w-full flex flex-col items-center">
+            <div className="flex items-center gap-3 w-full mb-4 opacity-70">
+              <div className="h-[1px] bg-slate-300 flex-1"></div>
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+                BELUM PUNYA AKUN?
+              </span>
+              <div className="h-[1px] bg-slate-300 flex-1"></div>
             </div>
-            <div className="bg-[#FF6600] p-2 rounded-lg text-white shadow-lg group-hover:bg-orange-500 transition-colors">
-              <ChevronRight size={16} strokeWidth={4} />
+
+            <div className="w-full flex flex-col gap-3">
+              {/* TOMBOL DAFTAR PEMBELI */}
+              <button
+                onClick={() => navigate("/register")}
+                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-teal-50 to-orange-50 rounded-2xl hover:shadow-md transition-all active:scale-95 border border-teal-100 group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#008080] shadow-sm group-hover:bg-[#008080] group-hover:text-white transition-colors">
+                    <User size={18} />
+                  </div>
+                  <div className="text-left">
+                    <span className="block text-[12px] font-black uppercase text-slate-700 tracking-widest">
+                      Daftar Pembeli
+                    </span>
+                    <span className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                      Mulai Belanja Kebutuhanmu
+                    </span>
+                  </div>
+                </div>
+                <ArrowLeft
+                  size={16}
+                  className="text-slate-400 group-hover:text-[#008080] rotate-180 transition-transform group-hover:translate-x-1"
+                />
+              </button>
+
+              {/* TOMBOL DAFTAR MITRA */}
+              <div className="grid grid-cols-2 gap-3 w-full">
+                <button
+                  onClick={() => navigate("/merchant-promo")}
+                  className="flex flex-col items-center justify-center gap-1.5 p-4 bg-[#008080] rounded-2xl hover:bg-teal-700 transition-all shadow-md active:scale-95 border border-teal-600 group"
+                >
+                  <Store size={22} className="text-white" />
+                  <span className="text-[10px] font-black uppercase text-white tracking-widest text-center leading-tight">
+                    BUKA TOKO
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => navigate("/promo/kurir")}
+                  className="flex flex-col items-center justify-center gap-1.5 p-4 bg-[#FF6600] rounded-2xl hover:bg-orange-600 transition-all shadow-md active:scale-95 border border-orange-500 group"
+                >
+                  <Bike size={22} className="text-white" />
+                  <span className="text-[10px] font-black uppercase text-white tracking-widest text-center leading-tight">
+                    DAFTAR KURIR
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
