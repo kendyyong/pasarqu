@@ -153,15 +153,17 @@ export const LoginPage = () => {
               </div>
 
               <div className="flex justify-end pt-1">
+                {/* 🚀 FIX: TOMBOL LUPA SANDI DIHUBUNGKAN KE ROUTER */}
                 <button
                   type="button"
-                  className="text-[10px] font-black text-[#FF6600] uppercase tracking-widest hover:underline"
+                  onClick={() => navigate("/forgot-password")}
+                  className="text-[10px] font-black text-[#FF6600] uppercase tracking-widest hover:underline active:scale-95 transition-all"
                 >
                   Lupa Kata Sandi?
                 </button>
               </div>
 
-              {/* 🚀 FIX: TOMBOL LOGIN SLATE/MIDNIGHT BLUE (ELEGAN & PRO) */}
+              {/* TOMBOL LOGIN */}
               <button
                 disabled={loading}
                 className="w-full mt-2 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-[1000] uppercase tracking-[0.2em] text-[12px] shadow-xl shadow-slate-900/20 active:scale-95 transition-all flex justify-center items-center gap-2 border border-slate-800"

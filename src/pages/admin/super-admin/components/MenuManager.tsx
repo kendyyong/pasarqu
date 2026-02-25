@@ -1,19 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../../../lib/supabaseClient";
 import {
-  Zap,
   ToggleLeft,
   ToggleRight,
   Plus,
-  Save,
   Trash2,
-  Image as ImageIcon,
-  Upload,
-  X,
-  Loader2,
-  Link as LinkIcon,
-  Palette,
-  Type,
   LayoutGrid,
   RefreshCw,
 } from "lucide-react";
@@ -57,11 +48,14 @@ export const MenuManager = () => {
   }, []);
 
   const toggleMenuStatus = async (id: string, currentStatus: boolean) => {
-    const { error } = await supabase
-      .from("app_menus")
-      .update({ is_active: !currentStatus })
-      .eq("id", id);
-    if (!error) {
+    try {
+      const { error } = await supabase
+        .from("app_menus")
+        .update({ is_active: !currentStatus })
+        .eq("id", id);
+
+      if (error) throw error;
+
       setMenus((prev) =>
         prev.map((m) =>
           m.id === id ? { ...m, is_active: !currentStatus } : m,
@@ -71,6 +65,8 @@ export const MenuManager = () => {
         currentStatus ? "MENU DINONAKTIFKAN" : "MENU DIAKTIFKAN",
         "success",
       );
+    } catch (err: any) {
+      showToast(err.message, "error");
     }
   };
 
@@ -83,83 +79,57 @@ export const MenuManager = () => {
       order_index: menus.length + 1,
       is_active: true,
     };
-    const { error } = await supabase.from("app_menus").insert([newMenu]);
-    if (!error) {
+    try {
+      const { error } = await supabase.from("app_menus").insert([newMenu]);
+      if (error) throw error;
       fetchMenus();
       showToast("MENU BERHASIL DITAMBAHKAN", "success");
+    } catch (err: any) {
+      showToast(err.message, "error");
     }
   };
 
   const handleDelete = async (id: string) => {
     if (window.confirm("HAPUS MENU INI SECARA PERMANEN?")) {
-      const { error } = await supabase.from("app_menus").delete().eq("id", id);
-      if (!error) {
+      try {
+        const { error } = await supabase
+          .from("app_menus")
+          .delete()
+          .eq("id", id);
+        if (error) throw error;
         setMenus((prev) => prev.filter((m) => m.id !== id));
         showToast("MENU DIHAPUS", "success");
+      } catch (err: any) {
+        showToast(err.message, "error");
       }
     }
   };
 
   const handleUpdateField = async (id: string, field: string, value: any) => {
-    const { error } = await supabase
-      .from("app_menus")
-      .update({ [field]: value })
-      .eq("id", id);
-    if (!error) showToast("DATA TERSIMPAN", "success");
+    try {
+      const { error } = await supabase
+        .from("app_menus")
+        .update({ [field]: value })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setMenus((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, [field]: value } : m)),
+      );
+      showToast("DATA TERSIMPAN", "success");
+    } catch (err: any) {
+      // Jika error 400 terjadi di sini, database dan kodingan belum sinkron
+      showToast("GAGAL SIMPAN: " + err.message, "error");
+    }
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 text-left font-black uppercase tracking-tighter">
-      {/* SECTION 1: BANNER IKLAN */}
-      <div className="bg-white rounded-md p-6 shadow-sm border border-slate-200">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-[14px] font-black text-slate-900 flex items-center gap-2">
-              <ImageIcon className="text-[#008080]" size={20} /> IKLAN SLIDE
-              BERANDA
-            </h3>
-            <p className="text-[10px] font-bold text-slate-400 mt-1 tracking-widest uppercase">
-              BANNER PROMOSI UTAMA APLIKASI
-            </p>
-          </div>
-          <button className="bg-slate-50 border border-slate-200 text-slate-600 px-4 py-2 rounded-md font-black text-[11px] hover:bg-[#008080] hover:text-white transition-all">
-            <Upload size={14} className="mr-2 inline" /> TAMBAH BANNER
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="aspect-[2/1] bg-slate-50 rounded-md border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300 gap-2 hover:border-[#008080] hover:text-[#008080] cursor-pointer transition-all">
-            <Plus size={24} />
-            <span className="text-[9px] font-black uppercase tracking-widest">
-              SLOT IKLAN BARU
-            </span>
-          </div>
-
-          {/* Contoh Banner Aktif */}
-          <div className="aspect-[2/1] bg-slate-800 rounded-md relative overflow-hidden group border border-slate-200">
-            <img
-              src="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800"
-              alt="Promo"
-              className="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-500"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-            <div className="absolute bottom-2 left-2">
-              <p className="text-[8px] text-white font-black px-2 py-0.5 bg-[#FF6600] rounded-sm">
-                AKTIF
-              </p>
-            </div>
-            <button className="absolute top-2 right-2 bg-white/10 backdrop-blur-md p-1.5 rounded-md text-white hover:bg-red-600 transition-colors">
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* SECTION 2: TOMBOL NAVIGASI GRID */}
-      <div className="bg-white rounded-md p-6 shadow-sm border border-slate-200 relative">
+      <div className="bg-white dark:bg-slate-900 rounded-md p-6 border border-slate-200 dark:border-slate-800 relative transition-colors duration-500">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h3 className="text-[14px] font-black text-slate-900 flex items-center gap-2">
+            <h3 className="text-[14px] font-black text-slate-900 dark:text-white flex items-center gap-2">
               <LayoutGrid className="text-[#FF6600]" size={20} /> TOMBOL
               NAVIGASI GRID
             </h3>
@@ -169,7 +139,7 @@ export const MenuManager = () => {
           </div>
           <button
             onClick={handleAdd}
-            className="bg-[#008080] text-white px-5 py-2.5 rounded-md font-black text-[11px] flex items-center gap-2 hover:bg-slate-900 transition-all shadow-lg active:scale-95"
+            className="bg-[#008080] text-white px-5 py-2.5 rounded-md font-black text-[11px] flex items-center gap-2 hover:bg-slate-900 transition-all active:scale-95"
           >
             <Plus size={16} /> TAMBAH MENU
           </button>
@@ -179,7 +149,7 @@ export const MenuManager = () => {
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <RefreshCw className="animate-spin text-[#008080]" size={32} />
             <p className="text-[10px] text-slate-400 font-black">
-              MENGHUBUNGKAN KE DATABASE...
+              MENGHUBUNGKAN DATABASE...
             </p>
           </div>
         ) : (
@@ -187,64 +157,84 @@ export const MenuManager = () => {
             {menus.map((menu) => (
               <div
                 key={menu.id}
-                className="flex flex-col lg:flex-row items-center p-4 bg-white border border-slate-100 rounded-md gap-6 hover:border-[#008080] hover:shadow-md transition-all group"
+                className="flex flex-col lg:flex-row items-center p-4 bg-white dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-md gap-6 hover:border-[#008080] transition-all"
               >
-                {/* Preview Ikon */}
                 <div
-                  className={`w-12 h-12 ${menu.color_class || "bg-[#008080]"} text-white rounded-md flex items-center justify-center shadow-lg shrink-0 border-b-4 border-black/20`}
+                  className={`w-12 h-12 ${menu.color_class} text-white rounded-md flex items-center justify-center shrink-0 border-b-4 border-black/20`}
                 >
                   <DynamicIcon name={menu.icon_name} size={22} />
                 </div>
 
-                {/* Edit Form */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-1 w-full text-left">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-1 w-full">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 tracking-widest uppercase ml-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">
                       Label Menu
                     </label>
                     <input
-                      className="w-full bg-slate-50 border border-slate-100 rounded-md px-3 py-2.5 text-[12px] font-black focus:border-[#008080] outline-none transition-all uppercase"
-                      defaultValue={menu.label}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-md px-3 py-2 text-[12px] font-black outline-none focus:border-[#008080] dark:text-white"
+                      value={menu.label}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        setMenus((prev) =>
+                          prev.map((m) =>
+                            m.id === menu.id ? { ...m, label: val } : m,
+                          ),
+                        );
+                      }}
                       onBlur={(e) =>
-                        handleUpdateField(
-                          menu.id,
-                          "label",
-                          e.target.value.toUpperCase(),
-                        )
+                        handleUpdateField(menu.id, "label", e.target.value)
                       }
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 tracking-widest uppercase ml-1">
-                      Rute / URL
+                    <label className="text-[9px] font-black text-slate-400 uppercase">
+                      Rute URL
                     </label>
                     <input
-                      className="w-full bg-slate-50 border border-slate-100 rounded-md px-3 py-2.5 text-[12px] font-black focus:border-[#008080] outline-none transition-all"
-                      defaultValue={menu.target_url}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-md px-3 py-2 text-[12px] font-black outline-none focus:border-[#008080] dark:text-white"
+                      value={menu.target_url}
+                      onChange={(e) => {
+                        setMenus((prev) =>
+                          prev.map((m) =>
+                            m.id === menu.id
+                              ? { ...m, target_url: e.target.value }
+                              : m,
+                          ),
+                        );
+                      }}
                       onBlur={(e) =>
                         handleUpdateField(menu.id, "target_url", e.target.value)
                       }
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 tracking-widest uppercase ml-1">
-                      Nama Ikon (Lucide)
+                    <label className="text-[9px] font-black text-slate-400 uppercase">
+                      Nama Ikon
                     </label>
                     <input
-                      className="w-full bg-slate-50 border border-slate-100 rounded-md px-3 py-2.5 text-[12px] font-black focus:border-[#008080] outline-none transition-all"
-                      defaultValue={menu.icon_name}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-md px-3 py-2 text-[12px] font-black outline-none focus:border-[#008080] dark:text-white"
+                      value={menu.icon_name}
+                      onChange={(e) => {
+                        setMenus((prev) =>
+                          prev.map((m) =>
+                            m.id === menu.id
+                              ? { ...m, icon_name: e.target.value }
+                              : m,
+                          ),
+                        );
+                      }}
                       onBlur={(e) =>
                         handleUpdateField(menu.id, "icon_name", e.target.value)
                       }
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 tracking-widest uppercase ml-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase">
                       Warna Tema
                     </label>
                     <select
-                      className="w-full bg-slate-50 border border-slate-100 rounded-md px-3 py-2.5 text-[12px] font-black cursor-pointer focus:border-[#008080] outline-none"
-                      defaultValue={menu.color_class}
+                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-md px-3 py-2 text-[12px] font-black outline-none focus:border-[#008080] dark:text-white"
+                      value={menu.color_class}
                       onChange={(e) =>
                         handleUpdateField(
                           menu.id,
@@ -253,18 +243,17 @@ export const MenuManager = () => {
                         )
                       }
                     >
-                      <option value="bg-[#008080]">TOSCA (PRIMARY)</option>
-                      <option value="bg-[#FF6600]">ORANGE (SECONDARY)</option>
-                      <option value="bg-blue-600">BLUE SKY</option>
-                      <option value="bg-red-600">DANGER RED</option>
-                      <option value="bg-purple-600">ROYAL PURPLE</option>
-                      <option value="bg-slate-900">DEEP BLACK</option>
+                      <option value="bg-[#008080]">TOSCA</option>
+                      <option value="bg-[#FF6600]">ORANGE</option>
+                      <option value="bg-blue-600">BLUE</option>
+                      <option value="bg-red-600">RED</option>
+                      <option value="bg-purple-600">PURPLE</option>
+                      <option value="bg-slate-900">BLACK</option>
                     </select>
                   </div>
                 </div>
 
-                {/* Aksi Toggle & Hapus */}
-                <div className="flex items-center gap-4 lg:border-l lg:pl-6 border-slate-200">
+                <div className="flex items-center gap-4 border-slate-200">
                   <button
                     onClick={() => toggleMenuStatus(menu.id, menu.is_active)}
                   >
@@ -276,7 +265,7 @@ export const MenuManager = () => {
                   </button>
                   <button
                     onClick={() => handleDelete(menu.id)}
-                    className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-md transition-all"
+                    className="p-2 text-slate-300 hover:text-red-600"
                   >
                     <Trash2 size={20} />
                   </button>
@@ -285,13 +274,6 @@ export const MenuManager = () => {
             ))}
           </div>
         )}
-      </div>
-
-      <div className="bg-slate-900 p-4 rounded-md text-center border-b-4 border-[#008080]">
-        <p className="text-[10px] text-white font-black tracking-widest uppercase">
-          SELURUH PERUBAHAN PADA HALAMAN INI AKAN BERDAMPAK LANGSUNG PADA
-          TAMPILAN APLIKASI PELANGGAN.
-        </p>
       </div>
     </div>
   );

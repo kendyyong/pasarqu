@@ -1,7 +1,7 @@
 import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { useToast } from "../../contexts/ToastContext";
-import { Link } from "react-router-dom";
 import {
   Store,
   Bike,
@@ -11,14 +11,17 @@ import {
   Lock,
   Mail,
   ChevronLeft,
-  Globe,
   Zap,
+  ArrowLeft,
+  LockKeyhole,
+  Terminal,
+  ScanFace,
+  Fingerprint,
 } from "lucide-react";
 
 /**
  * --- TEMPLATE LOGIN PRO (LOGIKA STREAMLINED) ---
- * Perbaikan: Fokus validasi hanya pada tabel 'profiles'.
- * Jika Profil Approved, user diizinkan masuk Dashboard.
+ * Digunakan untuk Admin Wilayah, Toko, dan Kurir
  */
 const BaseLoginPage = ({
   role,
@@ -39,7 +42,6 @@ const BaseLoginPage = ({
     e.preventDefault();
     setIsLoading(true);
     try {
-      // 1. Cek Email & Password (Auth Supabase)
       const { data, error } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
@@ -48,7 +50,6 @@ const BaseLoginPage = ({
       if (error) throw error;
 
       if (data.user) {
-        // 2. Tarik Data Profil (Satu Sumber Kebenaran)
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
           .select("role, status, is_verified")
@@ -60,7 +61,6 @@ const BaseLoginPage = ({
         const isSuperAdmin = profile?.role === "SUPER_ADMIN";
         const isCorrectRole = profile?.role === role;
 
-        // A. CEK ROLE (Pastikan tidak salah kamar)
         if (!isCorrectRole && !isSuperAdmin) {
           await supabase.auth.signOut();
           const identity =
@@ -73,24 +73,19 @@ const BaseLoginPage = ({
           return;
         }
 
-        // B. CEK STATUS (Logika Disederhanakan)
         if (!isSuperAdmin) {
-          // SKENARIO 1: SUKSES
           if (profile?.status === "APPROVED") {
             showToast(`Selamat Datang, ${title}!`, "success");
-            // Gunakan replace agar tidak bisa 'Back' ke login
             window.location.replace(dashboardUrl);
             return;
           }
 
-          // SKENARIO 2: MASIH PENDING
           if (profile?.status === "PENDING" || !profile?.status) {
             showToast("Pendaftaran Anda masih dalam peninjauan admin.", "info");
             window.location.replace("/waiting-approval");
             return;
           }
 
-          // SKENARIO 3: DIBEKUKAN/DITOLAK
           if (
             profile?.status === "SUSPENDED" ||
             profile?.status === "REJECTED"
@@ -105,7 +100,6 @@ const BaseLoginPage = ({
           }
         }
 
-        // C. JIKA SUPER ADMIN (Bypass Langsung)
         showToast(`Akses Super Admin Diberikan.`, "success");
         window.location.replace(dashboardUrl);
       }
@@ -120,7 +114,6 @@ const BaseLoginPage = ({
     <div
       className={`min-h-screen font-sans flex flex-col ${isTeal ? "bg-teal-600" : "bg-[#FF6600]"}`}
     >
-      {/* HEADER */}
       <nav className="w-full bg-white shadow-sm py-4 px-6 md:px-12 flex justify-between items-center z-20">
         <div className="flex items-center gap-4">
           <Link
@@ -135,15 +128,14 @@ const BaseLoginPage = ({
           </h2>
         </div>
         <Link
-          to="/portal"
+          to="/login"
           className="text-[10px] font-black text-slate-400 hover:text-teal-600 flex items-center gap-1 uppercase tracking-widest transition-colors"
         >
-          <ChevronLeft size={14} /> Portal Mitra
+          <ChevronLeft size={14} /> KEMBALI
         </Link>
       </nav>
 
       <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-12 lg:gap-24 p-6 relative overflow-hidden">
-        {/* BRANDING SIDE */}
         <div className="hidden lg:flex flex-col text-white max-w-sm text-left">
           <div className="mb-8 p-5 bg-white/10 backdrop-blur-md rounded-3xl w-fit border border-white/20 shadow-2xl">
             {icon}
@@ -158,7 +150,6 @@ const BaseLoginPage = ({
           </p>
         </div>
 
-        {/* LOGIN CARD */}
         <div className="w-full max-w-[420px]">
           <div className="bg-white p-10 rounded-[2.5rem] shadow-[0_30px_100px_rgba(0,0,0,0.2)] border border-white">
             <div className="mb-8 text-left">
@@ -198,12 +189,12 @@ const BaseLoginPage = ({
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">
                     Password
                   </label>
-                  <button
-                    type="button"
+                  <Link
+                    to="/forgot-password"
                     className="text-[9px] font-black text-blue-600 uppercase tracking-tighter hover:underline"
                   >
                     Lupa?
-                  </button>
+                  </Link>
                 </div>
                 <div className="relative group">
                   <Lock
@@ -276,8 +267,9 @@ export const AdminLogin = () => (
   />
 );
 
-// --- LOGIN SUPER ADMIN ---
+// 🚀 FIX: LOGIN SUPER ADMIN (EDISI KHUSUS CEO KENDY ASSA - REVISI VISUAL)
 export const SuperAdminLogin = () => {
+  const navigate = useNavigate();
   const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });
@@ -301,11 +293,14 @@ export const SuperAdminLogin = () => {
       if (profileError) throw profileError;
 
       if (profile?.role === "SUPER_ADMIN") {
-        showToast("Akses Diterima.", "success");
-        window.location.replace("/super-admin");
+        showToast(
+          "Otorisasi Diterima. Selamat Datang, CEO Kendy Assa.",
+          "success",
+        );
+        window.location.replace("/admin");
       } else {
         await supabase.auth.signOut();
-        throw new Error("Akses Ditolak! Bukan Super Admin.");
+        throw new Error("Akses Ditolak! Kredensial Bukan Tingkat Master.");
       }
     } catch (err: any) {
       showToast(err.message, "error");
@@ -314,59 +309,158 @@ export const SuperAdminLogin = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black font-sans flex items-center justify-center p-4 relative overflow-hidden">
-      <div className="absolute top-[-20%] left-[-20%] w-[800px] h-[800px] bg-purple-900/30 rounded-full blur-[150px] pointer-events-none" />
-      <div className="w-full max-w-md relative z-10">
-        <div className="bg-black/80 backdrop-blur-xl rounded-[2rem] shadow-2xl border border-purple-900/50 p-10">
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-purple-900/30 rounded-full border border-purple-500/30 text-purple-400 mb-6 shadow-[0_0_30px_rgba(168,85,247,0.3)] animate-pulse">
-              <Globe size={40} />
+    <div className="min-h-[100dvh] w-screen flex flex-col font-sans relative overflow-hidden bg-gradient-to-br from-slate-900 via-[#003333] to-[#331a00] text-left selection:bg-[#FF6600] selection:text-white">
+      {/* AMBIENT LIGHTING */}
+      <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-[#008080]/30 rounded-full blur-[150px] pointer-events-none mix-blend-overlay"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-[#FF6600]/20 rounded-full blur-[150px] pointer-events-none mix-blend-overlay"></div>
+
+      {/* HEADER: KEMBALI */}
+      <header className="absolute top-0 left-0 p-8 z-50 w-full">
+        <button
+          onClick={() => navigate("/login")}
+          className="flex items-center gap-3 text-white/70 hover:text-white transition-all active:scale-95 group py-3 px-5 rounded-full bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/10 w-max"
+        >
+          <ArrowLeft
+            size={18}
+            className="group-hover:-translate-x-1 transition-transform"
+          />
+          <span className="text-[11px] font-black uppercase tracking-[0.2em]">
+            Kembali
+          </span>
+        </button>
+      </header>
+
+      <div className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 w-full max-w-[480px] mx-auto">
+        <div className="w-full animate-in fade-in zoom-in-95 duration-700">
+          <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-[3rem] p-10 shadow-[0_20px_60px_rgba(0,0,0,0.5)] relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/10 to-transparent pointer-events-none"></div>
+
+            <div className="flex flex-col items-center mb-10 relative z-10">
+              <div className="relative mb-8">
+                {/* Efek cahaya di belakang logo */}
+                <div className="absolute inset-0 bg-gradient-to-r from-[#008080] to-[#FF6600] blur-3xl opacity-40 rounded-full animate-pulse"></div>
+
+                {/* 🚀 LOGO CEO TANPA KOTAK, DENGAN GLOW PUTIH KUAT (Outline Effect) */}
+                <img
+                  src="/logo-text.png"
+                  alt="PasarQu CEO"
+                  className="relative w-auto h-16 object-contain drop-shadow-[0_0_3px_#ffffff] drop-shadow-[0_0_10px_rgba(255,255,255,0.7)]"
+                />
+              </div>
+
+              {/* TYPOGRAPHY DENGAN GARIS TEPI PUTIH (STROKE) */}
+              <h1 className="text-[30px] font-[1000] uppercase tracking-[0.05em] text-center leading-none drop-shadow-2xl">
+                <span className="text-[#008080] drop-shadow-[0_0_2px_#fff] [-webkit-text-stroke:1px_white]">
+                  PASARQU
+                </span>
+                <br />
+                <span className="text-[#FF6600] drop-shadow-[0_0_2px_#fff] [-webkit-text-stroke:1px_white]">
+                  MASTER
+                </span>
+              </h1>
+
+              <div className="flex items-center gap-2 mt-4 px-4 py-1.5 rounded-full bg-white/5 border border-white/10">
+                <Shield size={12} className="text-[#FF6600]" />
+                <p className="text-[9px] font-black text-white/70 uppercase tracking-[0.3em]">
+                  Executive Control Panel
+                </p>
+              </div>
             </div>
-            <h1 className="text-3xl font-black text-white tracking-tighter mb-2 italic">
-              GOD MODE
-            </h1>
-            <p className="text-purple-400 text-[10px] font-black uppercase tracking-[0.3em]">
-              Super Admin Only
+
+            <form
+              onSubmit={handleSuperLogin}
+              className="space-y-5 relative z-10"
+            >
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-white/60 uppercase tracking-[0.2em] ml-2">
+                  Kredensial Master
+                </label>
+                <div className="relative group">
+                  <Mail
+                    className="absolute left-5 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#008080] transition-colors"
+                    size={20}
+                  />
+                  <input
+                    type="email"
+                    placeholder="Master Email ID"
+                    className="w-full pl-14 pr-6 py-5 bg-black/20 border border-white/10 rounded-2xl text-white font-bold text-sm focus:border-[#008080] focus:bg-black/30 focus:ring-1 focus:ring-[#008080]/50 outline-none transition-all placeholder:text-white/20 shadow-inner"
+                    value={formData.email}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-white/60 uppercase tracking-[0.2em] ml-2">
+                  Kode Otorisasi
+                </label>
+                <div className="relative group">
+                  <LockKeyhole
+                    className="absolute left-5 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#FF6600] transition-colors"
+                    size={20}
+                  />
+                  <input
+                    type="password"
+                    placeholder="••••••••••••"
+                    className="w-full pl-14 pr-6 py-5 bg-black/20 border border-white/10 rounded-2xl text-white font-bold text-sm focus:border-[#FF6600] focus:bg-black/30 focus:ring-1 focus:ring-[#FF6600]/50 outline-none transition-all placeholder:text-white/20 shadow-inner tracking-[0.2em]"
+                    value={formData.password}
+                    onChange={(e) =>
+                      setFormData({ ...formData, password: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* 🚀 TOMBOL ORANGE SOLID KHUSUS CEO DENGAN TEKS BARU */}
+              <button
+                disabled={isLoading}
+                className="w-full mt-8 py-5 bg-[#FF6600] hover:bg-[#e65c00] text-white rounded-2xl shadow-[0_10px_40px_-10px_rgba(255,102,0,0.6)] active:scale-95 transition-all flex justify-center items-center gap-2 relative group overflow-hidden border border-white/30"
+              >
+                <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] skew-x-12"></div>
+                {isLoading ? (
+                  <Loader2 className="animate-spin relative z-10" size={24} />
+                ) : (
+                  <>
+                    <Zap size={20} className="relative z-10 fill-white" />
+                    {/* 🚀 STRUKTUR TEKS BARU MULTI-LINE */}
+                    <div className="relative z-10 flex flex-col items-center leading-tight py-1">
+                      <span className="text-[10px] font-bold opacity-90 mb-0.5 tracking-widest">
+                        Silahkan Masuk
+                      </span>
+                      <span className="text-[16px] font-[1000] tracking-widest uppercase drop-shadow-sm">
+                        KENDY ASSA
+                      </span>
+                      <span className="text-[9px] font-black opacity-80 tracking-[0.2em] mt-0.5">
+                        FOUNDER & CEO PASARQU
+                      </span>
+                    </div>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+
+          <div className="mt-10 text-center opacity-50">
+            <p className="text-[8px] font-black text-white uppercase tracking-[0.4em] drop-shadow">
+              HIGHEST AUTHORITY LEVEL ACCESS • PASARQU 2026
             </p>
           </div>
-          <form onSubmit={handleSuperLogin} className="space-y-6">
-            <input
-              type="email"
-              placeholder="SECURE ID"
-              className="w-full px-6 py-4 bg-purple-900/10 border border-purple-900/50 rounded-xl text-white font-bold text-center outline-none focus:border-purple-500"
-              value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
-            />
-            <input
-              type="password"
-              placeholder="PASSKEY"
-              className="w-full px-6 py-4 bg-purple-900/10 border border-purple-900/50 rounded-xl text-white font-bold text-center outline-none focus:border-purple-500 tracking-[0.5em]"
-              value={formData.password}
-              onChange={(e) =>
-                setFormData({ ...formData, password: e.target.value })
-              }
-            />
-            <button
-              disabled={isLoading}
-              className="w-full py-5 bg-purple-700 text-white rounded-xl font-black uppercase text-xs tracking-[0.3em] hover:bg-purple-600 transition-all"
-            >
-              {isLoading ? (
-                <Loader2 className="animate-spin" />
-              ) : (
-                <>
-                  <Zap size={16} className="inline mr-2" /> INITIATE
-                </>
-              )}
-            </button>
-          </form>
         </div>
       </div>
+      <style>{`
+        @keyframes shimmer {
+          100% { transform: translateX(100%); }
+        }
+      `}</style>
     </div>
   );
 };
 
+// --- LOGIN MITRA TOKO ---
 export const MerchantLogin = () => (
   <BaseLoginPage
     role="MERCHANT"
@@ -379,6 +473,7 @@ export const MerchantLogin = () => (
   />
 );
 
+// --- LOGIN MITRA KURIR ---
 export const CourierLogin = () => (
   <BaseLoginPage
     role="COURIER"

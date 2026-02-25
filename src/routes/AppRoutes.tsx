@@ -8,14 +8,14 @@ import { RoleBasedRedirect } from "./RoleBasedRedirect";
 
 // --- PAGES DASAR ---
 import { MarketSelectionPage } from "../pages/market-selection/MarketSelectionPage";
-
-// --- IMPORT PAGES BARU (Agar Jalur Tersambung) ---
 import { HelpCenterPage } from "../pages/info/HelpCenterPage";
 import { LoginPage } from "../pages/auth/LoginPage";
-import { MerchantLoginPage } from "../pages/auth/MerchantLoginPage";
-import { CourierLoginPage } from "../pages/auth/CourierLoginPage";
 
-// --- IMPORT SECTIONS (Rute yang sudah dipisah) ---
+// 🚀 IMPORT PAGES LUPA PASSWORD
+import { ForgotPasswordPage } from "../pages/auth/ForgotPasswordPage";
+import { UpdatePasswordPage } from "../pages/auth/UpdatePasswordPage";
+
+// --- IMPORT SECTIONS ---
 import { AuthRoutes } from "./sections/AuthRoutes";
 import { CustomerRoutes } from "./sections/CustomerRoutes";
 import { PartnerRoutes } from "./sections/PartnerRoutes";
@@ -25,7 +25,7 @@ export const AppRoutes = () => {
   const location = useLocation();
   const { isChecking, selectedMarket } = useMarketCheck();
 
-  // 1. LOADING STATE (Tetap sesuai aslinya)
+  // 1. LOADING STATE
   if (isChecking) {
     return (
       <div className="h-screen flex items-center justify-center bg-white font-black uppercase text-[#008080]">
@@ -39,16 +39,17 @@ export const AppRoutes = () => {
     );
   }
 
-  // 2. LOGIKA BYPASS PASAR (Menambah jalur tanpa mengubah desain)
+  // 2. LOGIKA BYPASS PASAR
   const bypassRoutes = [
     "/login",
     "/register",
     "/verify-otp",
     "/complete-profile",
+    "/forgot-password", // 🚀 DITAMBAHKAN
+    "/update-password", // 🚀 DITAMBAHKAN
     "/terms",
     "/privacy",
     "/register-merchant",
-    "/portal",
     "/admin",
     "/admin-wilayah",
     "/waiting-approval",
@@ -80,11 +81,13 @@ export const AppRoutes = () => {
       <Route path="/" element={<RoleBasedRedirect />} />
       <Route path="/select-market" element={<MarketSelectionPage />} />
 
-      {/* --- PENDAFTARAN JALUR (MENGHUBUNGKAN TOMBOL PORTAL KE FILE MASING-MASING) --- */}
+      {/* --- JALUR LOGIN, LUPA SANDI & BANTUAN --- */}
       <Route path="/info/bantuan" element={<HelpCenterPage />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/login/toko" element={<MerchantLoginPage />} />
-      <Route path="/login/kurir" element={<CourierLoginPage />} />
+
+      {/* 🚀 JALUR LUPA KATA SANDI */}
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/update-password" element={<UpdatePasswordPage />} />
 
       {/* --- PENGGABUNGAN SEMUA SEKSI RUTE --- */}
       {AuthRoutes()}

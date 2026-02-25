@@ -26,7 +26,7 @@ const mapContainerStyle = {
   height: "100%",
   borderRadius: "0.375rem",
 };
-const centerDefault = { lat: -0.7893, lng: 113.9213 }; // Posisi tengah Indonesia
+const centerDefault = { lat: -0.7893, lng: 113.9213 };
 
 const formatRupiah = (num: number) => {
   return new Intl.NumberFormat("id-ID", {
@@ -36,7 +36,6 @@ const formatRupiah = (num: number) => {
   }).format(num);
 };
 
-// SVG PATH UNTUK IKON KANTOR PASAR
 const pathOffice =
   "M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z";
 
@@ -65,12 +64,10 @@ export const DashboardOverview: React.FC<Props> = ({
   });
   const [loading, setLoading] = useState(true);
 
-  // ✅ STATE UNTUK PETA & ZOOM DINAMIS
   const mapRef = useRef<google.maps.Map | null>(null);
   const [currentZoom, setCurrentZoom] = useState(5);
   const [maxDistanceKm, setMaxDistanceKm] = useState<number>(1);
 
-  // 1. TARIK DATA GLOBAL CONFIG
   useEffect(() => {
     const fetchConfig = async () => {
       const { data } = await supabase
@@ -86,7 +83,6 @@ export const DashboardOverview: React.FC<Props> = ({
     fetchConfig();
   }, []);
 
-  // 2. FETCH LIVE DATA STATISTIK
   const fetchLiveData = async () => {
     setLoading(true);
     try {
@@ -123,7 +119,6 @@ export const DashboardOverview: React.FC<Props> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // 3. CARI ADMIN PASAR SAAT PIN DIKLIK
   useEffect(() => {
     if (selectedMarker) {
       const fetchAdminProfile = async () => {
@@ -141,14 +136,9 @@ export const DashboardOverview: React.FC<Props> = ({
     }
   }, [selectedMarker]);
 
-  // ✅ GENERATOR IKON DINAMIS (Mengikuti Zoom Level)
   const makeSvgIcon = (svgPath: string, color: string, baseSize: number) => {
     if (!window.google) return undefined;
-
-    // Karena default zoom Super Admin adalah 5, kita jadikan 5 sebagai rasio dasar (1.0x)
     const scaleFactor = currentZoom / 5;
-
-    // Minimal ukuran 14px (kalau di zoom out), maksimal 3x lipat (kalau di zoom in dalam)
     const dynamicSize = Math.min(
       baseSize * 3,
       Math.max(14, baseSize * scaleFactor),
@@ -162,31 +152,30 @@ export const DashboardOverview: React.FC<Props> = ({
     };
   };
 
-  // Ikon Kantor Pusat Kontrol
   const iconOffice = makeSvgIcon(pathOffice, "#FF6600", 22);
 
   return (
     <div className="space-y-4 md:space-y-6 animate-in fade-in duration-700 font-black uppercase tracking-tighter text-left pb-10">
-      {/* 1. TOP STATS */}
+      {/* 1. TOP STATS (BERSIH TOTAL) */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
         <StatCard
           title="TOTAL OMSET"
           value={formatRupiah(stats.revenue)}
           icon={<TrendingUp size={20} />}
-          border="border-teal-600"
+          color="text-teal-600"
         />
         <StatCard
           title="TRANSAKSI"
           value={stats.total_orders.toLocaleString()}
           icon={<ShoppingBag size={20} />}
-          border="border-orange-600"
+          color="text-orange-600"
         />
         <div className="col-span-2 md:col-span-1">
           <StatCard
             title="USER AKTIF"
             value={stats.active_users.toLocaleString()}
             icon={<User size={20} />}
-            border="border-slate-900"
+            color="text-slate-900"
           />
         </div>
       </div>
@@ -194,8 +183,8 @@ export const DashboardOverview: React.FC<Props> = ({
       {/* 2. MAIN MONITORING */}
       <div className="flex flex-col lg:grid lg:grid-cols-12 gap-4 md:gap-6">
         {/* LEFT: PETA GIS */}
-        <div className="lg:col-span-8 bg-white p-2 md:p-3 rounded-md border border-slate-200 shadow-sm relative flex flex-col h-[350px] md:h-[500px] lg:h-[650px]">
-          <div className="absolute top-4 left-4 z-10 hidden md:flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-md shadow-xl border-b-2 border-teal-500">
+        <div className="lg:col-span-8 bg-white p-2 md:p-3 rounded-md border border-slate-200 relative flex flex-col h-[350px] md:h-[500px] lg:h-[650px]">
+          <div className="absolute top-4 left-4 z-10 hidden md:flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-md border border-teal-500">
             <Layers size={14} className="text-teal-400" />
             <span className="text-[9px] tracking-widest">
               LIVE GIS MONITOR | ZONA: {maxDistanceKm}KM
@@ -216,7 +205,6 @@ export const DashboardOverview: React.FC<Props> = ({
                 onLoad={(map) => {
                   mapRef.current = map;
                 }}
-                // ✅ SENSOR PERUBAHAN ZOOM UNTUK RESIZE IKON
                 onZoomChanged={() => {
                   if (mapRef.current) {
                     const newZoom = mapRef.current.getZoom();
@@ -225,18 +213,15 @@ export const DashboardOverview: React.FC<Props> = ({
                   }
                 }}
               >
-                {/* RENDER SEMUA PASAR */}
                 {markets?.map((m) => {
                   const lat = parseFloat(m.lat || m.latitude || "0");
                   const lng = parseFloat(m.lng || m.longitude || "0");
-
                   if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0)
                     return null;
                   const position = { lat, lng };
 
                   return (
                     <React.Fragment key={`group-${m.id}`}>
-                      {/* LINGKARAN RADIUS KEKUASAAN PASAR */}
                       <CircleF
                         center={position}
                         radius={maxDistanceKm * 1000}
@@ -248,8 +233,6 @@ export const DashboardOverview: React.FC<Props> = ({
                           clickable: false,
                         }}
                       />
-
-                      {/* PIN GEDUNG KANTOR (Auto-Resize) */}
                       <MarkerF
                         position={position}
                         icon={iconOffice}
@@ -259,7 +242,6 @@ export const DashboardOverview: React.FC<Props> = ({
                   );
                 })}
 
-                {/* POPUP PROFIL PASAR KETIKA DIKLIK */}
                 {selectedMarker && (
                   <InfoWindowF
                     position={{
@@ -273,9 +255,8 @@ export const DashboardOverview: React.FC<Props> = ({
                     onCloseClick={() => setSelectedMarker(null)}
                   >
                     <div className="p-2 min-w-[220px] font-sans uppercase text-left">
-                      {/* HEADER PROFIL */}
                       <div className="flex items-center gap-3 border-b border-slate-200 pb-3 mb-3">
-                        <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-md flex items-center justify-center shrink-0 border border-orange-100 shadow-inner">
+                        <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-md flex items-center justify-center shrink-0 border border-orange-100">
                           <Store size={20} />
                         </div>
                         <div>
@@ -288,7 +269,6 @@ export const DashboardOverview: React.FC<Props> = ({
                         </div>
                       </div>
 
-                      {/* DETAIL ADMIN & ZONA */}
                       <div className="space-y-2 mb-4">
                         <div className="flex items-start gap-2 bg-slate-50 p-2 rounded border border-slate-100">
                           <User
@@ -323,10 +303,9 @@ export const DashboardOverview: React.FC<Props> = ({
                         </div>
                       </div>
 
-                      {/* TOMBOL AKSI */}
                       <button
                         onClick={() => setAuditMarket(selectedMarker)}
-                        className="w-full py-2.5 bg-slate-900 text-white text-[10px] font-black tracking-widest rounded flex items-center justify-center gap-1.5 hover:bg-[#008080] transition-colors shadow-md active:scale-95"
+                        className="w-full py-2.5 bg-slate-900 text-white text-[10px] font-black tracking-widest rounded flex items-center justify-center gap-1.5 hover:bg-[#008080] transition-colors active:scale-95"
                       >
                         <SearchCode size={14} /> AUDIT SYSTEM NODE
                       </button>
@@ -344,7 +323,7 @@ export const DashboardOverview: React.FC<Props> = ({
 
         {/* RIGHT: LIVE FEED */}
         <div className="lg:col-span-4 flex flex-col gap-4">
-          <div className="bg-slate-900 rounded-md shadow-xl flex flex-col h-[450px] lg:h-[650px] overflow-hidden border-b-8 border-teal-600">
+          <div className="bg-slate-900 rounded-md flex flex-col h-[450px] lg:h-[650px] overflow-hidden border border-white/5">
             <div className="p-4 flex items-center justify-between border-b border-white/10">
               <div className="flex items-center gap-2">
                 <RefreshCcw
@@ -392,7 +371,7 @@ export const DashboardOverview: React.FC<Props> = ({
               ))}
             </div>
 
-            <button className="m-4 p-3 bg-white/10 text-white rounded text-[9px] font-black hover:bg-white/20 transition-all">
+            <button className="m-4 p-3 bg-white/10 text-white rounded text-[9px] font-black hover:bg-white/20 transition-all border border-white/10">
               TAMPILKAN SEMUA LOG
             </button>
           </div>
@@ -410,18 +389,21 @@ export const DashboardOverview: React.FC<Props> = ({
   );
 };
 
-// --- SUB-COMPONENT STAT CARD ---
-const StatCard = ({ title, value, icon, border }: any) => (
+// --- SUB-COMPONENT STAT CARD (FIXED) ---
+const StatCard = ({ title, value, icon, color }: any) => (
   <div
-    className={`bg-white p-4 md:p-6 rounded-md border border-slate-200 shadow-sm flex items-center justify-between border-b-4 ${border} hover:shadow-md transition-all`}
+    className={`bg-white p-4 md:p-6 rounded-md border border-slate-200 flex items-center justify-between transition-all`}
   >
     <div className="min-w-0">
       <p className="text-[8px] md:text-[10px] text-slate-400 mb-1 tracking-widest">
         {title}
       </p>
-      <h3 className="text-sm md:text-xl text-slate-900 truncate">{value}</h3>
+      {/* Warna teks menyesuaikan kategori */}
+      <h3 className={`text-sm md:text-xl font-black ${color} truncate`}>
+        {value}
+      </h3>
     </div>
-    <div className="w-9 h-9 md:w-12 md:h-12 bg-slate-50 text-slate-400 rounded-md flex items-center justify-center shrink-0 ml-2">
+    <div className="w-9 h-9 md:w-12 md:h-12 bg-slate-50 text-slate-400 rounded-md flex items-center justify-center shrink-0 ml-2 border border-slate-100">
       {icon}
     </div>
   </div>

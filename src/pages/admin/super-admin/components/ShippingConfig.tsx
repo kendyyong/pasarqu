@@ -9,6 +9,8 @@ import {
   Loader2,
   CheckCircle2,
   RefreshCw,
+  ShoppingBag,
+  Store,
 } from "lucide-react";
 
 export const ShippingConfig: React.FC<any> = ({ theme }) => {
@@ -20,6 +22,13 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
   const [simDist, setSimDist] = useState(5);
   const [simStops, setSimStops] = useState(1);
   const [simSurge, setSimSurge] = useState(false);
+  const [simBelanja, setSimBelanja] = useState(600000);
+
+  // 🚀 BARU: State untuk memilih Tipe Toko di Simulator (Reguler / Sembako)
+  const [simTipeToko, setSimTipeToko] = useState<"REGULER" | "SEMBAKO">(
+    "REGULER",
+  );
+
   const [selectedRate, setSelectedRate] = useState<any>(null);
 
   const fetchLogisticsData = async () => {
@@ -54,7 +63,9 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
               app_fee_percent: 20,
               buyer_service_fee: 2000,
               seller_admin_fee_percent: 5,
-              sembako_admin_fee_percent: 2, // Default Sembako
+              sembako_admin_fee_percent: 2,
+              qris_threshold: 500000,
+              qris_fee_percent: 0.7,
               multi_stop_fee: 2000,
               multi_stop_app_share: 1000,
               surge_fee: 0,
@@ -103,7 +114,9 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
         app_fee_percent: Number(rate.app_fee_percent),
         buyer_service_fee: Number(rate.buyer_service_fee),
         seller_admin_fee_percent: Number(rate.seller_admin_fee_percent),
-        sembako_admin_fee_percent: Number(rate.sembako_admin_fee_percent || 0), // Menyimpan rate sembako
+        sembako_admin_fee_percent: Number(rate.sembako_admin_fee_percent || 0),
+        qris_threshold: Number(rate.qris_threshold || 500000),
+        qris_fee_percent: Number(rate.qris_fee_percent || 0.7),
         multi_stop_fee: Number(rate.multi_stop_fee),
         multi_stop_courier_share: Number(rate.multi_stop_courier_share || 0),
         multi_stop_app_share: Number(rate.multi_stop_app_share),
@@ -144,11 +157,20 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
 
   const calculateSimulation = () => {
     if (!selectedRate)
-      return { total_ongkir: 0, app_profit: 0, courier_net: 0, buyer_pays: 0 };
+      return {
+        total_ongkir: 0,
+        app_profit: 0,
+        courier_net: 0,
+        qris_fee: 0,
+        admin_toko_net: 0,
+        total_potongan_toko: 0,
+        persen_toko_aktif: 0,
+      };
 
     const r = selectedRate;
     const extraStops = simStops > 1 ? simStops - 1 : 0;
 
+    // --- 1. ONGKIR & KURIR (SAMA SEKALI TIDAK TERPENGARUH QRIS) ---
     let distCost = 0;
     if (simDist <= r.base_distance_km) {
       distCost = Number(r.base_fare);
@@ -163,21 +185,49 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
 
     const totalOngkirKeUser = distCost + totalExtraFeeKurir;
     const appCutFromBase = distCost * (Number(r.app_fee_percent) / 100);
+
+    // Kurir tetap dapat full haknya, tidak ada sangkut paut dengan QRIS
     const courierNet = distCost - appCutFromBase + totalExtraFeeKurir;
+
+    // --- 2. LOGIKA ADMIN TOKO VS QRIS ---
+    const belanja = Number(simBelanja);
+    const qrisThreshold = Number(r.qris_threshold || 500000);
+    const qrisPercent = Number(r.qris_fee_percent || 0.7);
+
+    // Ambil persen admin berdasarkan Tipe Toko yang dipilih di Simulator
+    const adminPercent =
+      simTipeToko === "REGULER"
+        ? Number(r.seller_admin_fee_percent || 5)
+        : Number(r.sembako_admin_fee_percent || 2);
+
+    // Hitung total potongan toko normal
+    const totalPotonganToko = belanja * (adminPercent / 100);
+
+    let qrisFee = 0;
+    let pasarquAdminTokoNet = totalPotonganToko;
+
+    // Jika melewati batas belanja, QRIS "memakan" sedikit margin PasarQu dari potongan toko
+    if (belanja >= qrisThreshold) {
+      qrisFee = belanja * (qrisPercent / 100);
+      pasarquAdminTokoNet = totalPotonganToko - qrisFee;
+    }
+
+    // --- TOTAL PROFIT APP KESELURUHAN ---
     const totalAppProfit =
-      appCutFromBase +
-      Number(r.buyer_service_fee) +
-      totalExtraAppShare +
-      surgeCost;
+      appCutFromBase + // Dari potongan ongkir
+      Number(r.buyer_service_fee) + // Dari biaya layanan user
+      totalExtraAppShare + // Dari ekstra titik (hak app)
+      surgeCost + // Dari surge fee
+      pasarquAdminTokoNet; // Dari potongan toko (SETELAH dikurangi QRIS)
 
     return {
       total_ongkir: totalOngkirKeUser,
       courier_net: courierNet,
       app_profit: totalAppProfit,
-      buyer_pays:
-        totalOngkirKeUser +
-        (Number(r.buyer_service_fee) + totalExtraAppShare + surgeCost) +
-        100000,
+      total_potongan_toko: totalPotonganToko,
+      qris_fee: qrisFee,
+      admin_toko_net: pasarquAdminTokoNet,
+      persen_toko_aktif: adminPercent,
     };
   };
 
@@ -250,7 +300,7 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                 </button>
               </div>
 
-              {/* INPUT PENGATURAN */}
+              {/* INPUT PENGATURAN UMUM */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <InputGroup
                   label="LAYANAN PEMBELI"
@@ -282,7 +332,6 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                   unit="%"
                   isAdmin
                 />
-                {/* 🚀 INPUT ADMIN SEMBAKO DITAMBAHKAN DI SINI */}
                 <InputGroup
                   label="ADMIN SEMBAKO (%)"
                   value={rate.sembako_admin_fee_percent}
@@ -296,6 +345,28 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                   unit="%"
                   isSurge
                 />
+
+                {/* 🚀 INPUT PENGATURAN QRIS */}
+                <div className="col-span-2 md:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-5 bg-orange-50 p-5 rounded-md border border-orange-200 mt-2 shadow-inner">
+                  <InputGroup
+                    label="BATAS TRANSAKSI QRIS"
+                    value={rate.qris_threshold}
+                    onChange={(v: any) =>
+                      handleUpdate(rate.district_name, "qris_threshold", v)
+                    }
+                    icon="RP"
+                    isAdmin
+                  />
+                  <InputGroup
+                    label="BIAYA QRIS DITANGGUNG APP (%)"
+                    value={rate.qris_fee_percent}
+                    onChange={(v: any) =>
+                      handleUpdate(rate.district_name, "qris_fee_percent", v)
+                    }
+                    unit="%"
+                    isAdmin
+                  />
+                </div>
 
                 <div className="col-span-2 md:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-5 bg-white p-5 rounded-md border border-slate-200 mt-2 shadow-inner">
                   <InputGroup
@@ -372,9 +443,69 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
 
             {selectedRate ? (
               <div className="space-y-6">
+                {/* 🚀 SIMULATOR TOTAL BELANJA & TIPE TOKO */}
+                <div className="bg-white/5 p-4 rounded-md border border-white/10">
+                  <div className="flex justify-between items-center mb-4">
+                    <label className="text-[11px] text-orange-400 tracking-widest flex items-center gap-2">
+                      <ShoppingBag size={14} /> BELANJA: RP{" "}
+                      {simBelanja.toLocaleString()}
+                    </label>
+                  </div>
+                  <input
+                    type="range"
+                    min="10000"
+                    max="1000000"
+                    step="10000"
+                    value={simBelanja}
+                    onChange={(e) => setSimBelanja(Number(e.target.value))}
+                    className="w-full accent-[#FF6600] h-2 bg-slate-700 rounded-md appearance-none cursor-pointer mb-5"
+                  />
+
+                  {/* TOGGLE TIPE TOKO */}
+                  <div className="flex bg-slate-800 p-1 rounded-md mb-4 border border-slate-700">
+                    <button
+                      onClick={() => setSimTipeToko("REGULER")}
+                      className={`flex-1 py-1.5 text-[9px] font-black tracking-widest rounded transition-all ${simTipeToko === "REGULER" ? "bg-[#008080] text-white shadow" : "text-slate-400 hover:text-white"}`}
+                    >
+                      REGULER ({selectedRate.seller_admin_fee_percent}%)
+                    </button>
+                    <button
+                      onClick={() => setSimTipeToko("SEMBAKO")}
+                      className={`flex-1 py-1.5 text-[9px] font-black tracking-widest rounded transition-all ${simTipeToko === "SEMBAKO" ? "bg-[#FF6600] text-white shadow" : "text-slate-400 hover:text-white"}`}
+                    >
+                      SEMBAKO ({selectedRate.sembako_admin_fee_percent}%)
+                    </button>
+                  </div>
+
+                  {/* DETAIL SPLIT QRIS */}
+                  <div className="mt-4 text-[10px] space-y-2 font-bold tracking-widest">
+                    <div className="flex justify-between text-slate-400">
+                      <span>
+                        POTONGAN {simTipeToko} ({sim.persen_toko_aktif}%)
+                      </span>
+                      <span className="text-white">
+                        RP {sim.total_potongan_toko.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-red-400">
+                      <span>
+                        BIAYA QRIS{" "}
+                        {simBelanja >= selectedRate.qris_threshold
+                          ? `(${selectedRate.qris_fee_percent}%)`
+                          : "(0%)"}
+                      </span>
+                      <span>- RP {sim.qris_fee.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-teal-400 border-t border-white/10 pt-2">
+                      <span>NET PASARQU (DARI TOKO)</span>
+                      <span>RP {sim.admin_toko_net.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
                 <div>
-                  <label className="text-[11px] text-teal-400 mb-3 block tracking-widest">
-                    JUMLAH TITIK TOKO: {simStops}
+                  <label className="text-[11px] text-teal-400 mb-3 block tracking-widest flex items-center gap-2">
+                    <MapPin size={14} /> JUMLAH TITIK TOKO: {simStops}
                   </label>
                   <input
                     type="range"
@@ -387,10 +518,14 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                 </div>
 
                 <div className="space-y-4 pt-4 border-t border-white/10">
+                  {/* PENDAPATAN KURIR */}
                   <div className="flex justify-between items-center bg-[#008080]/20 p-4 rounded-md border border-[#008080]/50">
                     <div>
                       <p className="text-[10px] text-teal-200 tracking-widest mb-1">
-                        PENDAPATAN KURIR
+                        PENDAPATAN KURIR{" "}
+                        <span className="text-white/40 text-[8px]">
+                          (TDK DIPOTONG)
+                        </span>
                       </p>
                       <p className="text-[18px] font-[1000] font-sans">
                         RP {sim.courier_net.toLocaleString()}

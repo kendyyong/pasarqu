@@ -9,7 +9,6 @@ import { AuthPage } from "../../pages/auth/AuthPage";
 import { RegisterPage } from "../../pages/auth/RegisterPage";
 import { OTPVerificationPage } from "../../pages/auth/OTPVerificationPage";
 import { CompleteProfilePage } from "../../pages/auth/CompleteProfilePage";
-import { PortalLoginPage } from "../../pages/auth/PortalLoginPage";
 import { TermsPage } from "../../pages/legal/Termspage";
 import { PrivacyPage } from "../../pages/legal/PrivacyPage";
 import { ProtectedRoute } from "../../components/layout/ProtectedRoute";
@@ -22,7 +21,6 @@ import {
 
 export const AuthRoutes = () => [
   <Route key="login" path="/login" element={<AuthPage />} />,
-  <Route key="portal" path="/portal" element={<PortalLoginPage />} />,
   <Route key="register" path="/register" element={<RegisterPage />} />,
   <Route key="otp" path="/verify-otp" element={<OTPVerificationPage />} />,
   <Route key="terms" path="/terms" element={<TermsPage />} />,
