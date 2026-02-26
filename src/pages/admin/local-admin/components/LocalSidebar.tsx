@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   Menu,
   X,
+  UserCog, // 🚀 Tambah Icon UserCog
 } from "lucide-react";
 
 interface Props {
@@ -24,6 +25,7 @@ interface Props {
   pendingCouriers: number;
   pendingProducts: number;
   onLogout: () => void;
+  disabled?: boolean; // 🚀 TAMBAHKAN PROPS DISABLED
 }
 
 export const LocalSidebar: React.FC<Props> = ({
@@ -34,20 +36,22 @@ export const LocalSidebar: React.FC<Props> = ({
   pendingCouriers,
   pendingProducts,
   onLogout,
+  disabled = false, // 🚀 TERIMA PROPS DISABLED (Default False)
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const toggleSidebar = () => setIsOpen(!isOpen);
 
-  // Fungsi agar saat klik menu di HP, sidebar otomatis tertutup
+  // 🚀 LOGIKA PROTEKSI: Cegah navigasi jika terkunci, kecuali settings
   const handleNavClick = (tab: string) => {
+    if (disabled && tab !== "settings") return;
     setActiveTab(tab);
     setIsOpen(false);
   };
 
   return (
     <>
-      {/* 📱 MOBILE HEADER BAR - HANYA MUNCUL DI HP */}
+      {/* 📱 MOBILE HEADER BAR */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b-2 border-slate-100 z-[60] flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-slate-900 rounded-md flex items-center justify-center text-white font-black border-b-2 border-[#008080]">
@@ -65,7 +69,7 @@ export const LocalSidebar: React.FC<Props> = ({
         </button>
       </div>
 
-      {/* 🌑 OVERLAY - MUNCUL SAAT SIDEBAR TERBUKA DI HP */}
+      {/* 🌑 OVERLAY */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[65] lg:hidden"
@@ -96,7 +100,6 @@ export const LocalSidebar: React.FC<Props> = ({
                 </p>
               </div>
             </div>
-            {/* Tombol Close di dalam sidebar (Mobile) */}
             <button
               onClick={toggleSidebar}
               className="lg:hidden p-2 text-slate-400"
@@ -118,31 +121,45 @@ export const LocalSidebar: React.FC<Props> = ({
 
         {/* NAVIGATION SECTION */}
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1 no-scrollbar bg-white">
-          <GroupLabel label="OPERASIONAL" />
+          <GroupLabel label="PROFIL & OPERASIONAL" />
+
+          {/* 🚀 MENU SETTINGS (Selalu Aktif) */}
+          <NavItem
+            icon={<UserCog size={20} />}
+            label="PENGATURAN AKUN"
+            active={activeTab === "settings"}
+            onClick={() => handleNavClick("settings")}
+          />
+
           <NavItem
             icon={<LayoutDashboard size={20} />}
             label="OVERVIEW"
             active={activeTab === "overview"}
             onClick={() => handleNavClick("overview")}
+            disabled={disabled} // 🚀 Oper status disabled
           />
           <NavItem
             icon={<ShoppingBag size={20} />}
             label="PESANAN MASUK"
             active={activeTab === "orders"}
             onClick={() => handleNavClick("orders")}
+            disabled={disabled}
           />
           <NavItem
             icon={
               <Radio
                 size={20}
                 className={
-                  activeTab === "radar" ? "animate-pulse text-[#FF6600]" : ""
+                  activeTab === "radar" && !disabled
+                    ? "animate-pulse text-[#FF6600]"
+                    : ""
                 }
               />
             }
             label="RADAR LIVE"
             active={activeTab === "radar"}
             onClick={() => handleNavClick("radar")}
+            disabled={disabled}
           />
 
           <GroupLabel label="VERIFIKASI & ASSET" />
@@ -153,6 +170,7 @@ export const LocalSidebar: React.FC<Props> = ({
             onClick={() => handleNavClick("products")}
             count={pendingProducts}
             isAlert={pendingProducts > 0}
+            disabled={disabled}
           />
           <NavItem
             icon={<Store size={20} />}
@@ -160,6 +178,7 @@ export const LocalSidebar: React.FC<Props> = ({
             active={activeTab === "merchants"}
             onClick={() => handleNavClick("merchants")}
             count={pendingMerchants}
+            disabled={disabled}
           />
           <NavItem
             icon={<Truck size={20} />}
@@ -167,6 +186,7 @@ export const LocalSidebar: React.FC<Props> = ({
             active={activeTab === "couriers"}
             onClick={() => handleNavClick("couriers")}
             count={pendingCouriers}
+            disabled={disabled}
           />
 
           <GroupLabel label="LAPORAN & LAINNYA" />
@@ -175,18 +195,21 @@ export const LocalSidebar: React.FC<Props> = ({
             label="KEUANGAN"
             active={activeTab === "finance"}
             onClick={() => handleNavClick("finance")}
+            disabled={disabled}
           />
           <NavItem
             icon={<Megaphone size={20} />}
             label="SIARAN WARGA"
             active={activeTab === "broadcast"}
             onClick={() => handleNavClick("broadcast")}
+            disabled={disabled}
           />
           <NavItem
             icon={<ShieldAlert size={20} />}
             label="PUSAT BANTUAN"
             active={activeTab === "resolution"}
             onClick={() => handleNavClick("resolution")}
+            disabled={disabled}
           />
         </nav>
 
@@ -194,7 +217,7 @@ export const LocalSidebar: React.FC<Props> = ({
         <div className="p-4 border-t-2 border-slate-100 bg-slate-50">
           <button
             onClick={onLogout}
-            className="w-full flex items-center gap-4 px-4 py-4 text-slate-500 hover:text-white hover:bg-[#008080] rounded-md transition-all duration-200 group active:translate-y-0.5 shadow-sm"
+            className="w-full flex items-center gap-4 px-4 py-4 text-slate-500 hover:text-white hover:bg-red-500 rounded-md transition-all duration-200 group active:translate-y-0.5 shadow-sm"
           >
             <LogOut
               size={20}
@@ -211,55 +234,71 @@ export const LocalSidebar: React.FC<Props> = ({
 };
 
 // --- SUB-KOMPONEN NAV ITEM ---
-const NavItem = ({ icon, label, active, onClick, count, isAlert }: any) => (
-  <button
-    onClick={onClick}
-    className={`
-      w-full flex items-center justify-between px-4 py-3.5 rounded-md transition-all duration-200 group
-      ${active ? "bg-[#008080] text-white shadow-lg" : "bg-transparent text-slate-600 hover:bg-teal-50 hover:text-[#008080]"}
-    `}
-  >
-    <div className="flex items-center gap-4">
-      <div
-        className={`w-6 h-6 flex items-center justify-center transition-colors shrink-0 ${active ? "text-white" : "text-slate-400 group-hover:text-[#008080]"}`}
-      >
-        {icon}
-      </div>
-      <span className="text-[12px] font-black tracking-tight text-left leading-none uppercase">
-        {label}
-      </span>
-    </div>
+const NavItem = ({
+  icon,
+  label,
+  active,
+  onClick,
+  count,
+  isAlert,
+  disabled,
+}: any) => {
+  // Jika ini bukan menu settings dan sedang mode disabled
+  const isLocked = disabled && label !== "PENGATURAN AKUN";
 
-    {count !== undefined && count > 0 ? (
-      <span
-        className={`px-2.5 py-1 rounded-md text-[10px] font-black min-w-[24px] text-center shadow-sm ${isAlert ? "bg-[#FF6600] text-white animate-pulse" : "bg-white text-[#008080]"}`}
-      >
-        {count}
-      </span>
-    ) : (
-      active && <ChevronRight size={16} className="text-white/30" />
-    )}
-  </button>
-);
+  return (
+    <button
+      onClick={onClick}
+      disabled={isLocked}
+      className={`
+        w-full flex items-center justify-between px-4 py-3.5 rounded-md transition-all duration-200 group
+        ${
+          active
+            ? "bg-[#008080] text-white shadow-lg"
+            : isLocked
+              ? "bg-transparent text-slate-300 cursor-not-allowed opacity-50 grayscale"
+              : "bg-transparent text-slate-600 hover:bg-teal-50 hover:text-[#008080]"
+        }
+      `}
+    >
+      <div className="flex items-center gap-4">
+        <div
+          className={`w-6 h-6 flex items-center justify-center transition-colors shrink-0 ${
+            active
+              ? "text-white"
+              : isLocked
+                ? "text-slate-200"
+                : "text-slate-400 group-hover:text-[#008080]"
+          }`}
+        >
+          {icon}
+        </div>
+        <span className="text-[12px] font-black tracking-tight text-left leading-none uppercase">
+          {label}
+        </span>
+      </div>
+
+      {count !== undefined && count > 0 && !isLocked && (
+        <span
+          className={`px-2.5 py-1 rounded-md text-[10px] font-black min-w-[24px] text-center shadow-sm ${
+            isAlert
+              ? "bg-[#FF6600] text-white animate-pulse"
+              : "bg-white text-[#008080]"
+          }`}
+        >
+          {count}
+        </span>
+      )}
+
+      {active && !isLocked && (
+        <ChevronRight size={16} className="text-white/30" />
+      )}
+    </button>
+  );
+};
 
 const GroupLabel = ({ label }: { label: string }) => (
   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-4 mt-8 mb-2 text-left">
     {label}
   </p>
-);
-
-const ActivityIcon = ({ className }: { className?: string }) => (
-  <svg
-    className={className}
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-  </svg>
 );

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../../../lib/supabaseClient";
-import { useToast } from "../../../../contexts/ToastContext";
+import { supabase } from "../src/lib/supabaseClient";
+import { useToast } from "../src/contexts/ToastContext";
 import {
   Plus,
   Search,

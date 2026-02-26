@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { supabase } from "../../../../lib/supabaseClient";
+import { supabase } from "../src/lib/supabaseClient";
 import {
   Wallet,
   Clock,
@@ -10,8 +10,8 @@ import {
   Loader2,
   Banknote,
 } from "lucide-react";
-import { useToast } from "../../../../contexts/ToastContext";
-import { createAuditLog } from "../../../../lib/auditHelper";
+import { useToast } from "../src/contexts/ToastContext";
+import { createAuditLog } from "../src/lib/auditHelper";
 
 // Format Rupiah Helper
 const formatRupiah = (amount: number) => {

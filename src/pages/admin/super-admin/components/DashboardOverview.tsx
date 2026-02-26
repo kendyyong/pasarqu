@@ -11,7 +11,6 @@ import {
   MapPin,
   User,
   TrendingUp,
-  Loader2,
   RefreshCcw,
   Activity,
   Layers,
@@ -88,7 +87,7 @@ export const DashboardOverview: React.FC<Props> = ({
     try {
       const { data: orders } = await supabase
         .from("orders")
-        .select("*, profiles(name)")
+        .select("*, profiles(full_name)") // 🚀 FIX: Sinkron ke full_name
         .order("created_at", { ascending: false })
         .limit(8);
 
@@ -125,7 +124,7 @@ export const DashboardOverview: React.FC<Props> = ({
         setMarketAdmin(null);
         const { data } = await supabase
           .from("profiles")
-          .select("name, phone_number")
+          .select("full_name, phone_number") // 🚀 FIX: Sinkron ke full_name
           .eq("managed_market_id", selectedMarker.id)
           .limit(1)
           .maybeSingle();
@@ -156,7 +155,7 @@ export const DashboardOverview: React.FC<Props> = ({
 
   return (
     <div className="space-y-4 md:space-y-6 animate-in fade-in duration-700 font-black uppercase tracking-tighter text-left pb-10">
-      {/* 1. TOP STATS (BERSIH TOTAL) */}
+      {/* 1. TOP STATS (FLAT - TANPA BAYANGAN & GARIS BAWAH) */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
         <StatCard
           title="TOTAL OMSET"
@@ -182,11 +181,11 @@ export const DashboardOverview: React.FC<Props> = ({
 
       {/* 2. MAIN MONITORING */}
       <div className="flex flex-col lg:grid lg:grid-cols-12 gap-4 md:gap-6">
-        {/* LEFT: PETA GIS */}
+        {/* LEFT: PETA GIS (FLAT) */}
         <div className="lg:col-span-8 bg-white p-2 md:p-3 rounded-md border border-slate-200 relative flex flex-col h-[350px] md:h-[500px] lg:h-[650px]">
-          <div className="absolute top-4 left-4 z-10 hidden md:flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-md border border-teal-500">
+          <div className="absolute top-4 left-4 z-10 hidden md:flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-md border-b-2 border-teal-500">
             <Layers size={14} className="text-teal-400" />
-            <span className="text-[9px] tracking-widest">
+            <span className="text-[9px] tracking-widest uppercase">
               LIVE GIS MONITOR | ZONA: {maxDistanceKm}KM
             </span>
           </div>
@@ -281,7 +280,7 @@ export const DashboardOverview: React.FC<Props> = ({
                             </p>
                             <p className="text-[11px] font-black text-slate-800 tracking-tight mt-1 truncate">
                               {marketAdmin
-                                ? marketAdmin.name
+                                ? marketAdmin.full_name // 🚀 FIX
                                 : "BELUM DI-ASSIGN"}
                             </p>
                           </div>
@@ -314,14 +313,14 @@ export const DashboardOverview: React.FC<Props> = ({
                 )}
               </GoogleMap>
             ) : (
-              <div className="h-full flex items-center justify-center text-slate-400 text-[10px]">
+              <div className="h-full flex items-center justify-center text-slate-400 text-[10px] uppercase">
                 MENYAMBUNGKAN SATELIT...
               </div>
             )}
           </div>
         </div>
 
-        {/* RIGHT: LIVE FEED */}
+        {/* RIGHT: LIVE FEED (FLAT) */}
         <div className="lg:col-span-4 flex flex-col gap-4">
           <div className="bg-slate-900 rounded-md flex flex-col h-[450px] lg:h-[650px] overflow-hidden border border-white/5">
             <div className="p-4 flex items-center justify-between border-b border-white/10">
@@ -330,13 +329,15 @@ export const DashboardOverview: React.FC<Props> = ({
                   size={14}
                   className={`text-teal-400 ${loading ? "animate-spin" : ""}`}
                 />
-                <h3 className="text-[11px] text-white tracking-widest">
+                <h3 className="text-[11px] text-white tracking-widest uppercase">
                   LIVE ORDERS
                 </h3>
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-ping"></div>
-                <span className="text-[8px] text-white/50">REALTIME</span>
+                <span className="text-[8px] text-white/50 uppercase">
+                  REALTIME
+                </span>
               </div>
             </div>
 
@@ -356,22 +357,22 @@ export const DashboardOverview: React.FC<Props> = ({
                       <span className="text-[12px] text-white font-black">
                         {formatRupiah(order.total_price)}
                       </span>
-                      <span className="text-[8px] text-white/30">
+                      <span className="text-[8px] text-white/30 uppercase">
                         {new Date(order.created_at).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
                       </span>
                     </div>
-                    <p className="text-[9px] text-teal-400 truncate mt-0.5">
-                      {order.profiles?.name || "PELANGGAN"}
+                    <p className="text-[9px] text-teal-400 truncate mt-0.5 uppercase">
+                      {order.profiles?.full_name || "PELANGGAN"}
                     </p>
                   </div>
                 </div>
               ))}
             </div>
 
-            <button className="m-4 p-3 bg-white/10 text-white rounded text-[9px] font-black hover:bg-white/20 transition-all border border-white/10">
+            <button className="m-4 p-3 bg-white/10 text-white rounded text-[9px] font-black hover:bg-white/20 transition-all border border-white/10 uppercase">
               TAMPILKAN SEMUA LOG
             </button>
           </div>
@@ -381,7 +382,7 @@ export const DashboardOverview: React.FC<Props> = ({
       {/* 3. MOBILE NOTICE */}
       <div className="lg:hidden bg-orange-50 p-4 rounded-md border border-orange-100 flex items-center gap-3">
         <Activity size={18} className="text-[#FF6600]" />
-        <p className="text-[9px] text-[#FF6600] font-black leading-tight">
+        <p className="text-[9px] text-[#FF6600] font-black leading-tight uppercase">
           MODE MOBILE AKTIF: GESTUR DUA JARI UNTUK NAVIGASI PETA.
         </p>
       </div>
@@ -389,16 +390,15 @@ export const DashboardOverview: React.FC<Props> = ({
   );
 };
 
-// --- SUB-COMPONENT STAT CARD (FIXED) ---
+// --- SUB-COMPONENT STAT CARD (FLAT) ---
 const StatCard = ({ title, value, icon, color }: any) => (
   <div
     className={`bg-white p-4 md:p-6 rounded-md border border-slate-200 flex items-center justify-between transition-all`}
   >
     <div className="min-w-0">
-      <p className="text-[8px] md:text-[10px] text-slate-400 mb-1 tracking-widest">
+      <p className="text-[8px] md:text-[10px] text-slate-400 mb-1 tracking-widest uppercase">
         {title}
       </p>
-      {/* Warna teks menyesuaikan kategori */}
       <h3 className={`text-sm md:text-xl font-black ${color} truncate`}>
         {value}
       </h3>

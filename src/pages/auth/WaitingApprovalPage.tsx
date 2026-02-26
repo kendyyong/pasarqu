@@ -11,11 +11,12 @@ import {
   Search,
   Loader2,
   RefreshCcw,
+  ShoppingBag, // 🚀 Tambahkan Icon ShoppingBag
 } from "lucide-react";
 
 export const WaitingApprovalPage = () => {
   const navigate = useNavigate();
-  const { user, refreshProfile } = useAuth(); // Pastikan ada refreshProfile di AuthContext
+  const { user, refreshProfile } = useAuth();
   const [isChecking, setIsChecking] = useState(false);
 
   // ✅ 1. FUNGSI CEK STATUS DENGAN PAKSA REFRESH
@@ -24,7 +25,6 @@ export const WaitingApprovalPage = () => {
     setIsChecking(true);
 
     try {
-      // Ambil data langsung dari Supabase (Bukan dari memori/context)
       const { data, error } = await supabase
         .from("profiles")
         .select("is_verified, role")
@@ -34,10 +34,8 @@ export const WaitingApprovalPage = () => {
       if (error) throw error;
 
       if (data?.is_verified === true) {
-        // Jika di DB sudah TRUE, panggil refreshProfile agar AuthContext terupdate
         if (refreshProfile) await refreshProfile();
 
-        // Langsung arahkan
         const targetUrl =
           data.role === "MERCHANT"
             ? "/merchant-dashboard"
@@ -47,7 +45,6 @@ export const WaitingApprovalPage = () => {
 
         window.location.replace(targetUrl);
       } else {
-        // Jika masih FALSE
         alert(
           "Status: Masih Menunggu. Admin wilayah belum menekan tombol Verifikasi.",
         );
@@ -104,12 +101,12 @@ export const WaitingApprovalPage = () => {
         <div className="relative mb-8 flex justify-center">
           <div className="w-24 h-24 bg-teal-50 rounded-[2rem] flex items-center justify-center">
             {isChecking ? (
-              <Loader2 size={40} className="text-teal-600 animate-spin" />
+              <Loader2 size={40} className="text-[#008080] animate-spin" />
             ) : (
-              <Search size={40} className="text-teal-600 animate-pulse" />
+              <Search size={40} className="text-[#008080] animate-pulse" />
             )}
           </div>
-          <div className="absolute top-0 right-[35%] w-8 h-8 bg-orange-500 rounded-xl flex items-center justify-center text-white shadow-lg border-2 border-white animate-bounce">
+          <div className="absolute top-0 right-[35%] w-8 h-8 bg-[#FF6600] rounded-xl flex items-center justify-center text-white shadow-lg border-2 border-white animate-bounce">
             <Clock size={16} />
           </div>
         </div>
@@ -128,7 +125,7 @@ export const WaitingApprovalPage = () => {
             icon={<CheckCircle2 size={14} />}
             label="Data Terkirim"
             status="Selesai"
-            color="text-teal-600"
+            color="text-[#008080]"
             bgColor="bg-teal-50"
           />
           <Step
@@ -136,7 +133,7 @@ export const WaitingApprovalPage = () => {
             icon={<Loader2 size={14} className="animate-spin" />}
             label="Verifikasi Admin"
             status="Sedang Validasi"
-            color="text-orange-500"
+            color="text-[#FF6600]"
             bgColor="bg-orange-50"
           />
           <Step
@@ -149,34 +146,40 @@ export const WaitingApprovalPage = () => {
           />
         </div>
 
+        {/* 🚀 ACTION BUTTONS AREA */}
         <div className="space-y-3">
-          <button
-            onClick={checkStatusManual}
-            disabled={isChecking}
-            className="w-full py-4 bg-teal-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-teal-700 transition-all shadow-xl shadow-teal-600/20 active:scale-95"
-          >
-            {isChecking ? (
-              "MENYAMBUNGKAN..."
-            ) : (
-              <>
-                <RefreshCcw size={16} /> Cek Status Sekarang
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={() => window.open("https://wa.me/628123456789", "_blank")}
-            className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-slate-800 transition-all shadow-lg active:scale-95"
-          >
-            <Smartphone size={16} /> Hubungi Admin Wilayah
-          </button>
-
+          {/* TOMBOL UTAMA: BELANJA (MENGALIHKAN FOKUS USER) */}
           <button
             onClick={() => navigate("/")}
-            className="w-full py-2 text-slate-400 font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 hover:text-teal-600 transition-colors"
+            className="w-full py-4 bg-[#FF6600] hover:bg-orange-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 transition-all shadow-xl shadow-orange-500/20 active:scale-95"
           >
-            <ArrowLeft size={14} /> Kembali ke Beranda
+            <ShoppingBag size={18} /> Mulai Belanja Sekarang
           </button>
+
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            <button
+              onClick={checkStatusManual}
+              disabled={isChecking}
+              className="w-full py-3.5 bg-slate-900 text-white rounded-2xl font-black text-[9px] uppercase tracking-[0.1em] flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-md active:scale-95 disabled:opacity-50"
+            >
+              {isChecking ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <>
+                  <RefreshCcw size={14} /> Cek Status
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={() =>
+                window.open("https://wa.me/628123456789", "_blank")
+              }
+              className="w-full py-3.5 bg-white text-slate-700 border border-slate-200 rounded-2xl font-black text-[9px] uppercase tracking-[0.1em] flex items-center justify-center gap-2 hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+            >
+              <Smartphone size={14} /> Hubungi Admin
+            </button>
+          </div>
         </div>
 
         <p className="mt-10 text-[8px] font-black text-slate-300 uppercase tracking-[0.3em]">

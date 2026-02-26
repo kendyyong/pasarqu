@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { supabase } from "../../../../lib/supabaseClient";
+import { supabase } from "../src/lib/supabaseClient";
 import {
   Wallet,
   Plus,
@@ -15,8 +15,8 @@ import {
   ArrowUpRight,
   ShieldX,
 } from "lucide-react";
-import { useToast } from "../../../../contexts/ToastContext";
-import { createAuditLog } from "../../../../lib/auditHelper";
+import { useToast } from "../src/contexts/ToastContext";
+import { createAuditLog } from "../src/lib/auditHelper";
 
 export const CourierFinanceManager = () => {
   const { showToast } = useToast();

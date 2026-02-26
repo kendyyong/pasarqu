@@ -9,7 +9,7 @@ import { useToast } from "../contexts/ToastContext";
  * Mendukung fitur Persetujuan (APPROVED) dan Penolakan (REJECTED) dengan Alasan.
  */
 export const useAdminProductApproval = () => {
-  const { profile } = useAuth();
+  const { profile } = useAuth() as any;
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -28,9 +28,9 @@ export const useAdminProductApproval = () => {
         .from("products")
         .select(`
           *,
-          merchants (shop_name),
+          merchants (shop_name), 
           categories (name)
-        `)
+        `) // 🚀 KEMBALI KE ASAL: Menggunakan tabel 'merchants' sesuai arsitektur database!
         .eq("status", "PENDING")
         .eq("market_id", profile.managed_market_id)
         .order("created_at", { ascending: false });
@@ -61,6 +61,8 @@ export const useAdminProductApproval = () => {
       // Siapkan objek update
       const updateData: any = { 
         status: action,
+        // 🚀 FIX: Sinkronkan juga is_verified agar centang hijau di toko langsung aktif
+        is_verified: action === "APPROVED",
         // Jika disetujui, kita hapus alasan lama (jika ada)
         // Jika ditolak, kita masukkan alasan baru
         rejection_reason: action === "REJECTED" ? (reason || "Tidak ada alasan spesifik") : null 

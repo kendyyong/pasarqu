@@ -69,7 +69,7 @@ const DEFAULT_CONFIG: AppSettings = {
 };
 
 interface ConfigContextType {
-  appConfig: AppSettings | null;
+  appConfig: AppSettings; // 🚀 FIX: Dibuat PASTI ADA (tidak boleh null) untuk mencegah blank
   loading: boolean;
   refreshConfig: () => Promise<void>;
   updateConfig: (newConfig: Partial<AppSettings>) => void;
@@ -80,15 +80,12 @@ const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
 export const ConfigProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
-  const [appConfig, setAppConfig] = useState<AppSettings | null>(
-    DEFAULT_CONFIG,
-  );
+  // 🚀 FIX: Inisialisasi tidak akan pernah null
+  const [appConfig, setAppConfig] = useState<AppSettings>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(true);
 
   // --- FUNGSI AMBIL DATA DARI SUPABASE ---
   const fetchSettings = async () => {
-    // Jangan set loading true di sini jika hanya refresh,
-    // agar layar tidak kedap-kedip saat simpan di admin.
     try {
       const { data, error } = await supabase
         .from("app_settings")
@@ -97,28 +94,70 @@ export const ConfigProvider: React.FC<{ children: ReactNode }> = ({
         .single();
 
       if (error) {
-        console.warn("Menggunakan config default:", error.message);
+        console.warn("Menggunakan config default karena:", error.message);
         setAppConfig(DEFAULT_CONFIG);
         return;
       }
 
       if (data) {
-        // ✅ LOGIKA CACHE BUSTER:
-        // Menambahkan timestamp pada URL logo agar browser dipaksa
-        // mendownload ulang jika logo baru saja diganti.
+        // ✅ LOGIKA CACHE BUSTER
         const freshLogoUrl = data.logo_url
           ? `${data.logo_url}?t=${new Date().getTime()}`
           : null;
 
+        // 🚀 FIX: PARSING SUPER AMAN UNTUK OBJEK (MENCEGAH BLANK SCREEN)
+        let safeBankAccount = DEFAULT_CONFIG.bankAccount;
+        if (data.bankAccount) {
+          if (typeof data.bankAccount === "string") {
+            try {
+              safeBankAccount = JSON.parse(data.bankAccount);
+            } catch (e) {}
+          } else if (typeof data.bankAccount === "object") {
+            safeBankAccount = {
+              ...DEFAULT_CONFIG.bankAccount,
+              ...data.bankAccount,
+            };
+          }
+        }
+
+        let safeShippingRates = DEFAULT_CONFIG.defaultShippingRates;
+        if (data.defaultShippingRates) {
+          if (typeof data.defaultShippingRates === "string") {
+            try {
+              safeShippingRates = JSON.parse(data.defaultShippingRates);
+            } catch (e) {}
+          } else if (typeof data.defaultShippingRates === "object") {
+            safeShippingRates = {
+              ...DEFAULT_CONFIG.defaultShippingRates,
+              ...data.defaultShippingRates,
+            };
+          }
+        }
+
+        // 🚀 SETTING DATA FINAL (Pelapis Baja)
         setAppConfig({
           ...DEFAULT_CONFIG,
-          ...data,
+          ...data, // Timpa dengan data DB
+
+          // TAPI kita timpa balik kolom berbahaya agar tidak null!
           app_name: data.app_name || DEFAULT_CONFIG.app_name,
-          logo_url: freshLogoUrl, // Gunakan URL yang sudah di-refresh
+          logo_url: freshLogoUrl,
           primary_color: data.primary_color || DEFAULT_CONFIG.primary_color,
+
+          bankAccount: safeBankAccount, // Pasti berbentuk objek, tidak akan pernah null
+          defaultShippingRates: safeShippingRates, // Pasti berbentuk objek, tidak akan pernah null
+
+          appAdminFeePercentage:
+            data.appAdminFeePercentage ?? DEFAULT_CONFIG.appAdminFeePercentage,
+          defaultAppFee: data.defaultAppFee ?? DEFAULT_CONFIG.defaultAppFee,
+          shippingCommissionPercentage:
+            data.shippingCommissionPercentage ??
+            DEFAULT_CONFIG.shippingCommissionPercentage,
+          min_wallet_limit:
+            data.min_wallet_limit ?? DEFAULT_CONFIG.min_wallet_limit,
         });
 
-        console.log("✅ Branding Terbaru Berhasil Dimuat:", data.app_name);
+        console.log("✅ Config Terbaru Berhasil Dimuat:", data.app_name);
       }
     } catch (err) {
       console.error("Gagal memuat config:", err);
@@ -132,13 +171,14 @@ export const ConfigProvider: React.FC<{ children: ReactNode }> = ({
   }, []);
 
   const updateConfig = (newConfig: Partial<AppSettings>) => {
-    setAppConfig((prev) => (prev ? { ...prev, ...newConfig } : null));
+    setAppConfig((prev) => ({ ...prev, ...newConfig }));
   };
 
   return (
     <ConfigContext.Provider
       value={{ appConfig, loading, refreshConfig: fetchSettings, updateConfig }}
     >
+      {/* Jika aplikasi masih meload config pertama kali, tampilkan anak-anaknya menggunakan DEFAULT_CONFIG agar layar tidak pernah blank! */}
       {children}
     </ConfigContext.Provider>
   );

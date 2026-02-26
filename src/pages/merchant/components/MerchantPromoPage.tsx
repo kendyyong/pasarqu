@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useToast } from "../../../contexts/ToastContext";
+import { useMarket } from "../../../contexts/MarketContext";
 import { useNavigate } from "react-router-dom";
-import { GoogleMap, useJsApiLoader, MarkerF } from "@react-google-maps/api";
+import {
+  GoogleMap,
+  useJsApiLoader,
+  MarkerF,
+  Autocomplete,
+} from "@react-google-maps/api";
 import {
   Store,
   ArrowRight,
@@ -15,30 +21,25 @@ import {
   Lock,
   User,
   ChevronLeft,
-  Map as MapIcon,
   BarChart3,
   Zap,
   Globe,
   Crosshair,
 } from "lucide-react";
 
+const libraries: "places"[] = ["places"];
+
 export const MerchantPromoPage: React.FC = () => {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
 
-  const savedMarketName =
-    localStorage.getItem("selected_market_name") ||
-    localStorage.getItem("market_name") ||
-    "";
-  const savedMarketId = localStorage.getItem("selected_market_id") || "";
-
-  const [detectedMarketName, setDetectedMarketName] =
-    useState<string>(savedMarketName);
+  const { selectedMarket } = useMarket() as any;
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+    libraries,
   });
 
   const [formData, setFormData] = useState({
@@ -48,58 +49,94 @@ export const MerchantPromoPage: React.FC = () => {
     phone: "",
     shopName: "",
     address: "",
-    market_id: savedMarketId,
+    market_id: "",
     latitude: -6.2,
     longitude: 106.8,
   });
 
-  // 🚀 FIX: Logika Sinkronisasi Super Aman (Tahan Error 400)
-  useEffect(() => {
-    const syncMarketDetails = async () => {
-      if (!savedMarketId) return;
+  const [autocomplete, setAutocomplete] =
+    useState<google.maps.places.Autocomplete | null>(null);
 
-      try {
-        // Gunakan "id" karena ini standar Supabase.
-        // maybeSingle() akan mencegah error jika data tidak ditemukan.
-        const { data, error } = await supabase
-          .from("markets")
-          .select("name, latitude, longitude")
-          .eq("id", savedMarketId)
-          .maybeSingle();
+  const handlePlaceChanged = () => {
+    if (autocomplete !== null) {
+      const place = autocomplete.getPlace();
+      if (place.geometry && place.geometry.location) {
+        const newLat = place.geometry.location.lat();
+        const newLng = place.geometry.location.lng();
+        const newAddress = place.formatted_address || place.name || "";
 
-        if (data && !error) {
-          setDetectedMarketName(data.name);
-          setFormData((prev) => ({
-            ...prev,
-            latitude: Number(data.latitude) || -6.2,
-            longitude: Number(data.longitude) || 106.8,
-          }));
-        }
-      } catch (err) {
-        // Jika masuk ke sini, berarti ID salah format (misal UUID dilempar ke Int).
-        // Kita tangkap errornya agar tidak muncul pesan merah di layar user.
-        console.warn(
-          "ID Pasar tidak cocok dengan format Database. Menggunakan data lokal.",
-        );
+        setFormData((prev) => ({
+          ...prev,
+          latitude: newLat,
+          longitude: newLng,
+          address: newAddress,
+        }));
+        showToast("Titik peta otomatis disesuaikan!", "success");
       }
-    };
-
-    // Hanya fetch jika ID tidak kosong
-    if (savedMarketId) {
-      syncMarketDetails();
     }
-  }, [savedMarketId]);
+  };
+
+  const getAddressFromLatLng = async (lat: number, lng: number) => {
+    if (!window.google) return;
+    const geocoder = new window.google.maps.Geocoder();
+
+    try {
+      const response = await geocoder.geocode({ location: { lat, lng } });
+      if (response.results && response.results.length > 0) {
+        const formattedAddress = response.results[0].formatted_address;
+        setFormData((prev) => ({ ...prev, address: formattedAddress }));
+      }
+    } catch (error) {
+      console.warn("Gagal mendeteksi teks alamat dari Google Maps:", error);
+    }
+  };
+
+  useEffect(() => {
+    const finalMarketId =
+      selectedMarket?.id || localStorage.getItem("active_market_id") || "";
+
+    if (finalMarketId) {
+      setFormData((prev) => ({ ...prev, market_id: finalMarketId }));
+
+      const syncMap = async () => {
+        try {
+          const { data } = await supabase
+            .from("markets")
+            .select("latitude, longitude")
+            .eq("id", finalMarketId)
+            .maybeSingle();
+
+          if (data) {
+            setFormData((prev) => ({
+              ...prev,
+              latitude: Number(data.latitude) || -6.2,
+              longitude: Number(data.longitude) || 106.8,
+            }));
+          }
+        } catch (err) {
+          console.warn("Gagal sinkronisasi peta pasar.");
+        }
+      };
+      syncMap();
+    }
+  }, [selectedMarket]);
 
   const handleAutoDetect = () => {
     if (navigator.geolocation) {
+      showToast("Mendeteksi lokasi GPS Anda...", "success");
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          const newLat = Number(position.coords.latitude);
+          const newLng = Number(position.coords.longitude);
+
           setFormData((prev) => ({
             ...prev,
-            latitude: Number(position.coords.latitude),
-            longitude: Number(position.coords.longitude),
+            latitude: newLat,
+            longitude: newLng,
           }));
-          showToast("Lokasi lapak berhasil dideteksi!", "success");
+
+          getAddressFromLatLng(newLat, newLng);
+          showToast("Akurasi GPS Berhasil!", "success");
         },
         () =>
           showToast("Gagal akses GPS. Pastikan izin lokasi aktif.", "error"),
@@ -113,10 +150,16 @@ export const MerchantPromoPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      if (!formData.market_id)
+      const activeMarketId =
+        formData.market_id ||
+        selectedMarket?.id ||
+        localStorage.getItem("active_market_id");
+
+      if (!activeMarketId) {
         throw new Error(
-          "Data pasar tidak ditemukan. Silakan kembali ke Beranda dan pilih pasar kembali.",
+          "Gagal mengidentifikasi pasar. Pastikan Anda masuk melalui Pilihan Pasar di Beranda.",
         );
+      }
 
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
@@ -138,16 +181,37 @@ export const MerchantPromoPage: React.FC = () => {
           latitude: formData.latitude,
           longitude: formData.longitude,
           is_verified: false,
-          managed_market_id: formData.market_id,
+          managed_market_id: activeMarketId,
           created_at: new Date().toISOString(),
         });
 
         if (profileError) throw profileError;
+
+        const { error: merchantError } = await supabase
+          .from("merchants")
+          .upsert({
+            id: data.user.id,
+            owner_name: formData.name,
+            shop_name: formData.shopName,
+            phone_number: formData.phone,
+            address: formData.address,
+            market_id: activeMarketId,
+            is_verified: false,
+            latitude: formData.latitude,
+            longitude: formData.longitude,
+            created_at: new Date().toISOString(),
+          });
+
+        if (merchantError) {
+          console.error("Gagal simpan ke merchants:", merchantError);
+        }
+
+        // 🚀 FIX TAHAP 1: Pesan sukses diganti dan diarahkan ke Beranda Pembeli
         showToast(
-          "Pendaftaran Berhasil! Admin akan segera memverifikasi lapak Anda.",
+          "Toko terdaftar! Sambil menunggu verifikasi, Anda bisa berbelanja.",
           "success",
         );
-        setTimeout(() => navigate("/waiting-approval"), 1500);
+        setTimeout(() => navigate("/"), 2000);
       }
     } catch (err: any) {
       showToast(err.message, "error");
@@ -168,7 +232,6 @@ export const MerchantPromoPage: React.FC = () => {
       <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-[#008080]/20 rounded-full blur-[120px] pointer-events-none mix-blend-screen"></div>
       <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-[#FF6600]/10 rounded-full blur-[120px] pointer-events-none mix-blend-screen"></div>
 
-      {/* TOP BAR */}
       <nav className="border-b border-white/10 sticky top-0 bg-[#002222]/80 backdrop-blur-lg z-50 shadow-sm">
         <div className="max-w-[1200px] mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <div
@@ -196,9 +259,7 @@ export const MerchantPromoPage: React.FC = () => {
         </div>
       </nav>
 
-      {/* KONTEN UTAMA - FORM LEBAR DI MOBILE */}
       <main className="flex-1 flex flex-col lg:flex-row max-w-[1200px] mx-auto w-full p-0 md:p-12 gap-6 lg:gap-20 justify-center relative z-10 mt-6 md:mt-0">
-        {/* INFO KIRI (Desktop & Tablet Saja) */}
         <div className="hidden lg:block flex-1 space-y-10 text-left pt-4">
           <div className="space-y-6">
             <div className="inline-flex items-center gap-2 bg-[#FF6600]/20 text-[#FF6600] px-4 py-1.5 rounded-full border border-[#FF6600]/30 shadow-inner">
@@ -241,7 +302,6 @@ export const MerchantPromoPage: React.FC = () => {
           </div>
         </div>
 
-        {/* FORMULIR KANAN (Dibuat Full Width & Membulat di Atas untuk HP) */}
         <div className="w-full lg:w-[480px] shrink-0 mt-4 md:mt-0">
           <div className="bg-white/95 backdrop-blur-xl rounded-t-[2.5rem] md:rounded-[2rem] shadow-[0_-10px_40px_rgba(0,128,128,0.15)] md:shadow-2xl md:shadow-teal-900/40 border-t md:border border-white/50 p-6 md:p-10 sticky top-24 min-h-[80vh] md:min-h-0">
             <div className="text-center mb-8 pt-2 md:pt-0">
@@ -251,66 +311,81 @@ export const MerchantPromoPage: React.FC = () => {
               <h2 className="text-2xl font-black text-slate-800 tracking-tighter uppercase">
                 Daftar Seller
               </h2>
-              <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-1">
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">
                 Lengkapi Data Lapak Anda
               </p>
             </div>
 
-            <form onSubmit={handleRegister} className="space-y-4">
-              {/* AREA TERKUNCI */}
-              <div className="space-y-1 text-left">
-                <label className="text-[10px] font-black text-slate-500 uppercase ml-1 tracking-widest">
-                  Wilayah Operasional
-                </label>
-                <div className="w-full px-4 py-3 bg-teal-50 border border-teal-200 rounded-xl text-sm font-black text-[#008080] flex justify-between items-center shadow-inner">
-                  <span className="flex items-center gap-2 uppercase">
-                    <MapIcon size={16} className="text-[#008080]" />
-                    {detectedMarketName || "LOKASI PASAR"}
-                  </span>
-                  <div className="flex items-center gap-1 bg-teal-200/50 text-[#008080] px-2 py-1 rounded text-[9px] font-black tracking-widest uppercase border border-teal-300">
-                    <Lock size={10} /> TERKUNCI
-                  </div>
-                </div>
-              </div>
-
+            <form onSubmit={handleRegister} className="space-y-3.5">
               <div className="grid grid-cols-2 gap-3 text-left">
                 <InputGroup
                   placeholder="Nama Pemilik"
-                  icon={<User size={18} />}
+                  icon={<User size={16} />}
                   value={formData.name}
                   onChange={(v) => setFormData({ ...formData, name: v })}
                 />
                 <InputGroup
-                  placeholder="WhatsApp"
-                  icon={<Smartphone size={18} />}
+                  placeholder="No. WhatsApp"
+                  icon={<Smartphone size={16} />}
                   value={formData.phone}
+                  type="tel"
                   onChange={(v) => setFormData({ ...formData, phone: v })}
                 />
               </div>
 
               <InputGroup
                 placeholder="Nama Toko / Lapak"
-                icon={<Store size={18} />}
+                icon={<Store size={16} />}
                 value={formData.shopName}
                 onChange={(v) => setFormData({ ...formData, shopName: v })}
               />
 
-              {/* AREA MAPS */}
+              {/* AREA MAPS & AUTOCOMPLETE */}
               <div className="space-y-2 pt-2 text-left">
                 <div className="flex justify-between items-center px-1">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                    Titik Koordinat Toko
+                    Peta Lapak Anda
                   </label>
                   <button
                     type="button"
                     onClick={handleAutoDetect}
-                    className="flex items-center gap-1 text-[9px] font-black bg-teal-50 text-[#008080] px-3 py-1.5 rounded-full border border-teal-200 hover:bg-teal-100 transition-all shadow-sm active:scale-95"
+                    className="flex items-center gap-1 text-[9px] font-black bg-teal-50 text-[#008080] px-3 py-1.5 rounded-full border border-teal-200 hover:bg-teal-100 transition-all shadow-sm active:scale-95 uppercase tracking-widest"
                   >
-                    <Crosshair size={10} /> AKURASI GPS
+                    <Crosshair size={10} /> Akurasi GPS
                   </button>
                 </div>
 
-                <div className="w-full h-[200px] md:h-[280px] rounded-2xl overflow-hidden border-2 border-slate-200 relative shadow-inner bg-slate-100">
+                {isLoaded ? (
+                  <Autocomplete
+                    onLoad={(autoC) => setAutocomplete(autoC)}
+                    onPlaceChanged={handlePlaceChanged}
+                  >
+                    <div className="relative group flex-1 text-left mb-3">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#008080] transition-colors pointer-events-none z-10">
+                        <MapPin size={16} />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Ketik Alamat atau Patokan..."
+                        value={formData.address}
+                        onChange={(e) =>
+                          setFormData({ ...formData, address: e.target.value })
+                        }
+                        className="w-full pl-[3.25rem] pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#008080] focus:ring-2 focus:ring-[#008080]/20 focus:bg-white outline-none text-[12px] font-bold transition-all placeholder:text-slate-400 shadow-inner text-left text-slate-800"
+                        required
+                      />
+                    </div>
+                  </Autocomplete>
+                ) : (
+                  <InputGroup
+                    placeholder="Alamat Detail (No. Lapak / Jalan)"
+                    icon={<MapPin size={16} />}
+                    value={formData.address}
+                    onChange={(v) => setFormData({ ...formData, address: v })}
+                  />
+                )}
+
+                <div className="w-full h-[200px] md:h-[280px] rounded-xl overflow-hidden border border-slate-200 relative shadow-inner bg-slate-100 mt-2">
                   {isLoaded ? (
                     <GoogleMap
                       mapContainerStyle={{ width: "100%", height: "100%" }}
@@ -334,11 +409,16 @@ export const MerchantPromoPage: React.FC = () => {
                         draggable={true}
                         onDragEnd={(e) => {
                           if (e.latLng) {
+                            const newLat = e.latLng.lat();
+                            const newLng = e.latLng.lng();
+
                             setFormData((prev) => ({
                               ...prev,
-                              latitude: e.latLng!.lat(),
-                              longitude: e.latLng!.lng(),
+                              latitude: newLat,
+                              longitude: newLng,
                             }));
+
+                            getAddressFromLatLng(newLat, newLng);
                           }
                         }}
                       />
@@ -347,35 +427,28 @@ export const MerchantPromoPage: React.FC = () => {
                     <div className="w-full h-full flex flex-col items-center justify-center gap-2">
                       <Loader2 className="animate-spin text-[#008080]" />
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        Mengaktifkan Radar...
+                        Memuat Peta Pintar...
                       </span>
                     </div>
                   )}
                   <div className="absolute top-2 right-2 bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-700 border shadow-sm pointer-events-none z-10 uppercase tracking-widest">
-                    Geser Pin ke Lapak Anda
+                    Geser Pin ke Lapak
                   </div>
                 </div>
               </div>
-
-              <InputGroup
-                placeholder="Alamat Detail (No. Lapak / Jalan)"
-                icon={<MapPin size={18} />}
-                value={formData.address}
-                onChange={(v) => setFormData({ ...formData, address: v })}
-              />
 
               <div className="pt-2 flex flex-col gap-3 text-left">
                 <InputGroup
                   type="email"
                   placeholder="Email Akun Seller"
-                  icon={<Mail size={18} />}
+                  icon={<Mail size={16} />}
                   value={formData.email}
                   onChange={(v) => setFormData({ ...formData, email: v })}
                 />
                 <InputGroup
                   type="password"
                   placeholder="Buat Password"
-                  icon={<Lock size={18} />}
+                  icon={<Lock size={16} />}
                   value={formData.password}
                   onChange={(v) => setFormData({ ...formData, password: v })}
                 />
@@ -383,10 +456,10 @@ export const MerchantPromoPage: React.FC = () => {
 
               <button
                 disabled={isLoading}
-                className="w-full py-4 bg-[#FF6600] text-white rounded-2xl font-[1000] text-[12px] uppercase tracking-[0.2em] shadow-lg shadow-orange-500/20 hover:bg-orange-600 active:scale-95 transition-all flex items-center justify-center gap-2 mt-4 border border-orange-400"
+                className="w-full py-3.5 bg-[#FF6600] text-white rounded-xl font-[1000] text-[12px] uppercase tracking-wide shadow-md shadow-orange-500/20 hover:bg-orange-600 active:scale-95 transition-all flex items-center justify-center gap-2 mt-4 border border-orange-400 disabled:opacity-50"
               >
                 {isLoading ? (
-                  <Loader2 className="animate-spin" />
+                  <Loader2 className="animate-spin" size={16} />
                 ) : (
                   <>
                     DAFTAR SEKARANG <ArrowRight size={16} />
@@ -407,7 +480,6 @@ export const MerchantPromoPage: React.FC = () => {
   );
 };
 
-// Komponen BenefitItem
 const BenefitItem = ({ icon, title, desc }: any) => (
   <div className="flex gap-4 text-left items-start group">
     <div className="w-12 h-12 bg-white/5 backdrop-blur-md rounded-2xl flex items-center justify-center shrink-0 border border-white/10 group-hover:bg-white/10 transition-colors">
@@ -446,7 +518,7 @@ const InputGroup = ({
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#008080] focus:ring-2 focus:ring-[#008080]/20 focus:bg-white outline-none text-[12px] font-bold uppercase tracking-widest transition-all placeholder:text-slate-400 placeholder:tracking-widest shadow-inner text-left text-slate-800"
+      className="w-full pl-[3.25rem] pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#008080] focus:ring-2 focus:ring-[#008080]/20 focus:bg-white outline-none text-[12px] font-bold transition-all placeholder:text-slate-400 shadow-inner text-left text-slate-800"
       required
     />
   </div>

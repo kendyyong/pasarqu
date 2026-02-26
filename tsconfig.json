@@ -29,6 +29,19 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "vite.config.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
+    "vite.config.ts",
+    "_trash_temporary/ManageQuickActions.tsx",
+    "_trash_temporary/Sidebar.tsx",
+    "_trash_temporary/CourierFinanceManager.tsx",
+    "_trash_temporary/SuperRegionalFinanceTab.tsx",
+    "_trash_temporary/TopUpHistory.tsx",
+    "_trash_temporary/SuperAdminHeader.tsx",
+    "_trash_temporary/SuperWithdrawalTab.tsx",
+    "_trash_temporary/AdminPromoPage.tsx"
+  ],
   "exclude": ["node_modules", "supabase", "dist"]
 }

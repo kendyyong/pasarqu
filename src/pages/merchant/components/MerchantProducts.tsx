@@ -9,12 +9,13 @@ import {
   Search,
   Edit2,
   Trash2,
-  CheckCircle2,
-  Clock,
   Package,
+  Clock,
+  CheckCircle2,
+  Layers,
+  Archive,
 } from "lucide-react";
 
-// 🚀 BAGIAN INI YANG MEMPERBAIKI ERROR 2322
 interface Props {
   autoOpenTrigger?: number;
   merchantProfile: any;
@@ -34,7 +35,6 @@ export const MerchantProducts: React.FC<Props> = ({
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // LOGIKA ANTI-MENTAL: Hanya buka form jika counter bertambah
   useEffect(() => {
     if (autoOpenTrigger > 0) {
       setSelectedProduct(null);
@@ -54,11 +54,13 @@ export const MerchantProducts: React.FC<Props> = ({
         .order("name");
       if (catData) setCategories(catData);
 
-      const { data: prodData } = await supabase
+      const { data: prodData, error: prodErr } = await supabase
         .from("products")
         .select("*, categories(name)")
         .eq("merchant_id", merchantProfile.id)
         .order("created_at", { ascending: false });
+
+      if (prodErr) throw prodErr;
       if (prodData) setProducts(prodData);
     } catch (err: any) {
       showToast(err.message, "error");
@@ -72,11 +74,11 @@ export const MerchantProducts: React.FC<Props> = ({
   }, [user, merchantProfile]);
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("HAPUS PRODUK INI?")) return;
+    if (!window.confirm("HAPUS PRODUK INI DARI KATALOG?")) return;
     try {
       const { error } = await supabase.from("products").delete().eq("id", id);
       if (error) throw error;
-      showToast("PRODUK DIHAPUS", "success");
+      showToast("PRODUK BERHASIL DIHAPUS", "success");
       fetchData();
     } catch (err: any) {
       showToast(err.message, "error");
@@ -85,52 +87,52 @@ export const MerchantProducts: React.FC<Props> = ({
 
   if (view === "list") {
     return (
-      <div className="w-full animate-in fade-in duration-500 pb-24 text-left font-bold uppercase text-[12px]">
-        {/* HEADER KATALOG */}
+      <div className="w-full animate-in fade-in duration-500 pb-24 text-left font-sans font-normal">
+        {/* HEADER UTAMA - BOLD HANYA JUDUL */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 px-1">
           <div>
-            <h2 className="text-[18px] md:text-[20px] font-bold text-slate-800 tracking-tight leading-none uppercase">
-              KATALOG PRODUK
+            <h2 className="text-2xl font-bold text-slate-800 tracking-tighter leading-none uppercase">
+              Katalog Produk
             </h2>
-            <p className="text-[10px] font-bold text-orange-500 tracking-[0.2em] mt-2 uppercase">
-              TOTAL: {products.length} ITEM TERDAFTAR
+            <p className="text-[10px] font-normal text-slate-400 tracking-[0.2em] mt-2 uppercase">
+              Mengelola {products.length} item di etalase Anda
             </p>
           </div>
+
           <button
             onClick={() => {
               setSelectedProduct(null);
               setView("form");
             }}
-            className="hidden md:flex bg-[#008080] text-white px-6 py-4 rounded-xl font-bold text-[12px] uppercase shadow-lg hover:bg-teal-700 transition-all gap-2"
+            className="hidden md:flex bg-[#008080] text-white px-6 py-3.5 rounded-xl font-bold text-[12px] uppercase shadow-md hover:bg-teal-700 transition-all gap-2 tracking-widest active:scale-95"
           >
-            <Plus size={18} strokeWidth={3} /> TAMBAH PRODUK BARU
+            <Plus size={18} strokeWidth={3} /> Tambah Produk
           </button>
         </div>
 
-        {/* SEARCH BAR */}
+        {/* SEARCH BAR CLEAN */}
         <div className="bg-white border border-slate-200 rounded-xl p-1 mb-6 flex items-center gap-3 shadow-sm focus-within:border-[#008080] transition-colors mx-1">
-          <div className="pl-3 text-[#008080]">
-            <Search size={20} />
+          <div className="pl-4 text-slate-300">
+            <Search size={18} />
           </div>
           <input
             type="text"
-            placeholder="CARI NAMA BARANG..."
-            className="flex-1 bg-transparent border-none outline-none py-3.5 text-[12px] font-bold text-slate-800 placeholder:text-slate-300 uppercase tracking-widest"
+            placeholder="CARI NAMA BARANG ANDA..."
+            className="flex-1 bg-transparent border-none outline-none py-3 text-[12px] font-normal text-slate-800 placeholder:text-slate-300 uppercase tracking-widest"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
 
-        {/* GRID PRODUK */}
         {loading ? (
           <div className="py-20 flex flex-col items-center gap-3 text-slate-400">
             <Loader2 className="animate-spin text-[#008080]" size={36} />
-            <span className="text-[10px] font-bold uppercase">
-              MENYIAPKAN KATALOG...
+            <span className="text-[10px] uppercase tracking-widest">
+              Sinkronisasi Etalase...
             </span>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4 px-1">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-5 px-1">
             {products
               .filter((p: any) =>
                 p.name.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -138,79 +140,105 @@ export const MerchantProducts: React.FC<Props> = ({
               .map((product: any) => (
                 <div
                   key={product.id}
-                  className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-[#008080] transition-all group relative flex flex-col shadow-sm"
+                  className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-[#008080] hover:shadow-lg hover:shadow-teal-900/5 transition-all group relative flex flex-col"
                 >
+                  {/* BADGE STATUS PRO */}
                   <div className="absolute top-2 left-2 z-20">
                     {product.is_verified ? (
-                      <div className="bg-emerald-500 text-white px-2 py-1 rounded-lg text-[8px] font-bold uppercase">
-                        AKTIF
+                      <div className="bg-emerald-500 text-white px-2 py-0.5 rounded-md text-[8px] font-bold uppercase tracking-widest shadow-sm flex items-center gap-1">
+                        <CheckCircle2 size={10} /> Aktif
                       </div>
                     ) : (
-                      <div className="bg-orange-500 text-white px-2 py-1 rounded-lg text-[8px] font-bold animate-pulse uppercase">
-                        DITINJAU
+                      <div className="bg-[#FF6600] text-white px-2 py-0.5 rounded-md text-[8px] font-bold uppercase tracking-widest shadow-sm flex items-center gap-1">
+                        <Clock size={10} /> Ditinjau
                       </div>
                     )}
                   </div>
+
+                  {/* AREA GAMBAR */}
                   <div className="aspect-square relative bg-slate-50 border-b border-slate-100 shrink-0 overflow-hidden">
                     <img
                       src={product.image_url}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                      alt=""
+                      className={`w-full h-full object-cover transition-transform duration-500 ${!product.is_verified ? "opacity-40 grayscale" : "group-hover:scale-110"}`}
+                      alt={product.name}
                     />
-                    {!product.is_verified && (
-                      <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4 text-center">
-                        <p className="text-white text-[8px] font-bold uppercase">
-                          VERIFIKASI ADMIN
-                        </p>
-                      </div>
-                    )}
-                    <div className="absolute top-2 right-2 flex flex-col gap-2 z-20">
+
+                    {/* OVERLAY ACTION */}
+                    <div className="absolute top-2 right-2 flex flex-col gap-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => {
                           setSelectedProduct(product);
                           setView("form");
                         }}
-                        className="p-2 bg-white shadow-md rounded-lg text-slate-800 hover:bg-[#008080] hover:text-white active:scale-90 transition-all"
+                        className="p-2 bg-white text-[#008080] shadow-md rounded-lg hover:bg-[#008080] hover:text-white transition-all active:scale-90"
                       >
                         <Edit2 size={14} />
                       </button>
                       <button
                         onClick={() => handleDelete(product.id)}
-                        className="p-2 bg-red-500 text-white shadow-md rounded-lg hover:bg-red-600 active:scale-90 transition-all"
+                        className="p-2 bg-white text-red-500 shadow-md rounded-lg hover:bg-red-500 hover:text-white transition-all active:scale-90"
                       >
                         <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
-                  <div className="p-3 flex flex-col flex-1 justify-between">
-                    <h4 className="font-bold text-slate-800 text-[11px] uppercase line-clamp-2 leading-tight mb-2 uppercase">
+
+                  {/* DETAIL KARTU - FONT 12PX CLEAN */}
+                  <div className="p-3.5 flex flex-col flex-1">
+                    <div className="flex items-center gap-1 text-slate-400 text-[8px] uppercase tracking-widest mb-1.5 font-normal">
+                      <Layers size={10} /> {product.categories?.name || "UMUM"}
+                    </div>
+
+                    <h4 className="text-slate-700 text-[12px] font-normal uppercase line-clamp-2 leading-tight mb-2 min-h-[2rem]">
                       {product.name}
                     </h4>
-                    <p className="text-[#FF6600] font-bold text-[15px] leading-none uppercase">
-                      RP {product.final_price?.toLocaleString()}
-                    </p>
+
+                    <div className="mt-auto pt-2 border-t border-slate-50 flex flex-col gap-1.5">
+                      <div className="flex justify-between items-end">
+                        <p className="text-[#FF6600] font-bold text-[14px] leading-none uppercase tracking-tight">
+                          RP {product.final_price?.toLocaleString("id-ID")}
+                        </p>
+                        <div className="flex items-center gap-1 text-slate-400 text-[9px] font-normal uppercase">
+                          <Archive size={10} /> {product.stock}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
 
+            {/* KATALOG KOSONG */}
             {!loading && products.length === 0 && (
-              <div className="col-span-full py-20 flex flex-col items-center justify-center text-slate-300 opacity-50 uppercase">
-                <Package size={60} strokeWidth={1} />
-                <p className="text-[10px] font-bold tracking-[0.3em] mt-4 uppercase">
-                  KATALOG KOSONG
+              <div className="col-span-full py-24 flex flex-col items-center justify-center text-slate-300 opacity-50">
+                <Package size={64} strokeWidth={1} />
+                <p className="text-[12px] font-normal tracking-[0.3em] mt-4 uppercase">
+                  Belum ada produk terdaftar
                 </p>
               </div>
             )}
           </div>
         )}
+
+        {/* FLOATING ACTION BUTTON (MOBILE ONLY) */}
+        <button
+          onClick={() => {
+            setSelectedProduct(null);
+            setView("form");
+          }}
+          className="md:hidden fixed bottom-28 right-6 w-14 h-14 bg-[#008080] text-white rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-all z-50 border-4 border-white"
+        >
+          <Plus size={28} strokeWidth={3} />
+        </button>
       </div>
     );
   }
 
-  // TAMPILAN FORM REGISTRASI
   return (
     <ProductForm
-      onBack={() => setView("list")}
+      onBack={() => {
+        setView("list");
+        fetchData();
+      }}
       categories={categories}
       merchantData={merchantProfile}
       onSuccess={() => {

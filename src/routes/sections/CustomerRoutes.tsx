@@ -12,7 +12,9 @@ import { CheckoutPaymentPage } from "../../pages/checkout/CheckoutPaymentPage";
 import { ProtectedRoute } from "../../components/layout/ProtectedRoute";
 import { ChatRoom } from "../../pages/chat/ChatRoom";
 
-// WAJIB MENGGUNAKAN "export const" DI SINI AGAR TIDAK ERROR SYNTAX
+// 🚀 DAFTAR ROLE YANG DIPERBOLEHKAN BELANJA (KONSISTEN)
+const ALL_SHOPPERS = ["USER", "CUSTOMER", "MERCHANT", "COURIER", "SUPER_ADMIN"];
+
 export const CustomerRoutes = () => [
   <Route
     key="product-detail"
@@ -21,11 +23,12 @@ export const CustomerRoutes = () => [
   />,
   <Route key="shop-detail" path="/shop/:merchantId" element={<ShopDetail />} />,
   <Route key="terms-cash" path="/terms-cashback" element={<TermsCashback />} />,
+
   <Route
     key="chat-room"
     path="/chat/:roomId"
     element={
-      <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN"]}>
+      <ProtectedRoute allowedRoles={ALL_SHOPPERS}>
         <ChatRoom />
       </ProtectedRoute>
     }
@@ -34,7 +37,7 @@ export const CustomerRoutes = () => [
     key="cust-dash"
     path="/customer-dashboard"
     element={
-      <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN"]}>
+      <ProtectedRoute allowedRoles={ALL_SHOPPERS}>
         <CustomerDashboard />
       </ProtectedRoute>
     }
@@ -43,7 +46,7 @@ export const CustomerRoutes = () => [
     key="pay"
     path="/pasarqu-pay"
     element={
-      <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN"]}>
+      <ProtectedRoute allowedRoles={ALL_SHOPPERS}>
         <PasarQuPay />
       </ProtectedRoute>
     }
@@ -52,7 +55,7 @@ export const CustomerRoutes = () => [
     key="checkout"
     path="/checkout"
     element={
-      <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN"]}>
+      <ProtectedRoute allowedRoles={ALL_SHOPPERS}>
         <CheckoutPaymentPage />
       </ProtectedRoute>
     }
@@ -61,7 +64,7 @@ export const CustomerRoutes = () => [
     key="addr"
     path="/settings/address"
     element={
-      <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN"]}>
+      <ProtectedRoute allowedRoles={ALL_SHOPPERS}>
         <AddressSettingsPage />
       </ProtectedRoute>
     }
@@ -70,7 +73,7 @@ export const CustomerRoutes = () => [
     key="orders"
     path="/order-history"
     element={
-      <ProtectedRoute allowedRoles={["CUSTOMER", "SUPER_ADMIN"]}>
+      <ProtectedRoute allowedRoles={ALL_SHOPPERS}>
         <OrderHistoryPage />
       </ProtectedRoute>
     }

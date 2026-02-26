@@ -22,44 +22,108 @@ export const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ identifier: "", password: "" });
 
-  // --- LOGIKA RAHASIA SUPER ADMIN ---
-  const [clickCount, setClickCount] = useState(0);
-  const [lastClickTime, setLastClickTime] = useState(0);
-
-  const handleSecretClick = () => {
-    const currentTime = Date.now();
-    if (currentTime - lastClickTime > 1000) {
-      setClickCount(1);
-    } else {
-      const newCount = clickCount + 1;
-      setClickCount(newCount);
-      if (newCount === 5) {
-        navigate("/login/master");
-        setClickCount(0);
-      }
-    }
-    setLastClickTime(currentTime);
-  };
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    try {
-      let finalEmail = formData.identifier.trim();
 
+    // 🚀 1. VALIDASI AWAL KETAT
+    const input = formData.identifier.trim();
+    const pwd = formData.password;
+
+    if (!input || !pwd) {
+      return showToast("Mohon isi Email/No.HP dan Password!", "error");
+    }
+
+    setLoading(true);
+
+    try {
+      let finalEmailForAuth = input;
+
+      // 🚀 2. LOGIKA SMART LOOKUP (DUAL LOGIN)
+      const isEmail = input.includes("@");
+
+      if (!isEmail) {
+        // Bersihkan input (Hanya ambil angka)
+        let cleanPhone = input.replace(/\D/g, "");
+        let basePhone = cleanPhone;
+
+        // Normalisasi nomor HP (hapus 0 atau 62 di depan)
+        if (basePhone.startsWith("0")) basePhone = basePhone.substring(1);
+        if (basePhone.startsWith("62")) basePhone = basePhone.substring(2);
+
+        if (!basePhone) {
+          showToast("Format Nomor HP tidak valid!", "error");
+          setLoading(false);
+          return;
+        }
+
+        // Cari email asli di tabel profiles berdasarkan nomor HP
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("email")
+          .or(
+            `phone_number.eq.0${basePhone},phone_number.eq.62${basePhone},phone_number.eq.+62${basePhone},phone_number.eq.${cleanPhone}`,
+          )
+          .maybeSingle();
+
+        if (profile && profile.email && profile.email.includes("@")) {
+          // 🎉 Ketemu email aslinya di database
+          finalEmailForAuth = profile.email;
+        } else {
+          // ⚠️ FALLBACK: Format lama jika belum update profil
+          finalEmailForAuth = `62${basePhone}@pasarqu.com`;
+        }
+      }
+
+      // 🚀 3. SAFETY CHECK FORMAT EMAIL
+      if (!finalEmailForAuth.includes("@")) {
+        showToast("Format kredensial tidak dikenali.", "error");
+        setLoading(false);
+        return;
+      }
+
+      // 🚀 4. EKSEKUSI LOGIN KE SUPABASE AUTH
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: finalEmail,
-        password: formData.password,
+        email: finalEmailForAuth,
+        password: pwd,
       });
 
       if (error) throw error;
 
       if (data.user) {
-        showToast("Login Berhasil!", "success");
-        navigate("/");
+        // Ambil profil lengkap untuk routing & sapaan
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", data.user.id)
+          .single();
+
+        if (profile) {
+          showToast(
+            `Selamat datang kembali, ${profile.full_name || profile.name || "Juragan"}!`,
+            "success",
+          );
+
+          // Routing berdasarkan Role
+          if (profile.role === "SUPER_ADMIN") {
+            navigate("/super-admin");
+          } else if (profile.role === "LOCAL_ADMIN") {
+            navigate("/admin/local");
+          } else {
+            navigate("/");
+          }
+        } else {
+          showToast("Login Berhasil!", "success");
+          navigate("/");
+        }
       }
     } catch (error: any) {
-      showToast("Email atau Password salah", "error");
+      console.error("Login Error:", error);
+      // Terjemahkan error 400 menjadi pesan ramah
+      if (error.status === 400 || error.message.includes("Invalid login")) {
+        showToast("Nomor HP/Email atau Password salah", "error");
+      } else {
+        showToast("Terjadi kesalahan: " + error.message, "error");
+      }
     } finally {
       setLoading(false);
     }
@@ -67,15 +131,15 @@ export const LoginPage = () => {
 
   return (
     <div className="min-h-[100dvh] w-screen flex flex-col font-sans relative overflow-hidden bg-slate-50 text-left">
-      {/* DEKORASI BACKGROUND ELEGAN */}
+      {/* DEKORASI BACKGROUND */}
       <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#008080]/15 rounded-full blur-[100px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-[#FF6600]/10 rounded-full blur-[100px] pointer-events-none"></div>
 
       {/* HEADER: KEMBALI */}
-      <header className="absolute top-0 left-0 p-4 z-50 w-full flex justify-between items-center">
+      <header className="absolute top-0 left-0 p-4 z-50 w-full">
         <button
           onClick={() => navigate(-1)}
-          className="p-2 text-slate-500 hover:text-slate-800 rounded-full bg-white/60 shadow-sm border border-slate-200 transition-all backdrop-blur-md active:scale-90"
+          className="p-2 text-slate-500 hover:text-slate-800 rounded-full bg-white/60 shadow-sm border border-slate-200 transition-all active:scale-90"
         >
           <ArrowLeft size={20} />
         </button>
@@ -83,20 +147,16 @@ export const LoginPage = () => {
 
       <div className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 w-full max-w-[420px] mx-auto mt-6 md:mt-0 pb-12">
         <div className="w-full animate-in slide-in-from-bottom-8 duration-700">
-          {/* BAGIAN LOGO (RAHASIA) */}
+          {/* LOGO SECTION */}
           <div className="flex flex-col items-center mb-6">
-            <div
-              onClick={handleSecretClick}
-              className="mb-3 select-none outline-none cursor-default"
-              style={{ WebkitTapHighlightColor: "transparent" }}
-            >
+            <div className="mb-3">
               <img
                 src="/logo-text.png"
                 alt="PasarQu Logo"
                 className="h-16 md:h-20 w-auto object-contain"
                 style={{
                   filter:
-                    "drop-shadow(1.5px 1.5px 0px white) drop-shadow(-1.5px -1.5px 0px white) drop-shadow(1.5px -1.5px 0px white) drop-shadow(-1.5px 1.5px 0px white)",
+                    "drop-shadow(1.5px 1.5px 0px white) drop-shadow(-1.5px -1.5px 0px white)",
                 }}
               />
             </div>
@@ -104,25 +164,28 @@ export const LoginPage = () => {
               MASUK KE SISTEM
             </h1>
             <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest text-center px-6">
-              Akses Pembeli dan Mitra PasarQu
+              Akses Member dan Mitra PasarQu
             </p>
           </div>
 
-          {/* FORM LOGIN */}
+          {/* FORM CONTAINER */}
           <div className="w-full bg-white/80 backdrop-blur-xl border border-white/40 rounded-[2rem] p-6 md:p-8 shadow-2xl shadow-teal-900/5 mb-6">
             <form onSubmit={handleLogin} className="space-y-4">
-              {/* INPUT EMAIL */}
+              {/* INPUT IDENTIFIER (EMAIL / NO HP) */}
               <div className="relative group">
                 <Mail
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-800 transition-colors"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#008080] transition-colors"
                   size={18}
                 />
                 <input
-                  type="email"
-                  placeholder="EMAIL ANDA"
-                  className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-slate-800 text-[12px] font-bold focus:border-slate-800 focus:ring-2 focus:ring-slate-800/20 outline-none transition-all uppercase tracking-widest shadow-inner"
+                  type="text"
+                  placeholder="Nomor HP atau Email Anda"
+                  className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-slate-800 text-[12px] font-bold focus:border-[#008080] focus:ring-2 focus:ring-[#008080]/20 outline-none transition-all shadow-inner"
                   onChange={(e) =>
-                    setFormData({ ...formData, identifier: e.target.value })
+                    setFormData((prev) => ({
+                      ...prev,
+                      identifier: e.target.value,
+                    }))
                   }
                   required
                 />
@@ -131,15 +194,18 @@ export const LoginPage = () => {
               {/* INPUT PASSWORD */}
               <div className="relative group">
                 <Lock
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-slate-800 transition-colors"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#008080] transition-colors"
                   size={18}
                 />
                 <input
                   type={showPassword ? "text" : "password"}
-                  placeholder="KATA SANDI"
-                  className="w-full pl-12 pr-12 py-4 bg-white border border-slate-200 rounded-2xl text-slate-800 text-[12px] font-bold focus:border-slate-800 focus:ring-2 focus:ring-slate-800/20 outline-none transition-all shadow-inner"
+                  placeholder="Kata Sandi Anda"
+                  className="w-full pl-12 pr-12 py-4 bg-white border border-slate-200 rounded-2xl text-slate-800 text-[12px] font-bold focus:border-[#008080] focus:ring-2 focus:ring-[#008080]/20 outline-none transition-all shadow-inner"
                   onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
+                    setFormData((prev) => ({
+                      ...prev,
+                      password: e.target.value,
+                    }))
                   }
                   required
                 />
@@ -152,8 +218,8 @@ export const LoginPage = () => {
                 </button>
               </div>
 
+              {/* LUPA PASSWORD */}
               <div className="flex justify-end pt-1">
-                {/* 🚀 FIX: TOMBOL LUPA SANDI DIHUBUNGKAN KE ROUTER */}
                 <button
                   type="button"
                   onClick={() => navigate("/forgot-password")}
@@ -163,10 +229,10 @@ export const LoginPage = () => {
                 </button>
               </div>
 
-              {/* TOMBOL LOGIN */}
+              {/* TOMBOL SUBMIT */}
               <button
                 disabled={loading}
-                className="w-full mt-2 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-[1000] uppercase tracking-[0.2em] text-[12px] shadow-xl shadow-slate-900/20 active:scale-95 transition-all flex justify-center items-center gap-2 border border-slate-800"
+                className="w-full mt-2 py-4 bg-[#008080] hover:bg-teal-700 text-white rounded-2xl font-[1000] uppercase tracking-[0.2em] text-[12px] shadow-xl shadow-teal-900/20 active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-50"
               >
                 {loading ? (
                   <Loader2 className="animate-spin" size={18} />
@@ -177,7 +243,7 @@ export const LoginPage = () => {
             </form>
           </div>
 
-          {/* BAGIAN DAFTAR BARU */}
+          {/* REGISTER SECTION */}
           <div className="w-full flex flex-col items-center">
             <div className="flex items-center gap-3 w-full mb-4 opacity-70">
               <div className="h-[1px] bg-slate-300 flex-1"></div>
@@ -188,10 +254,9 @@ export const LoginPage = () => {
             </div>
 
             <div className="w-full flex flex-col gap-3">
-              {/* TOMBOL DAFTAR PEMBELI */}
               <button
                 onClick={() => navigate("/register")}
-                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-teal-50 to-orange-50 rounded-2xl hover:shadow-md transition-all active:scale-95 border border-teal-100 group"
+                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-teal-50 to-orange-50 rounded-2xl border border-teal-100 group active:scale-95 transition-all"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#008080] shadow-sm group-hover:bg-[#008080] group-hover:text-white transition-colors">
@@ -199,7 +264,7 @@ export const LoginPage = () => {
                   </div>
                   <div className="text-left">
                     <span className="block text-[12px] font-black uppercase text-slate-700 tracking-widest">
-                      Daftar Pembeli
+                      Daftar Member
                     </span>
                     <span className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">
                       Mulai Belanja Kebutuhanmu
@@ -208,30 +273,24 @@ export const LoginPage = () => {
                 </div>
                 <ArrowLeft
                   size={16}
-                  className="text-slate-400 group-hover:text-[#008080] rotate-180 transition-transform group-hover:translate-x-1"
+                  className="text-slate-400 rotate-180 transition-transform group-hover:translate-x-1"
                 />
               </button>
 
-              {/* TOMBOL DAFTAR MITRA */}
               <div className="grid grid-cols-2 gap-3 w-full">
                 <button
                   onClick={() => navigate("/merchant-promo")}
-                  className="flex flex-col items-center justify-center gap-1.5 p-4 bg-[#008080] rounded-2xl hover:bg-teal-700 transition-all shadow-md active:scale-95 border border-teal-600 group"
+                  className="flex flex-col items-center justify-center gap-1.5 p-4 bg-[#008080] rounded-2xl text-white font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all"
                 >
-                  <Store size={22} className="text-white" />
-                  <span className="text-[10px] font-black uppercase text-white tracking-widest text-center leading-tight">
-                    BUKA TOKO
-                  </span>
+                  <Store size={22} />
+                  BUKA TOKO
                 </button>
-
                 <button
                   onClick={() => navigate("/promo/kurir")}
-                  className="flex flex-col items-center justify-center gap-1.5 p-4 bg-[#FF6600] rounded-2xl hover:bg-orange-600 transition-all shadow-md active:scale-95 border border-orange-500 group"
+                  className="flex flex-col items-center justify-center gap-1.5 p-4 bg-[#FF6600] rounded-2xl text-white font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all"
                 >
-                  <Bike size={22} className="text-white" />
-                  <span className="text-[10px] font-black uppercase text-white tracking-widest text-center leading-tight">
-                    DAFTAR KURIR
-                  </span>
+                  <Bike size={22} />
+                  DAFTAR KURIR
                 </button>
               </div>
             </div>

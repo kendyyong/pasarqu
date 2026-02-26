@@ -101,7 +101,7 @@ export const SuperAdminDashboard: React.FC = () => {
     bgOrange: "bg-[#FF6600]",
   };
 
-  // 🛠️ DAFTAR MENU LENGKAP
+  // 🛠️ DAFTAR MENU LENGKAP (TIDAK ADA YANG DIPOTONG)
   const menuGroups = [
     {
       group: "CORE MONITORING",
@@ -167,7 +167,6 @@ export const SuperAdminDashboard: React.FC = () => {
           >
             <Menu size={22} />
           </button>
-          {/* 🚀 LOGO IMAGE MOBILE (Diperbesar sedikit juga biar imbang) */}
           <img
             src="/logo-text.png"
             alt="PasarQu"
@@ -198,13 +197,11 @@ export const SuperAdminDashboard: React.FC = () => {
           ${isDark ? "bg-slate-900 border-r border-slate-800 shadow-2xl md:shadow-none" : "bg-white border-r border-slate-200 shadow-2xl md:shadow-none"}
         `}
       >
-        {/* 🚀 LOGO IMAGE SIDEBAR (DIPERBESAR JADI h-12) */}
         <div
           className={`h-20 flex items-center justify-between px-6 shrink-0 ${isDark ? "bg-slate-950 border-b border-slate-800" : `bg-white border-b border-slate-100`}`}
         >
           <div className="flex items-center gap-3">
             {isSidebarOpen || isMobileMenuOpen ? (
-              // PERUBAHAN DISINI: h-8 menjadi h-12
               <img
                 src="/logo-text.png"
                 alt="PasarQu"
@@ -222,12 +219,12 @@ export const SuperAdminDashboard: React.FC = () => {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4 no-scrollbar space-y-4">
+        <nav className="flex-1 overflow-y-auto py-4 no-scrollbar space-y-6">
           {menuGroups.map((group, idx) => (
             <div key={idx} className="px-3">
               {(isSidebarOpen || isMobileMenuOpen) && (
                 <p
-                  className={`text-[9px] px-4 mb-2 tracking-[0.2em] uppercase ${isDark ? "text-slate-500 font-bold" : "text-slate-400 font-black"}`}
+                  className={`text-[10px] px-4 mb-3 tracking-[0.2em] uppercase font-black ${isDark ? "text-slate-500" : "text-slate-500"}`}
                 >
                   {group.group}
                 </p>
@@ -246,7 +243,7 @@ export const SuperAdminDashboard: React.FC = () => {
                             : `${brand.bgTosca} text-white shadow-lg shadow-teal-900/20`
                           : isDark
                             ? "text-slate-400 hover:bg-slate-800 hover:text-white"
-                            : "text-slate-800 hover:bg-slate-50 hover:text-[#008080]"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-[#008080]"
                       }`}
                     >
                       <item.icon size={20} className="shrink-0" />
@@ -315,7 +312,7 @@ export const SuperAdminDashboard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-6">
-            {/* 🚀 TOMBOL THEME DAY/NIGHT (KHUSUS CEO) */}
+            {/* 🚀 TOMBOL THEME DAY/NIGHT */}
             <button
               onClick={toggleTheme}
               className={`flex items-center gap-3 px-4 py-2 rounded-xl border transition-all duration-500 group ${

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useMerchantDashboard } from "../../hooks/useMerchantDashboard";
+import { useNavigate } from "react-router-dom";
 
 // --- COMPONENTS ---
 import { MerchantSidebar } from "./components/MerchantSidebar";
@@ -15,7 +16,7 @@ import { LocationPickerModal } from "./components/LocationPickerModal";
 import { MerchantSettings } from "./components/MerchantSettings";
 
 // --- ICONS ---
-import { Moon, Sun, Loader2, Settings } from "lucide-react";
+import { Moon, Sun, Loader2, Settings, ShoppingBag } from "lucide-react";
 
 type TabType =
   | "overview"
@@ -28,7 +29,8 @@ type TabType =
   | "settings";
 
 export const MerchantDashboard: React.FC = () => {
-  const { logout } = useAuth();
+  const { logout, profile } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [triggerAddProduct, setTriggerAddProduct] = useState(0);
 
@@ -49,6 +51,15 @@ export const MerchantDashboard: React.FC = () => {
     toggleShopStatus,
     stopAlarm,
   } = useMerchantDashboard();
+
+  // 🛡️ PENJAGA PINTU BELAKANG
+  useEffect(() => {
+    if (profile) {
+      if (profile.role === "MERCHANT" && profile.is_verified === false) {
+        navigate("/waiting-approval", { replace: true });
+      }
+    }
+  }, [profile, navigate]);
 
   useEffect(() => {
     if (!visitedTabs[activeTab])
@@ -118,9 +129,9 @@ export const MerchantDashboard: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0 md:ml-64 w-full h-screen overflow-hidden">
         {/* HEADER / TOP BAR */}
         <div
-          className={`border-b sticky top-0 z-40 shadow-sm flex items-center h-[70px] px-4 md:px-8 transition-colors duration-300 ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}
+          className={`border-b sticky top-0 z-[100] shadow-sm flex items-center h-[70px] px-4 md:px-8 transition-colors duration-300 ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}
         >
-          <div className="flex-1">
+          <div className="flex-1 min-w-0 pr-2">
             <MerchantHeader
               shopName={merchantProfile.shop_name}
               marketName={merchantProfile.market_name}
@@ -128,19 +139,18 @@ export const MerchantDashboard: React.FC = () => {
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* 🚀 TOMBOL SETTING (HANYA MOBILE) */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* 🚀 TOMBOL BELANJA (MODE PEMBELI) - FIX: ALAMAT BENAR & MUNCUL DI HP */}
             <button
-              onClick={() => setActiveTab("settings")}
-              className={`md:hidden p-2.5 rounded-xl transition-all active:scale-90 border ${
-                activeTab === "settings"
-                  ? "bg-[#008080] text-white border-[#008080]"
-                  : isDarkMode
-                    ? "bg-slate-800 border-slate-700 text-slate-400"
-                    : "bg-slate-50 border-slate-100 text-slate-500"
-              }`}
+              onClick={() => {
+                console.log("Meluncur ke Customer Dashboard...");
+                // 💡 PAKAI ALAMAT ASLI DARI CUSTOMER ROUTES BOS
+                window.location.href = "/customer-dashboard";
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] md:text-[11px] uppercase tracking-tighter transition-all active:scale-90 border shadow-md bg-[#FF6600] text-white border-orange-400"
             >
-              <Settings size={18} strokeWidth={2.5} />
+              <ShoppingBag size={15} strokeWidth={3} />
+              <span className="inline-block">BELANJA</span>
             </button>
 
             {/* DARK MODE TOGGLE */}
@@ -153,6 +163,20 @@ export const MerchantDashboard: React.FC = () => {
               ) : (
                 <Moon size={18} strokeWidth={2.5} />
               )}
+            </button>
+
+            {/* TOMBOL SETTING (HANYA MOBILE) */}
+            <button
+              onClick={() => setActiveTab("settings")}
+              className={`md:hidden p-2.5 rounded-xl transition-all active:scale-90 border ${
+                activeTab === "settings"
+                  ? "bg-[#008080] text-white border-[#008080]"
+                  : isDarkMode
+                    ? "bg-slate-800 border-slate-700 text-slate-400"
+                    : "bg-slate-50 border-slate-100 text-slate-500"
+              }`}
+            >
+              <Settings size={18} strokeWidth={2.5} />
             </button>
           </div>
         </div>

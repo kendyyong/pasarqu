@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { supabase } from "../../../../lib/supabaseClient";
+import { supabase } from "../src/lib/supabaseClient";
 import {
   Plus,
   Trash2,
@@ -15,7 +15,7 @@ import {
   CheckCircle2,
   LayoutDashboard,
 } from "lucide-react";
-import { useToast } from "../../../../contexts/ToastContext";
+import { useToast } from "../src/contexts/ToastContext";
 import { useNavigate } from "react-router-dom";
 
 export const ManageQuickActions = () => {

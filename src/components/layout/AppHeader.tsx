@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ShoppingBag, MessageCircle, User, MapPin } from "lucide-react";
+import { ShoppingBag, MessageCircle, User, MapPin } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
+// 🚀 IMPORT SEARCH BAR PRO
+import { SearchBar } from "../shared/SearchBar";
 
 interface AppHeaderProps {
   userName: string;
@@ -11,8 +13,10 @@ interface AppHeaderProps {
   onCartClick: () => void;
   onSearch: (query: string) => void;
   onUserClick: () => void;
+  searchQuery: string;
 }
 
+// 🚀 NAMED EXPORT
 export const AppHeader: React.FC<AppHeaderProps> = ({
   userName,
   userAvatar,
@@ -21,6 +25,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onCartClick,
   onSearch,
   onUserClick,
+  searchQuery,
 }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -46,69 +51,57 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     }
   };
 
-  // 🚀 FUNGSI GANTI PASAR
   const handleMarketChange = () => {
     navigate("/select-market");
   };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-[1000] bg-[#008080] border-b border-white/[0.02] transition-all duration-300">
-      <div className="max-w-[1200px] mx-auto px-4 h-[60px] md:h-[70px] flex items-center gap-3 md:gap-6">
-        {/* 🚀 AREA LOGO (SEKARANG BERFUNGSI SEBAGAI TOMBOL PILIH PASAR) */}
+      <div className="max-w-[1200px] mx-auto px-4 h-[65px] md:h-[85px] flex items-center gap-3 md:gap-6">
+        {/* AREA LOGO & GANTI PASAR */}
         <div
           className="flex items-center cursor-pointer shrink-0 group active:scale-95 transition-all duration-200"
           onClick={handleMarketChange}
         >
-          {/* 1. LOGO ICON (Tampilan Mobile) */}
-          <div className="relative h-10 w-10 flex items-center justify-center bg-white rounded-xl shadow-xl border border-white/20 overflow-hidden p-0 md:hidden">
+          {/* Logo Mobile (DIPERBESAR ke h-12) */}
+          <div className="relative h-12 w-12 flex items-center justify-center bg-white rounded-xl shadow-xl border border-white/20 overflow-hidden p-0 md:hidden">
             <img
               src="/logo-pasarqu.png"
               alt="Ganti Pasar"
               className="h-full w-full object-cover"
               onError={(e) => {
                 e.currentTarget.src =
-                  "https://ui-avatars.com/api/?name=Toko&background=008080&color=fff&size=100?text=P";
+                  "https://ui-avatars.com/api/?name=Toko&background=008080&color=fff";
               }}
             />
-            {/* Tooltip kecil untuk mobile agar user tahu ini bisa diklik */}
-            <div className="absolute inset-0 bg-black/5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <MapPin size={12} className="text-[#008080]" />
-            </div>
           </div>
 
-          {/* 2. LOGO TULISAN (Tampilan Desktop) */}
+          {/* Logo Desktop (DIPERBESAR ke h-14) */}
           <div className="hidden md:flex flex-col text-left">
             <img
               src="/logo-text.png"
-              alt="PASARQU - GANTI PASAR"
-              className="h-10 w-auto object-contain group-hover:opacity-90 transition-all"
+              alt="PASARQU"
+              className="h-14 w-auto object-contain" // 🚀 Ukuran dinaikkan dari h-10 ke h-14
               style={{
-                filter: `drop-shadow(1px 0px 1px white) drop-shadow(-1px 0px 1px white) drop-shadow(0px 1px 1px white) drop-shadow(0px -1px 1px white)`,
+                filter: `drop-shadow(1.5px 0px 0px white) drop-shadow(-1.5px 0px 0px white) drop-shadow(0px 1.5px 0px white) drop-shadow(0px -1.5px 0px white)`,
               }}
             />
-            <div className="flex items-center gap-1.5 mt-1 opacity-90 border-l-2 border-orange-400 pl-2 group-hover:border-white transition-colors">
-              <MapPin
-                size={10}
-                className="text-orange-400 group-hover:text-white"
-              />
-              <p className="text-[10px] text-teal-50 font-black uppercase tracking-[0.15em] group-hover:text-white">
+            <div className="flex items-center gap-1.5 mt-0 opacity-95 border-l-2 border-orange-400 pl-2">
+              <MapPin size={11} className="text-orange-400" />
+              <p className="text-[11px] text-teal-50 font-black uppercase tracking-[0.2em]">
                 {regionName || "PILIH PASAR"}
               </p>
             </div>
           </div>
         </div>
 
-        {/* SEARCH BAR */}
-        <div className="flex-1 bg-white/95 rounded-xl flex items-center p-1 shadow-inner h-10 overflow-hidden border border-slate-200 focus-within:ring-2 focus-within:ring-orange-400 transition-all">
-          <div className="flex-1 flex items-center px-4">
-            <Search size={18} className="text-slate-400 mr-2 shrink-0" />
-            <input
-              type="text"
-              placeholder="Cari kebutuhan dapur..."
-              className="w-full text-[12px] outline-none text-slate-800 font-black bg-transparent border-none focus:ring-0 uppercase"
-              onChange={(e) => onSearch(e.target.value)}
-            />
-          </div>
+        {/* 🚀 SEARCH BAR PRO */}
+        <div className="flex-1">
+          <SearchBar
+            value={searchQuery}
+            onChange={onSearch}
+            placeholder="Cari kebutuhan dapur..."
+          />
         </div>
 
         {/* ACTION AREA */}
@@ -117,14 +110,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             className="p-2 text-white cursor-pointer hover:bg-white/10 rounded-xl transition-all active:scale-90"
             onClick={handleChatClick}
           >
-            <MessageCircle size={22} />
+            <MessageCircle size={24} />
           </div>
 
           <div
             className={`relative p-2 text-white cursor-pointer hover:bg-white/10 rounded-xl transition-all ${isBump ? "scale-110" : ""}`}
             onClick={onCartClick}
           >
-            <ShoppingBag size={22} />
+            <ShoppingBag size={24} />
             {cartCount > 0 && (
               <div className="absolute top-0 right-0 bg-orange-500 text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-md border-2 border-[#008080] shadow-md">
                 {cartCount}
@@ -139,16 +132,16 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             {user && userAvatar ? (
               <img
                 src={userAvatar}
-                className="w-8 h-8 rounded-lg object-cover border border-white/20 shadow-sm"
+                className="w-9 h-9 rounded-lg object-cover shadow-sm"
                 alt="User"
               />
             ) : (
-              <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center text-white">
-                <User size={18} />
+              <div className="w-9 h-9 bg-white/20 rounded-lg flex items-center justify-center text-white">
+                <User size={20} />
               </div>
             )}
             <div className="flex flex-col text-left">
-              <span className="text-[11px] font-black text-white uppercase leading-none">
+              <span className="text-[12px] font-black text-white uppercase leading-none">
                 {finalDisplayName}
               </span>
             </div>
@@ -158,5 +151,3 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     </header>
   );
 };
-
-export default AppHeader;

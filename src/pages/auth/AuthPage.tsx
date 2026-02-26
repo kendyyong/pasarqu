@@ -5,7 +5,7 @@ import { useToast } from "../../contexts/ToastContext";
 import {
   Eye,
   EyeOff,
-  Mail,
+  Phone,
   Lock,
   LogIn,
   Store,
@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Zap,
   ChevronRight,
+  Mail,
 } from "lucide-react";
 import { GoogleLoginButton } from "../../components/ui/GoogleLoginButton";
 
@@ -73,31 +74,60 @@ export const AuthPage = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
     try {
       let finalEmail = formData.identifier.trim();
-      const isPhone = /^\d+$/.test(finalEmail);
+
+      // 🚀 LOGIKA STANDAR BARU: Cek apakah input berupa angka (Nomor HP)
+      const isPhone = /^[0-9+]+$/.test(finalEmail.replace(/\D/g, ""));
+
       if (isPhone) {
-        if (finalEmail.startsWith("0")) finalEmail = finalEmail.substring(1);
-        finalEmail = `${finalEmail}@pasarqu.com`;
+        let cleanPhone = finalEmail.replace(/\D/g, "");
+        // Bersihkan angka 0 atau 62 di depan agar seragam menjadi 628xxx
+        if (cleanPhone.startsWith("0")) cleanPhone = cleanPhone.substring(1);
+        if (cleanPhone.startsWith("62")) cleanPhone = cleanPhone.substring(2);
+
+        finalEmail = `62${cleanPhone}@pasarqu.com`;
+      } else if (!finalEmail.includes("@")) {
+        showToast("Format Nomor HP atau Email tidak valid!", "error");
+        setLoading(false);
+        return;
       }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: finalEmail,
         password: formData.password,
       });
+
       if (error) throw error;
+
       if (data.user) {
         const { data: profile } = await supabase
           .from("profiles")
           .select("*")
           .eq("id", data.user.id)
           .single();
+
         if (profile) {
-          showToast(`Selamat datang kembali, ${profile.name}!`, "success");
-          setTimeout(() => navigate("/"), 800);
+          showToast(
+            `Selamat datang kembali, ${profile.full_name || profile.name || "Juragan"}!`,
+            "success",
+          );
+
+          // Arahkan Super Admin ke dashboard jika role-nya SUPER_ADMIN
+          if (profile.role === "SUPER_ADMIN") {
+            setTimeout(() => navigate("/super-admin"), 800);
+          } else {
+            setTimeout(() => navigate(redirectTarget || "/"), 800);
+          }
         }
       }
     } catch (error: any) {
-      showToast("Email/HP atau Password salah", "error");
+      if (error.message.includes("Invalid login")) {
+        showToast("Nomor HP/Email atau Password salah!", "error");
+      } else {
+        showToast("Terjadi kesalahan: " + error.message, "error");
+      }
     } finally {
       setLoading(false);
     }
@@ -121,6 +151,7 @@ export const AuthPage = () => {
       {/* --- HEADER --- */}
       <div className="bg-white/5 backdrop-blur-md border-b border-white/10 sticky top-0 z-50">
         <div className="max-w-[1200px] mx-auto px-6 h-20 flex items-center justify-center lg:justify-start">
+          {/* TOMBOL LOGO NORMAL (TIDAK ADA RAHASIA) */}
           <div onClick={() => navigate("/")} className="cursor-pointer group">
             <img
               src="/logo-text.png"
@@ -161,16 +192,17 @@ export const AuthPage = () => {
               </h2>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-5">
+            <form onSubmit={handleLogin} className="space-y-4">
               <div className="relative group">
-                <Mail
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 group-focus-within:text-[#008080] transition-colors duration-300"
-                  size={20}
+                <Phone
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#008080] transition-colors duration-300"
+                  size={18}
                 />
+                {/* 🚀 INPUT NORMAL: Dihapus class 'uppercase' */}
                 <input
                   type="text"
-                  placeholder="EMAIL ATAU NOMOR HP"
-                  className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl focus:bg-white/10 focus:border-[#008080]/50 focus:ring-4 focus:ring-teal-500/5 outline-none text-[11px] font-black uppercase tracking-widest text-white placeholder:text-white/20 transition-all duration-300"
+                  placeholder="Nomor HP atau Email"
+                  className="w-full pl-12 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl focus:bg-white/10 focus:border-[#008080]/50 focus:ring-4 focus:ring-teal-500/5 outline-none text-[13px] font-black tracking-widest text-white placeholder:text-white/30 transition-all duration-300"
                   onChange={(e) =>
                     setFormData({ ...formData, identifier: e.target.value })
                   }
@@ -180,13 +212,13 @@ export const AuthPage = () => {
 
               <div className="relative group">
                 <Lock
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 group-focus-within:text-[#008080] transition-colors duration-300"
-                  size={20}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#008080] transition-colors duration-300"
+                  size={18}
                 />
                 <input
                   type={showPassword ? "text" : "password"}
-                  placeholder="PASSWORD"
-                  className="w-full pl-12 pr-12 py-4 bg-white/5 border border-white/10 rounded-2xl focus:bg-white/10 focus:border-[#008080]/50 focus:ring-4 focus:ring-teal-500/5 outline-none text-[11px] font-black uppercase tracking-widest text-white placeholder:text-white/20 transition-all duration-300"
+                  placeholder="Password"
+                  className="w-full pl-12 pr-12 py-3.5 bg-white/5 border border-white/10 rounded-xl focus:bg-white/10 focus:border-[#008080]/50 focus:ring-4 focus:ring-teal-500/5 outline-none text-[13px] font-black tracking-widest text-white placeholder:text-white/30 transition-all duration-300"
                   onChange={(e) =>
                     setFormData({ ...formData, password: e.target.value })
                   }
@@ -195,7 +227,7 @@ export const AuthPage = () => {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 hover:text-white transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white transition-colors"
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -203,7 +235,7 @@ export const AuthPage = () => {
 
               <button
                 disabled={loading}
-                className="w-full bg-[#008080] text-white font-[1000] py-4 rounded-2xl shadow-xl hover:bg-teal-600 hover:-translate-y-0.5 transition-all duration-300 uppercase text-[12px] tracking-[0.2em] mt-2 active:scale-95 border border-teal-400/30"
+                className="w-full bg-[#008080] text-white font-[1000] py-3.5 rounded-xl shadow-xl hover:bg-teal-600 hover:-translate-y-0.5 transition-all duration-300 uppercase text-[12px] tracking-[0.2em] mt-2 active:scale-95 border border-teal-400/30 disabled:opacity-50"
               >
                 {loading ? "MEMPROSES..." : "MASUK SEKARANG"}
               </button>
@@ -215,40 +247,41 @@ export const AuthPage = () => {
                   <div className="absolute inset-0 flex items-center">
                     <div className="w-full border-t border-white/10"></div>
                   </div>
-                  <span className="relative bg-[#003333] px-4 text-[10px] font-black text-white/30 uppercase tracking-[0.3em]">
+                  <span className="relative bg-[#003333] px-4 text-[10px] font-black text-white/40 uppercase tracking-[0.3em]">
                     Atau
                   </span>
                 </div>
 
                 <GoogleLoginButton />
 
-                <div className="mt-8 text-center text-[11px] font-black text-white/40 uppercase tracking-widest">
-                  BARU DI PASARQU?{" "}
+                {/* 🚀 PERUBAHAN TEKS: "Daftar Member" */}
+                <div className="mt-8 text-center text-[11px] font-black text-white/50 tracking-widest flex items-center justify-center gap-1.5">
+                  BELUM PUNYA AKUN?{" "}
                   <Link
                     to={`/register?redirect=${redirectTarget || ""}`}
-                    className="text-[#FF6600] hover:underline ml-1"
+                    className="text-[#FF6600] uppercase hover:text-orange-400 hover:scale-105 transition-all underline decoration-[#FF6600]/30 underline-offset-4"
                   >
-                    DAFTAR
+                    DAFTAR MEMBER
                   </Link>
                 </div>
 
                 {/* TOMBOL MITRA */}
                 <div
                   onClick={() => navigate("/portal")}
-                  className="w-full mt-10 bg-white/5 p-6 rounded-[2rem] relative overflow-hidden group cursor-pointer border border-white/10 shadow-2xl active:scale-95 transition-all duration-300"
+                  className="w-full mt-10 bg-white/5 p-5 rounded-[1.5rem] relative overflow-hidden group cursor-pointer border border-white/10 shadow-2xl active:scale-95 transition-all duration-300"
                 >
                   <div className="absolute -top-6 -right-6 p-2 opacity-5 group-hover:opacity-10 transition-all duration-700 text-white">
-                    <Zap size={120} fill="currentColor" />
+                    <Zap size={100} fill="currentColor" />
                   </div>
                   <div className="relative z-10 flex items-center justify-between">
                     <div className="flex flex-col">
-                      <div className="flex items-center gap-2 mb-1.5">
+                      <div className="flex items-center gap-2 mb-1">
                         <Zap
-                          size={16}
+                          size={14}
                           className="text-[#FF6600]"
                           fill="currentColor"
                         />
-                        <h3 className="text-white text-[15px] font-[1000] uppercase tracking-tighter">
+                        <h3 className="text-white text-[13px] font-[1000] uppercase tracking-tighter">
                           Portal Mitra
                         </h3>
                       </div>
@@ -256,8 +289,8 @@ export const AuthPage = () => {
                         Toko dan Kurir Pasarqu
                       </p>
                     </div>
-                    <div className="bg-[#FF6600] p-3 rounded-xl text-white shadow-lg group-hover:bg-orange-500 transition-all duration-300">
-                      <ChevronRight size={18} strokeWidth={4} />
+                    <div className="bg-[#FF6600] p-2.5 rounded-lg text-white shadow-lg group-hover:bg-orange-500 transition-all duration-300">
+                      <ChevronRight size={16} strokeWidth={4} />
                     </div>
                   </div>
                 </div>
@@ -266,20 +299,20 @@ export const AuthPage = () => {
 
             {/* FOOTER MERCHANT/COURIER */}
             {roleParam !== null && (
-              <div className="mt-10 pt-8 border-t border-white/10 w-full space-y-4">
+              <div className="mt-8 pt-6 border-t border-white/10 w-full space-y-3">
                 <button
                   onClick={() =>
                     navigate(
                       `${uiConfig.regPath}?redirect=${redirectTarget || ""}`,
                     )
                   }
-                  className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black text-white uppercase tracking-widest hover:bg-[#008080] transition-all duration-300 flex items-center justify-center gap-2"
+                  className="w-full py-3.5 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black text-white uppercase tracking-widest hover:bg-[#008080] transition-all duration-300 flex items-center justify-center gap-2"
                 >
                   {uiConfig.regLabel} <ArrowRight size={14} />
                 </button>
                 <button
                   onClick={() => navigate("/portal")}
-                  className="w-full text-[9px] font-black text-white/30 uppercase tracking-[0.3em] hover:text-[#FF6600] transition-colors"
+                  className="w-full text-[9px] font-black text-white/30 uppercase tracking-[0.3em] hover:text-[#FF6600] transition-colors pt-2"
                 >
                   BUKAN {uiConfig.title.toUpperCase()}? GANTI JENIS AKUN
                 </button>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ClipboardCheck,
@@ -10,8 +10,9 @@ import {
   Map as MapIcon,
   ArrowLeft,
   LayoutDashboard,
-  RefreshCw,
   MapPin,
+  UserCog,
+  ShieldAlert,
 } from "lucide-react";
 
 // --- HOOKS & SHARED ---
@@ -24,6 +25,8 @@ import { PartnerDetailModal } from "./components/PartnerDetailModal";
 import { LocalAdminHeader } from "./components/LocalAdminHeader";
 import { LocalAdminContent } from "./components/LocalAdminContent";
 import { AdminProductVerification } from "./components/AdminProductVerification";
+// 🚀 IMPORT KOMPONEN UPDATE DATA
+import { AdminProfileUpdate } from "./components/AdminProfileUpdate";
 
 interface LocalAdminProps {
   onBack?: () => void;
@@ -40,9 +43,9 @@ type TabType =
   | "ratings"
   | "resolution"
   | "broadcast"
-  | "orders";
+  | "orders"
+  | "settings"; // 🚀 Tambah Tab Settings
 
-// 🚩 MENGGUNAKAN NAMED EXPORT AGAR SESUAI DENGAN IMPORT DI APPROUTES
 export const LocalAdminDashboard: React.FC<LocalAdminProps> = ({ onBack }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>("overview");
@@ -70,7 +73,17 @@ export const LocalAdminDashboard: React.FC<LocalAdminProps> = ({ onBack }) => {
     showToast,
   } = useLocalAdminDashboard();
 
+  // 🚀 LOGIK GERBANG OTOMATIS: Jika profil belum lengkap, paksa ke tab settings
+  useEffect(() => {
+    if (isLoaded && profile && !profile.is_profile_complete) {
+      setActiveTab("settings");
+    }
+  }, [isLoaded, profile]);
+
   if (isLoading) return <PageLoader bgClass="bg-white" />;
+
+  // Cek apakah Admin sedang dalam mode "Wajib Update"
+  const isUpdateRequired = profile && !profile.is_profile_complete;
 
   return (
     <div
@@ -83,7 +96,7 @@ export const LocalAdminDashboard: React.FC<LocalAdminProps> = ({ onBack }) => {
         <div className="fixed inset-0 z-[999] bg-red-600/10 animate-pulse pointer-events-none border-[12px] border-red-500/30"></div>
       )}
 
-      {/* SIDEBAR */}
+      {/* SIDEBAR - Kirim props isUpdateRequired untuk mengunci menu jika perlu */}
       <LocalSidebar
         marketName={myMarket?.name || "PASAR WILAYAH"}
         activeTab={activeTab}
@@ -92,6 +105,7 @@ export const LocalAdminDashboard: React.FC<LocalAdminProps> = ({ onBack }) => {
         pendingCouriers={myCouriers.filter((c: any) => !c.is_verified).length}
         pendingProducts={pendingProducts.length}
         onLogout={() => logout().then(() => navigate("/"))}
+        disabled={isUpdateRequired}
       />
 
       {/* MAIN CONTENT AREA */}
@@ -101,14 +115,30 @@ export const LocalAdminDashboard: React.FC<LocalAdminProps> = ({ onBack }) => {
           isMuted={isMuted}
           setIsMuted={setIsMuted}
           onRefresh={fetchData}
-          adminName={profile?.name}
+          adminName={profile?.full_name || profile?.name} // Gunakan full_name jika sudah diupdate
         />
 
         <main className="p-6 md:p-10 max-w-7xl w-full mx-auto pb-32">
+          {/* BANNER PERINGATAN JIKA DATA BELUM LENGKAP */}
+          {isUpdateRequired && (
+            <div className="bg-red-600 text-white p-4 rounded-xl mb-8 flex items-center justify-between shadow-xl animate-bounce">
+              <div className="flex items-center gap-3">
+                <ShieldAlert size={24} />
+                <div>
+                  <h3 className="text-sm font-black">AKSES TERBATAS!</h3>
+                  <p className="text-[10px] opacity-90">
+                    LENGKAPI DATA IDENTITAS & BANK ANDA UNTUK MENGAKTIFKAN FITUR
+                    ADMIN.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* HEADER PAGE */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 border-b-4 border-slate-900 pb-6">
             <div className="text-left">
-              {onBack && (
+              {onBack && !isUpdateRequired && (
                 <button
                   onClick={onBack}
                   className="mb-4 text-[10px] font-black text-slate-400 hover:text-[#008080] transition-colors flex items-center gap-1"
@@ -119,7 +149,9 @@ export const LocalAdminDashboard: React.FC<LocalAdminProps> = ({ onBack }) => {
               <h1 className="text-3xl md:text-4xl font-black leading-none mb-2 tracking-tighter">
                 {activeTab === "overview"
                   ? "DASHBOARD WILAYAH"
-                  : activeTab.replace("_", " ")}
+                  : activeTab === "settings"
+                    ? "PENGATURAN PROFIL"
+                    : activeTab.replace("_", " ")}
               </h1>
               <p className="text-[10px] font-black text-slate-400 tracking-[0.2em] flex items-center gap-2">
                 <MapPin size={12} className="text-[#008080]" /> PENGAWASAN AREA:{" "}
@@ -127,87 +159,41 @@ export const LocalAdminDashboard: React.FC<LocalAdminProps> = ({ onBack }) => {
               </p>
             </div>
 
-            {/* QUICK TAB NAVIGATOR */}
-            <div className="flex flex-wrap bg-white p-1 rounded-md border border-slate-200 shadow-sm">
-              <button
-                onClick={() => setActiveTab("overview")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all ${
-                  activeTab === "overview"
-                    ? "bg-slate-900 text-white shadow-lg"
-                    : "text-slate-400 hover:bg-slate-50"
-                }`}
-              >
-                <LayoutDashboard size={16} />
-                <span className="text-[10px] font-black uppercase">
-                  OVERVIEW
-                </span>
-              </button>
-
-              <div className="w-[1px] h-6 bg-slate-100 mx-1 self-center"></div>
-
-              <button
-                onClick={() => setActiveTab("products")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all group ${
-                  activeTab === "products"
-                    ? "bg-[#FF6600] text-white shadow-lg"
-                    : "text-[#FF6600] hover:bg-orange-50"
-                }`}
-              >
-                <ClipboardCheck size={16} />
-                <span className="text-[10px] font-black uppercase">PRODUK</span>
-                {pendingProducts.length > 0 && (
-                  <span
-                    className={`text-[9px] px-1.5 py-0.5 rounded-sm font-black ${
-                      activeTab === "products"
-                        ? "bg-white text-orange-600"
-                        : "bg-orange-600 text-white animate-pulse"
-                    }`}
-                  >
-                    {pendingProducts.length}
-                  </span>
-                )}
-              </button>
-
-              <div className="w-[1px] h-6 bg-slate-100 mx-1 self-center"></div>
-
-              <QuickActionBtn
-                active={activeTab === "orders"}
-                icon={<ShoppingBag size={16} />}
-                label="ORDERS"
-                onClick={() => setActiveTab("orders")}
-              />
-              <QuickActionBtn
-                active={activeTab === "radar"}
-                icon={<Radio size={16} />}
-                label="RADAR"
-                onClick={() => setActiveTab("radar")}
-              />
-              <QuickActionBtn
-                active={activeTab === "broadcast"}
-                icon={<Megaphone size={16} />}
-                label="SIARAN"
-                onClick={() => setActiveTab("broadcast")}
-              />
-              <QuickActionBtn
-                active={activeTab === "finance"}
-                icon={<BarChart3 size={16} />}
-                label="FINANCE"
-                onClick={() => setActiveTab("finance")}
-              />
-              <QuickActionBtn
-                active={activeTab === "resolution"}
-                icon={<AlertCircle size={16} />}
-                label="HELP"
-                onClick={() => setActiveTab("resolution")}
-                color="text-red-500 hover:bg-red-50"
-              />
-            </div>
+            {/* QUICK TAB NAVIGATOR (Disembunyikan jika wajib update) */}
+            {!isUpdateRequired && (
+              <div className="flex flex-wrap bg-white p-1 rounded-md border border-slate-200 shadow-sm">
+                <QuickActionBtn
+                  active={activeTab === "overview"}
+                  icon={<LayoutDashboard size={16} />}
+                  label="OVERVIEW"
+                  onClick={() => setActiveTab("overview")}
+                />
+                <QuickActionBtn
+                  active={activeTab === "settings"}
+                  icon={<UserCog size={16} />}
+                  label="PROFIL"
+                  onClick={() => setActiveTab("settings")}
+                />
+                <div className="w-[1px] h-6 bg-slate-100 mx-1 self-center"></div>
+                <QuickActionBtn
+                  active={activeTab === "orders"}
+                  icon={<ShoppingBag size={16} />}
+                  label="ORDERS"
+                  onClick={() => setActiveTab("orders")}
+                />
+              </div>
+            )}
           </div>
 
           {/* CONTENT ROUTING */}
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-            {activeTab === "products" ? (
-              <AdminProductVerification />
+            {activeTab === "settings" ? (
+              <AdminProfileUpdate /> // 🚀 TAMPILKAN FORM UPDATE PROFIL
+            ) : activeTab === "products" ? (
+              <AdminProductVerification
+                products={pendingProducts}
+                onAction={fetchData}
+              />
             ) : (
               <LocalAdminContent
                 activeTab={activeTab}
@@ -266,12 +252,11 @@ const QuickActionBtn = ({
   >
     {icon}
     <span
-      className={`text-[10px] font-black uppercase ${active ? "block" : "hidden md:group-hover:block"}`}
+      className={`text-[10px] font-black uppercase ${active ? "block" : "hidden md:block opacity-60"}`}
     >
       {label}
     </span>
   </button>
 );
 
-// 🚩 DITAMBAHKAN DEFAULT EXPORT SEBAGAI BACKUP
 export default LocalAdminDashboard;
