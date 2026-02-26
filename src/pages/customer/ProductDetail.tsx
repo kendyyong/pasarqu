@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -9,13 +9,11 @@ import {
   ChevronRight,
   Share2,
   Heart,
-  AlertOctagon,
-  MessageCircle,
   Scale,
   Truck,
-  ShieldCheck,
   PackageCheck,
   ShoppingCart,
+  Image as ImageIcon, // Fallback icon
 } from "lucide-react";
 
 // Contexts & Hooks
@@ -32,7 +30,6 @@ import {
 } from "../../utils/courierLogic";
 
 // Sub-Components
-import { ProductGallery } from "./components/ProductGallery";
 import { MerchantCard } from "./components/MerchantCard";
 import { ProductDescription } from "./components/ProductDescription";
 import { ProductActionBar } from "./components/ProductActionBar";
@@ -52,7 +49,6 @@ export const ProductDetail = () => {
   const [soldCount, setSoldCount] = useState(0);
   const [averageRating, setAverageRating] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
   const [chatLoading, setChatLoading] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState("Standar");
@@ -65,7 +61,10 @@ export const ProductDetail = () => {
   const [locationStatus, setLocationStatus] =
     useState<string>("Melacak lokasi...");
   const [isWishlisted, setIsWishlisted] = useState(false);
-  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
+
+  // 🚀 STATE UNTUK GALERI SWIPEABLE
+  const [activeImgIndex, setActiveImgIndex] = useState(0);
+  const galleryRef = useRef<HTMLDivElement>(null);
 
   const totalCartItems = cart.reduce(
     (sum: number, item: any) => sum + (item.quantity || 0),
@@ -184,7 +183,6 @@ export const ProductDetail = () => {
 
   const toggleWishlist = async () => {
     if (!user) return navigate("/login");
-    setIsWishlistLoading(true);
     try {
       if (isWishlisted) {
         await supabase
@@ -201,9 +199,7 @@ export const ProductDetail = () => {
         setIsWishlisted(true);
         showToast("Disimpan ke Favorit", "success");
       }
-    } finally {
-      setIsWishlistLoading(false);
-    }
+    } catch (err) {}
   };
 
   // --- LOGIKA: CHAT & SHARE ---
@@ -220,6 +216,7 @@ export const ProductDetail = () => {
           `and(participant_1_id.eq.${user.id},participant_2_id.eq.${cleanId}),and(participant_1_id.eq.${cleanId},participant_2_id.eq.${user.id})`,
         )
         .maybeSingle();
+
       if (existingRoom?.id) roomId = existingRoom.id;
       else {
         const { data: newRoom } = await supabase
@@ -235,6 +232,7 @@ export const ProductDetail = () => {
           .maybeSingle();
         roomId = newRoom?.id;
       }
+
       const miniProd = {
         id: product.id,
         name: product.name,
@@ -244,6 +242,7 @@ export const ProductDetail = () => {
         link: window.location.href,
       };
       const autoMsg = `Halo Kak, stok ready?`;
+
       if (window.innerWidth >= 1024) {
         setActiveRoomId(roomId);
         setChatInitialMsg(autoMsg);
@@ -273,6 +272,16 @@ export const ProductDetail = () => {
     } else {
       await navigator.clipboard.writeText(url);
       showToast("Link disalin!", "success");
+    }
+  };
+
+  // 🚀 LOGIKA: DETEKSI SCROLL GAMBAR UNTUK INDIKATOR TITIK
+  const handleScroll = () => {
+    if (galleryRef.current) {
+      const scrollPosition = galleryRef.current.scrollLeft;
+      const width = galleryRef.current.clientWidth;
+      const newIndex = Math.round(scrollPosition / width);
+      setActiveImgIndex(newIndex);
     }
   };
 
@@ -306,10 +315,14 @@ export const ProductDetail = () => {
       ? product.variants
       : product.variants.split(",")
     : ["Standar"];
+  const images =
+    Array.isArray(product.image_urls) && product.image_urls.length > 0
+      ? product.image_urls
+      : [product.image_url];
 
   return (
-    <div className="bg-[#F5F5F5] min-h-screen text-left pb-20 md:pb-12 font-sans relative text-slate-900">
-      {/* 🚀 HEADER (Ikon Besar & Logo) */}
+    <div className="bg-[#F5F5F5] min-h-screen text-left pb-20 md:pb-12 font-sans relative text-slate-900 overflow-x-hidden">
+      {/* 🚀 HEADER */}
       <ProductHeader
         totalCartItems={totalCartItems}
         onShare={handleShare}
@@ -327,118 +340,166 @@ export const ProductDetail = () => {
         {/* 🚀 KARTU PRODUK UTAMA */}
         <div className="bg-white md:rounded-xl shadow-sm overflow-hidden mb-1 md:mb-3">
           <div className="flex flex-col md:flex-row">
-            <div className="w-full md:w-[450px] shrink-0 relative">
-              <ProductGallery
-                images={
-                  Array.isArray(product.image_urls)
-                    ? product.image_urls
-                    : [product.image_url]
-                }
-                activeIndex={activeImg}
-                onIndexChange={setActiveImg}
-                isOutOfStock={isOutOfStock}
-                isPo={product.is_po}
-                poDays={product.po_days}
-                productName={product.name}
-              />
+            {/* 📸 BAGIAN GALERI GAMBAR (SWIPEABLE LEVEL DEWA) */}
+            <div className="w-full md:w-[450px] shrink-0 relative bg-slate-50 aspect-square overflow-hidden group">
+              {/* Container Scroll/Swipe */}
+              <div
+                ref={galleryRef}
+                onScroll={handleScroll}
+                className="flex w-full h-full overflow-x-auto snap-x snap-mandatory no-scrollbar scroll-smooth"
+              >
+                {images.map((img: string, idx: number) => (
+                  <div
+                    key={idx}
+                    className="w-full h-full flex-shrink-0 snap-center flex justify-center items-center relative"
+                  >
+                    {img ? (
+                      <img
+                        src={img}
+                        alt={`${product.name} - ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center text-slate-300">
+                        <ImageIcon size={64} />
+                        <p className="text-[10px] mt-2 font-black tracking-widest">
+                          NO IMAGE
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Badge Out of Stock */}
+                    {isOutOfStock && (
+                      <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] flex items-center justify-center">
+                        <span className="bg-slate-900 text-white px-6 py-2 rounded-xl text-lg font-black tracking-widest uppercase border-4 border-white shadow-2xl rotate-[-10deg]">
+                          STOK HABIS
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Indikator Titik (Dots) */}
+              {images.length > 1 && (
+                <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2 z-20">
+                  {images.map((_: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className={`h-2 rounded-full transition-all duration-300 ${activeImgIndex === idx ? "w-6 bg-[#008080]" : "w-2 bg-white/70 shadow-sm"}`}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Tombol Wishlist Melayang */}
               <button
                 onClick={toggleWishlist}
-                className="absolute top-2 right-2 z-30 md:hidden p-2 bg-white/90 rounded-full shadow-md active:scale-90"
+                className="absolute top-4 right-4 z-30 md:hidden p-2.5 bg-white/90 rounded-full shadow-lg active:scale-90 transition-transform"
               >
                 <Heart
-                  size={18}
+                  size={20}
                   fill={isWishlisted ? "#ef4444" : "none"}
                   className={isWishlisted ? "text-red-500" : "text-slate-400"}
                 />
               </button>
             </div>
 
-            <div className="flex-1 p-2.5 md:p-5 flex flex-col">
-              <h1 className="text-[16px] md:text-[24px] font-black text-slate-800 uppercase tracking-tight mb-1 leading-tight">
+            {/* INFO PRODUK & HARGA */}
+            <div className="flex-1 p-3.5 md:p-6 flex flex-col">
+              <h1 className="text-[18px] md:text-[24px] font-black text-slate-800 uppercase tracking-tight mb-2 leading-tight">
                 {product.name}
               </h1>
 
-              <div className="flex items-center gap-2 mb-2 md:mb-4 text-[11px] md:text-[13px] font-bold">
-                <div className="flex items-center gap-1 text-[#FF6600]">
+              <div className="flex items-center gap-3 mb-3 md:mb-4 text-[12px] font-bold">
+                <div className="flex items-center gap-1 text-[#FF6600] bg-orange-50 px-2 py-0.5 rounded-md">
                   <Star size={14} fill="currentColor" />{" "}
                   <span>{averageRating || "4.9"}</span>
                 </div>
                 <div className="text-slate-200">|</div>
                 <div className="text-slate-500 uppercase font-black tracking-tight">
-                  {soldCount * 2 + 5} Terjual
+                  {soldCount * 2 + 5} TERJUAL
                 </div>
               </div>
 
               {/* HARGA & DISKON */}
-              <div className="bg-slate-50 border border-slate-100 p-2.5 md:p-4 rounded-lg mb-2 shadow-inner">
+              <div className="bg-slate-50 border-2 border-slate-100 p-4 md:p-5 rounded-xl mb-4 shadow-sm relative overflow-hidden">
                 {hasPromo && (
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="bg-red-500 text-white text-[9px] md:text-[11px] font-black px-1.5 py-0.5 rounded italic">
-                      -{discountPercent}%
+                  <div className="flex items-center gap-2 mb-1 relative z-10">
+                    <span className="bg-red-500 text-white text-[10px] md:text-[11px] font-black px-2 py-0.5 rounded-md">
+                      DISKON {discountPercent}%
                     </span>
-                    <span className="text-slate-400 line-through text-[10px] md:text-[14px] font-bold tracking-tighter">
+                    <span className="text-slate-400 line-through text-[12px] md:text-[14px] font-bold tracking-tighter">
                       Rp {product.price.toLocaleString()}
                     </span>
                   </div>
                 )}
-                <div className="flex items-end gap-1 leading-none">
-                  <span className="text-2xl md:text-4xl font-black text-[#FF6600] tracking-tighter">
+                <div className="flex items-end gap-1.5 leading-none relative z-10">
+                  <span className="text-3xl md:text-4xl font-black text-[#FF6600] tracking-tighter">
                     Rp {displayPrice.toLocaleString()}
                   </span>
-                  <span className="text-[10px] md:text-sm font-bold text-slate-400 mb-0.5 uppercase tracking-widest">
+                  <span className="text-[12px] md:text-sm font-black text-slate-400 mb-0.5 uppercase tracking-widest">
                     / {product.unit}
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 mt-2 text-[#008080] font-black text-[9px] md:text-[11px] uppercase tracking-wider">
+                <div className="flex items-center gap-1.5 mt-3 text-[#008080] font-black text-[10px] md:text-[11px] uppercase tracking-widest bg-teal-50/50 inline-flex px-2 py-1 rounded-md border border-teal-100 relative z-10">
                   <Scale size={14} /> BERAT: {product.weight}{" "}
                   {product.unit === "Kg" ? "Kg" : "Gram"}
                 </div>
+
+                {/* Dekorasi Airmark */}
+                <PackageCheck
+                  size={100}
+                  className="absolute -right-4 -bottom-4 text-slate-200 opacity-30 pointer-events-none"
+                />
               </div>
 
               {/* LOGISTIK KOMPAK */}
-              <div className="space-y-1.5 mb-4">
-                <div className="flex items-start gap-2">
-                  <Truck className="text-slate-400 mt-0.5" size={16} />
-                  <div className="flex flex-col">
-                    <p className="text-[12px] md:text-[14px] text-slate-700 font-bold leading-tight">
-                      Ongkir:{" "}
-                      <span className="text-[#008080]">
-                        Rp {shippingCost?.toLocaleString() || "---"}
-                      </span>
-                    </p>
-                    <span className="text-[9px] md:text-[11px] text-slate-400 italic mt-0.5">
-                      {locationStatus} ({distanceKm?.toFixed(1)} Km)
+              <div className="flex items-start gap-3 mb-6 p-3 bg-white border border-slate-200 rounded-xl">
+                <div className="w-8 h-8 rounded-lg bg-teal-50 text-[#008080] flex items-center justify-center shrink-0">
+                  <Truck size={18} />
+                </div>
+                <div className="flex flex-col">
+                  <p className="text-[13px] md:text-[14px] text-slate-800 font-black leading-tight uppercase">
+                    ESTIMASI ONGKIR:{" "}
+                    <span className="text-[#FF6600]">
+                      Rp {shippingCost?.toLocaleString() || "---"}
                     </span>
-                  </div>
+                  </p>
+                  <span className="text-[10px] md:text-[11px] text-slate-400 font-bold mt-0.5 uppercase tracking-widest">
+                    {locationStatus} ({distanceKm?.toFixed(1)} Km)
+                  </span>
                 </div>
               </div>
 
-              {/* 🚀 TOMBOL BELANJA DESKTOP (Sangat Jelas) */}
-              <div className="hidden md:flex flex-col gap-4 mt-auto border-t border-slate-50 pt-4">
-                <div className="flex items-center gap-4">
-                  <span className="text-[11px] font-black text-slate-400 uppercase w-20 shrink-0">
-                    Varian
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {productVariants.map((v: string) => (
-                      <button
-                        key={v}
-                        onClick={() => setSelectedVariant(v)}
-                        className={`px-4 py-1.5 text-[11px] font-black uppercase rounded-md border-2 transition-all ${selectedVariant === v ? "border-[#008080] text-[#008080] bg-teal-50" : "border-slate-100 text-slate-500 bg-white"}`}
-                      >
-                        {v}
-                      </button>
-                    ))}
-                  </div>
+              {/* 🚀 VARIAN (Jika ada) */}
+              <div className="mb-4">
+                <span className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                  PILIH VARIAN
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {productVariants.map((v: string) => (
+                    <button
+                      key={v}
+                      onClick={() => setSelectedVariant(v)}
+                      className={`px-4 py-2 text-[11px] font-black uppercase rounded-lg border-2 transition-all shadow-sm ${selectedVariant === v ? "border-[#008080] text-[#008080] bg-teal-50" : "border-slate-200 text-slate-500 bg-white hover:border-[#008080]"}`}
+                    >
+                      {v}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex items-center gap-4 mb-4">
-                  <span className="text-[11px] font-black text-slate-400 uppercase w-20 shrink-0">
-                    Jumlah
+              </div>
+
+              {/* 🚀 TOMBOL BELANJA DESKTOP (Sembunyi di Mobile) */}
+              <div className="hidden md:flex flex-col gap-4 mt-auto border-t-2 border-slate-100 pt-4">
+                <div className="flex items-center gap-4 mb-2">
+                  <span className="text-[11px] font-black text-slate-400 uppercase w-20 shrink-0 tracking-widest">
+                    JUMLAH
                   </span>
-                  <div className="flex items-center border-2 border-slate-200 rounded-lg overflow-hidden w-32 h-10 shadow-sm bg-white">
+                  <div className="flex items-center border-2 border-slate-200 rounded-xl overflow-hidden w-32 h-12 shadow-sm bg-white">
                     <button
                       onClick={() => setQty(Math.max(1, qty - 1))}
-                      className="flex-1 font-black text-xl hover:bg-slate-50"
+                      className="flex-1 font-black text-xl hover:bg-slate-100 transition-colors"
                     >
                       -
                     </button>
@@ -446,26 +507,27 @@ export const ProductDetail = () => {
                       type="number"
                       value={qty}
                       readOnly
-                      className="w-10 text-center font-black text-teal-600 bg-transparent"
+                      className="w-12 text-center font-black text-xl text-[#008080] bg-transparent outline-none"
                     />
                     <button
                       onClick={() => setQty(Math.min(product.stock, qty + 1))}
-                      className="flex-1 font-black text-xl hover:bg-slate-50"
+                      className="flex-1 font-black text-xl hover:bg-slate-100 transition-colors"
                     >
                       +
                     </button>
                   </div>
-                  <p className="text-[11px] font-bold text-slate-400 italic">
-                    Sisa: {product.stock}
+                  <p className="text-[11px] font-black text-slate-400 tracking-widest">
+                    SISA:{" "}
+                    <span className="text-slate-800">{product.stock}</span>
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => {
                       addToCart(productWithVariant, qty);
-                      showToast("Berhasil ditambah", "success");
+                      showToast("Masuk Keranjang", "success");
                     }}
-                    className="flex-1 h-12 border-2 border-[#008080] text-[#008080] font-black rounded-xl hover:bg-teal-50 transition-all flex items-center justify-center gap-2 active:scale-95"
+                    className="flex-1 h-14 border-2 border-[#008080] text-[#008080] font-black tracking-widest rounded-xl hover:bg-teal-50 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-sm"
                   >
                     <ShoppingCart size={20} /> KERANJANG
                   </button>
@@ -474,7 +536,7 @@ export const ProductDetail = () => {
                       addToCart(productWithVariant, qty);
                       navigate("/checkout");
                     }}
-                    className="flex-[1.5] h-12 bg-[#FF6600] text-white font-black rounded-xl hover:bg-orange-600 transition-all active:scale-95 text-center"
+                    className="flex-[1.5] h-14 bg-[#FF6600] text-white font-black tracking-widest rounded-xl hover:bg-orange-600 transition-all active:scale-95 text-center shadow-lg shadow-orange-900/10"
                   >
                     BELI SEKARANG
                   </button>
@@ -484,23 +546,22 @@ export const ProductDetail = () => {
           </div>
         </div>
 
-        {/* 🚀 SPESIFIKASI (FIXED: Teks Tidak Menempel) */}
-        <div className="bg-white md:rounded-xl shadow-sm mb-1 md:mb-3 overflow-hidden">
-          <div className="px-3.5 py-2.5 border-b border-slate-50 flex items-center gap-2">
+        {/* 🚀 SPESIFIKASI */}
+        <div className="bg-white md:rounded-xl shadow-sm mb-1 md:mb-3 overflow-hidden border-2 border-slate-50">
+          <div className="px-4 py-3 border-b-2 border-slate-100 flex items-center gap-2 bg-slate-50">
             <PackageCheck size={18} className="text-[#008080]" />
             <h3 className="text-[12px] md:text-[14px] font-black text-slate-800 uppercase tracking-widest">
               Spesifikasi Produk
             </h3>
           </div>
-          {/* Menggunakan grid layout yang aman agar label dan nilai tidak menempel */}
-          <div className="p-3.5 space-y-2.5">
+          <div className="p-4 space-y-3">
             <SpecRow label="Kategori" value={product.categories?.name} isLink />
             <SpecRow
-              label="Berat Bersih"
+              label="Berat"
               value={`${product.weight} ${product.unit === "Kg" ? "Kg" : "Gram"}`}
             />
-            <SpecRow label="Satuan Jual" value={`Per ${product.unit}`} />
-            <SpecRow label="Stok Tersedia" value={product.stock} />
+            <SpecRow label="Satuan" value={`Per ${product.unit}`} />
+            <SpecRow label="Stok" value={product.stock} />
             <SpecRow
               label="Dikirim Dari"
               value={product.merchants?.city || "Pasar Lokal"}
@@ -508,23 +569,17 @@ export const ProductDetail = () => {
           </div>
         </div>
 
-        {/* 🚀 MERCHANT SECTION (Ramping & Teks 12px Mobile) */}
-        <div className="bg-white md:rounded-xl shadow-sm mb-1 p-3 merchant-wrapper">
+        {/* 🚀 MERCHANT SECTION */}
+        <div className="bg-white md:rounded-xl shadow-sm mb-1 p-3">
           <MerchantCard
             merchant={product.merchants}
             onGoToShop={() => navigate(`/shop/${product.merchant_id}`)}
             onContactSeller={handleContactSeller}
             chatLoading={chatLoading}
           />
-          <style>{`
-              @media (max-width: 767px) {
-                .merchant-wrapper button, .merchant-wrapper a { font-size: 11px !important; padding: 4px 8px !important; height: 32px !important; }
-                .merchant-wrapper .flex { gap: 6px !important; }
-              }
-           `}</style>
         </div>
 
-        <div className="bg-white md:rounded-xl shadow-sm mb-1 p-3.5">
+        <div className="bg-white md:rounded-xl shadow-sm mb-1 p-4">
           <ProductDescription
             category={product.categories?.name}
             city={product.merchants?.city}
@@ -533,9 +588,9 @@ export const ProductDetail = () => {
           />
         </div>
 
-        <div className="bg-white md:rounded-xl shadow-sm mb-1 p-3.5">
-          <h3 className="text-[12px] md:text-[14px] font-black text-slate-800 uppercase tracking-widest mb-3 flex items-center gap-2">
-            <Star className="text-yellow-400" fill="currentColor" size={16} />{" "}
+        <div className="bg-white md:rounded-xl shadow-sm mb-1 p-4">
+          <h3 className="text-[12px] md:text-[14px] font-black text-slate-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <Star className="text-yellow-400" fill="currentColor" size={18} />{" "}
             Penilaian Produk
           </h3>
           <StoreReviews merchantId={product.merchant_id} />
@@ -549,23 +604,25 @@ export const ProductDetail = () => {
         </div>
       </main>
 
-      {/* 🚀 ACTION BAR (Mobile Floating) */}
-      <ProductActionBar
-        isOutOfStock={isOutOfStock}
-        qty={qty}
-        stock={product.stock}
-        onQtyChange={setQty}
-        onAddToCart={() => {
-          addToCart(productWithVariant, qty);
-          showToast("Berhasil ditambah", "success");
-        }}
-        onContactSeller={handleContactSeller}
-        chatLoading={chatLoading}
-        onBuyNow={() => {
-          addToCart(productWithVariant, qty);
-          navigate("/checkout");
-        }}
-      />
+      {/* 🚀 ACTION BAR (Mobile Floating di Bawah) */}
+      <div className="md:hidden">
+        <ProductActionBar
+          isOutOfStock={isOutOfStock}
+          qty={qty}
+          stock={product.stock}
+          onQtyChange={setQty}
+          onAddToCart={() => {
+            addToCart(productWithVariant, qty);
+            showToast("Berhasil ditambah", "success");
+          }}
+          onContactSeller={handleContactSeller}
+          chatLoading={chatLoading}
+          onBuyNow={() => {
+            addToCart(productWithVariant, qty);
+            navigate("/checkout");
+          }}
+        />
+      </div>
 
       {/* CHAT MODAL DESKTOP */}
       {isDesktopChatOpen && activeRoomId && (
@@ -584,12 +641,17 @@ export const ProductDetail = () => {
           </div>
         </div>
       )}
+
+      {/* 🚀 CSS MAGIC UNTUK MENGHILANGKAN SCROLLBAR TAPI BISA DI-SWIPE */}
+      <style>{`
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
     </div>
   );
 };
 
 // --- SUB-COMPONENTS ---
-
 const ProductHeader = ({ totalCartItems, onShare, onBack }: any) => (
   <header className="fixed top-0 left-0 right-0 z-[100] bg-[#008080] h-[55px] md:h-[65px] flex items-center shadow-md">
     <div className="w-full max-w-[1200px] mx-auto flex items-center justify-between px-3 md:px-4">
@@ -611,19 +673,17 @@ const ProductHeader = ({ totalCartItems, onShare, onBack }: any) => (
         />
       </div>
       <div className="flex items-center gap-1 md:gap-3">
-        {/* SHARE ICON DIPERBESAR (size 26) */}
         <button
           onClick={onShare}
           className="p-2 text-white active:bg-white/10 rounded-full transition-all"
         >
           <Share2 size={26} strokeWidth={2} />
         </button>
-        {/* CART ICON DIPERBESAR (size 26) */}
         <div
           className="relative p-2 text-white cursor-pointer active:bg-white/10 rounded-full"
           onClick={() => (window.location.href = "/cart")}
         >
-          <ShoppingBag size={26} strokeWidth={2} />
+          <ShoppingCart size={26} strokeWidth={2.5} />
           {totalCartItems > 0 && (
             <div className="absolute top-1 right-1 bg-[#FF6600] text-[10px] font-black w-4.5 h-4.5 flex items-center justify-center rounded-full border-2 border-[#008080] shadow-sm">
               {totalCartItems}
@@ -636,12 +696,12 @@ const ProductHeader = ({ totalCartItems, onShare, onBack }: any) => (
 );
 
 const SpecRow = ({ label, value, isLink }: any) => (
-  <div className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0 min-h-[36px] gap-6">
-    <span className="text-[11px] md:text-[13px] text-slate-400 font-bold uppercase tracking-wider shrink-0">
+  <div className="flex items-center justify-between py-2 border-b-2 border-slate-50 last:border-0 min-h-[40px] gap-6">
+    <span className="text-[11px] md:text-[12px] text-slate-400 font-black uppercase tracking-widest shrink-0">
       {label}
     </span>
     <span
-      className={`text-[11px] md:text-[13px] font-black uppercase text-right leading-tight flex-1 ${isLink ? "text-[#008080] cursor-pointer hover:underline" : "text-slate-800"}`}
+      className={`text-[12px] md:text-[13px] font-black uppercase text-right leading-tight flex-1 ${isLink ? "text-[#008080] cursor-pointer hover:underline" : "text-slate-800"}`}
     >
       {value}
     </span>
