@@ -96,7 +96,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return !!data.session;
   };
 
-  // ✅ FULL LOGOUT SCRIPT
+  // 🚀 FULL LOGOUT SCRIPT DENGAN SAPU BERSIH GHOST CART
   const logout = async () => {
     try {
       const currentMarketId = profile?.managed_market_id || profile?.market_id;
@@ -107,6 +107,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       await supabase.auth.signOut();
 
+      // 🧹 SAPU BERSIH MEMORI LOKAL TERKAIT AKUN
+      localStorage.removeItem("pasarqu_cart");
+      localStorage.removeItem("pasarqu_cart_owner");
+
+      // (Opsional: Jika bos punya localstorage lain yang mau dihapus saat logout, tambahkan disini)
+
       setSession(null);
       setUser(null);
       setProfile(null);
@@ -114,6 +120,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       window.location.href = "/";
     } catch (error) {
       console.error("Error saat logout:", error);
+      // Tetap paksa sapu bersih meskipun error koneksi
+      localStorage.removeItem("pasarqu_cart");
+      localStorage.removeItem("pasarqu_cart_owner");
       window.location.href = "/";
     }
   };
