@@ -13,7 +13,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-// 🚀 FUNGSI KOMPRESI OTOMATIS
+// 🚀 FUNGSI KOMPRESI & AUTO-CROP KOTAK (1:1) OTOMATIS
 const compressImage = (file: File): Promise<File> => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -23,25 +23,44 @@ const compressImage = (file: File): Promise<File> => {
       img.src = event.target?.result as string;
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        const MAX_WIDTH = 800;
-        const MAX_HEIGHT = 800;
-        let width = img.width;
-        let height = img.height;
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
+        // Target ukuran persegi
+        const TARGET_SIZE = 800;
+
+        // Ukuran asli gambar
+        const originalWidth = img.width;
+        const originalHeight = img.height;
+
+        // Menentukan area mana yang akan dipotong (ambil tengahnya)
+        let sourceX = 0;
+        let sourceY = 0;
+        let sourceSize = Math.min(originalWidth, originalHeight);
+
+        if (originalWidth > originalHeight) {
+          // Gambar landscape (lebar) -> potong kiri kanan
+          sourceX = (originalWidth - originalHeight) / 2;
+        } else if (originalHeight > originalWidth) {
+          // Gambar portrait (tinggi) -> potong atas bawah
+          sourceY = (originalHeight - originalWidth) / 2;
         }
-        canvas.width = width;
-        canvas.height = height;
+
+        // Set canvas ke ukuran kotak (800x800)
+        canvas.width = TARGET_SIZE;
+        canvas.height = TARGET_SIZE;
+
         const ctx = canvas.getContext("2d");
-        ctx?.drawImage(img, 0, 0, width, height);
+        // Gambar ke canvas dengan mode crop (sourceX, sourceY, dst)
+        ctx?.drawImage(
+          img,
+          sourceX,
+          sourceY,
+          sourceSize,
+          sourceSize, // Area yang diambil dari gambar asli
+          0,
+          0,
+          TARGET_SIZE,
+          TARGET_SIZE, // Area tujuan di canvas
+        );
+
         canvas.toBlob(
           (blob) => {
             if (blob) {
@@ -54,7 +73,7 @@ const compressImage = (file: File): Promise<File> => {
             }
           },
           "image/jpeg",
-          0.8,
+          0.8, // Kualitas kompresi 80% (Bagus & Ringan)
         );
       };
     };
@@ -230,6 +249,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({
 
       let finalUrls = [...existingImages];
       for (const file of imageFiles) {
+        // 🚀 FOTO AKAN DENGAN OTOMATIS TERPOTONG (SQUARE) SAAT DISINI
         const compressed = await compressImage(file);
         const fileName = `${merchantData.id || "admin"}-${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
         const { error: upErr } = await supabase.storage
@@ -272,7 +292,6 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       if (isEditMode) {
         const { error: updateErr } = await supabase
           .from("products")
-          // 🚀 UBAH KE FALSE SAAT UPDATE AGAR DIREVIEW ULANG ADMIN
           .update({ ...productData, is_verified: false })
           .eq("id", initialData.id);
         if (updateErr) throw new Error(`DATABASE ERROR: ${updateErr.message}`);
