@@ -160,10 +160,10 @@ export const MerchantDashboard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* TOMBOL BELANJA (MODE PEMBELI) */}
+            {/* 🚀 TOMBOL BELANJA: SEKARANG LANGSUNG KE BERANDA (/) */}
             <button
               onClick={() => {
-                window.location.href = "/customer-dashboard";
+                navigate("/");
               }}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] md:text-[11px] uppercase tracking-tighter transition-all active:scale-90 border shadow-md bg-[#FF6600] text-white border-orange-400"
             >
@@ -203,7 +203,7 @@ export const MerchantDashboard: React.FC = () => {
           className={`flex-1 overflow-y-auto no-scrollbar pb-24 md:pb-10 transition-colors duration-300 ${isDarkMode ? "bg-slate-950" : "bg-slate-50/50"} p-4 md:p-8`}
         >
           <div className="w-full max-w-[1400px] mx-auto relative text-left">
-            {/* 🚀 1. TAB OVERVIEW (SUDAH TERSAMBUNG KABEL) */}
+            {/* 🚀 1. TAB OVERVIEW */}
             <div
               className={
                 activeTab === "overview"

@@ -1,11 +1,14 @@
 import React from "react";
-import { Star, Settings, Wallet } from "lucide-react";
+import { Star, Settings, Wallet, Home } from "lucide-react"; // 🚀 Import ikon Home
+import { useNavigate } from "react-router-dom"; // 🚀 Import Navigasi
 
 interface CustomerHeaderProps {
   profile: any;
 }
 
 export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ profile }) => {
+  const navigate = useNavigate(); // 🚀 Inisialisasi hook navigasi
+
   return (
     <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 md:p-10 rounded-b-[2.5rem] md:rounded-b-[4rem] text-white relative overflow-hidden">
       {/* Profil Section */}
@@ -28,9 +31,23 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ profile }) => {
             </div>
           </div>
         </div>
-        <button className="p-3 bg-white/10 rounded-full hover:bg-white/20 transition-all">
-          <Settings size={20} />
-        </button>
+
+        {/* 🚀 TOMBOL AKSI KANAN ATAS (HOME & SETTINGS) */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/")}
+            className="p-3 bg-[#FF6600] text-white rounded-full hover:bg-orange-600 transition-all shadow-lg border border-orange-400"
+            title="Kembali ke Beranda Belanja"
+          >
+            <Home size={20} strokeWidth={2.5} />
+          </button>
+          <button
+            className="p-3 bg-white/10 rounded-full hover:bg-white/20 transition-all border border-white/10"
+            title="Pengaturan Akun"
+          >
+            <Settings size={20} strokeWidth={2.5} />
+          </button>
+        </div>
       </div>
 
       {/* Saldo Section */}
@@ -46,7 +63,7 @@ export const CustomerHeader: React.FC<CustomerHeaderProps> = ({ profile }) => {
             <h3 className="text-2xl font-black tracking-tighter">Rp450.000</h3>
           </div>
         </div>
-        <button className="text-[10px] font-black bg-white text-slate-900 px-4 py-2 rounded-xl uppercase tracking-widest hover:bg-teal-400 transition-all">
+        <button className="text-[10px] font-black bg-white text-slate-900 px-4 py-2 rounded-xl uppercase tracking-widest hover:bg-teal-400 transition-all shadow-sm">
           Top Up
         </button>
       </div>
