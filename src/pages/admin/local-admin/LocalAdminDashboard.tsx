@@ -148,7 +148,7 @@ export const LocalAdminDashboard: React.FC<LocalAdminProps> = ({ onBack }) => {
               )}
               <h1 className="text-3xl md:text-4xl font-black leading-none mb-2 tracking-tighter">
                 {activeTab === "overview"
-                  ? "DASHBOARD WILAYAH"
+                  ? "DASHBOARD SUPER GILA"
                   : activeTab === "settings"
                     ? "PENGATURAN PROFIL"
                     : activeTab.replace("_", " ")}

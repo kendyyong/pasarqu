@@ -13,12 +13,9 @@ import {
   Lock,
   User,
   ChevronLeft,
-  Map as MapIcon,
   Camera,
   CreditCard,
   UploadCloud,
-  ShieldCheck,
-  Clock,
   Wallet,
   CheckCircle,
 } from "lucide-react";
@@ -52,14 +49,10 @@ export const CourierPromoPage: React.FC = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
 
-  const savedMarketName =
-    localStorage.getItem("selected_market_name") ||
-    localStorage.getItem("market_name") ||
-    "";
+  // Menyimpan Market ID secara rahasia di background
   const savedMarketId = localStorage.getItem("selected_market_id") || "";
 
-  const [detectedMarketName, setDetectedMarketName] =
-    useState<string>(savedMarketName);
+  // Kordinat Default (Akan ditimpa GPS)
   const [coords, setCoords] = useState<{ lat: number; lng: number }>({
     lat: -0.5021,
     lng: 117.1536,
@@ -85,39 +78,50 @@ export const CourierPromoPage: React.FC = () => {
     selfie: null,
   });
 
-  // 🚀 FIX: Logika Sinkronisasi Pasar Anti-Error 400
-  useEffect(() => {
-    const syncMarketDetails = async () => {
-      if (savedMarketId && savedMarketId.length === 36) {
-        try {
-          const { data, error } = await supabase
-            .from("markets")
-            .select("name, latitude, longitude")
-            .eq("id", savedMarketId)
-            .maybeSingle();
-
-          if (data && !error) {
-            setDetectedMarketName(data.name);
-            setCoords({
-              lat: Number(data.latitude) || -0.5021,
-              lng: Number(data.longitude) || 117.1536,
-            });
-          }
-        } catch (err) {
-          console.warn("Sinkronisasi pasar dilewati.");
-        }
+  // 🚀 FUNGSI REVERSE GEOCODING (Mengubah Titik Kordinat jadi Teks Alamat)
+  const fetchAddressFromCoords = async (lat: number, lng: number) => {
+    try {
+      const res = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}&language=id`,
+      );
+      const data = await res.json();
+      if (data.status === "OK" && data.results.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          address: data.results[0].formatted_address,
+        }));
       }
-    };
-    syncMarketDetails();
-  }, [savedMarketId]);
+    } catch (err) {
+      console.error("Gagal mendapatkan alamat otomatis:", err);
+    }
+  };
 
-  // 🌍 GOOGLE GEOCODING SEARCH
+  // 🚀 AUTO-DETECT LOKASI GPS SAAT HALAMAN DIBUKA
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setCoords({ lat: latitude, lng: longitude });
+          fetchAddressFromCoords(latitude, longitude); // Auto-isi form alamat
+        },
+        (error) => {
+          console.warn("Akses GPS ditolak atau gagal:", error.message);
+        },
+        { enableHighAccuracy: true },
+      );
+    }
+  }, []);
+
+  // 🌍 GOOGLE GEOCODING SEARCH (Ketik Alamat)
   const handleAddressSearch = async (query: string) => {
     setFormData({ ...formData, address: query });
     if (query.length > 3) {
       try {
         const res = await fetch(
-          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${GOOGLE_MAPS_API_KEY}&region=id`,
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+            query,
+          )}&key=${GOOGLE_MAPS_API_KEY}&region=id`,
         );
         const data = await res.json();
         if (data.status === "OK") {
@@ -135,7 +139,7 @@ export const CourierPromoPage: React.FC = () => {
   const selectLocation = (result: any) => {
     const { lat, lng } = result.geometry.location;
     setCoords({ lat, lng });
-    setFormData({ ...formData, address: result.formatted_address });
+    setFormData({ ...formData, address: result.formatted_address }); // Teks normal
     setShowSuggestions(false);
   };
 
@@ -144,6 +148,7 @@ export const CourierPromoPage: React.FC = () => {
     useMapEvents({
       click(e) {
         setCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
+        fetchAddressFromCoords(e.latlng.lat, e.latlng.lng); // Auto-isi saat map di-klik
       },
     });
     return null;
@@ -223,7 +228,6 @@ export const CourierPromoPage: React.FC = () => {
   };
 
   return (
-    // 🚀 FIX: Background Oranye Elegan (Deep Orange to Dark Orange)
     <div className="min-h-screen bg-gradient-to-br from-[#8A3800] via-[#CC5200] to-[#4D1F00] flex flex-col font-sans text-left relative overflow-x-hidden">
       {/* DEKORASI LATAR BELAKANG */}
       <div
@@ -236,7 +240,7 @@ export const CourierPromoPage: React.FC = () => {
       <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-[#FF6600]/20 rounded-full blur-[120px] pointer-events-none mix-blend-screen"></div>
       <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-yellow-500/10 rounded-full blur-[120px] pointer-events-none mix-blend-screen"></div>
 
-      {/* 🚀 FIX: TOP BAR LOGO IMAGE */}
+      {/* TOP BAR LOGO IMAGE */}
       <nav className="border-b border-white/10 sticky top-0 bg-[#4D1F00]/80 backdrop-blur-lg z-[1001] shadow-sm">
         <div className="max-w-[1200px] mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <div
@@ -264,7 +268,6 @@ export const CourierPromoPage: React.FC = () => {
         </div>
       </nav>
 
-      {/* 🚀 FIX: TAMPILAN LEBAR & LUAS PADA MOBILE (Padding 0 di HP) */}
       <main className="flex-1 flex flex-col lg:flex-row max-w-[1200px] mx-auto w-full p-0 md:p-12 gap-6 lg:gap-20 justify-center relative z-10 mt-6 md:mt-0">
         {/* INFO KIRI (Desktop & Tablet Saja) */}
         <div className="hidden lg:block flex-1 space-y-10 text-left pt-4">
@@ -323,22 +326,6 @@ export const CourierPromoPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleRegister} className="space-y-4">
-              {/* AREA TERKUNCI (Sinkron dengan Pasar Pilihan) */}
-              <div className="space-y-1 text-left">
-                <label className="text-[10px] font-black text-slate-500 uppercase ml-1 tracking-widest">
-                  Area Penugasan
-                </label>
-                <div className="w-full px-4 py-3 bg-orange-50 border border-orange-200 rounded-xl text-sm font-black text-[#FF6600] flex justify-between items-center shadow-inner">
-                  <span className="flex items-center gap-2 uppercase">
-                    <MapIcon size={16} className="text-[#FF6600]" />
-                    {detectedMarketName || "LOKASI PASAR"}
-                  </span>
-                  <div className="flex items-center gap-1 bg-orange-200/50 text-[#FF6600] px-2 py-1 rounded text-[9px] font-black tracking-widest uppercase border border-orange-300">
-                    <Lock size={10} /> TERKUNCI
-                  </div>
-                </div>
-              </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <InputGroup
                   placeholder="Nama (Sesuai KTP)"
@@ -350,6 +337,7 @@ export const CourierPromoPage: React.FC = () => {
                 />
                 <InputGroup
                   placeholder="WhatsApp Aktif"
+                  type="number"
                   icon={<Smartphone size={18} />}
                   value={formData.phone}
                   onChange={(v: string) =>
@@ -358,10 +346,10 @@ export const CourierPromoPage: React.FC = () => {
                 />
               </div>
 
-              {/* AREA GOOGLE MAPS */}
+              {/* AREA GOOGLE MAPS DENGAN AUTO DETEKSI */}
               <div className="space-y-2 relative pt-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase ml-1 tracking-widest">
-                  Alamat Domisili (Pencarian Peta)
+                  Alamat Domisili (Geser Pin Peta)
                 </label>
                 <div className="relative">
                   <MapPin
@@ -370,8 +358,8 @@ export const CourierPromoPage: React.FC = () => {
                   />
                   <input
                     type="text"
-                    placeholder="Ketik nama jalan atau daerah..."
-                    className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-[12px] font-bold focus:border-[#FF6600] focus:ring-2 focus:ring-[#FF6600]/20 focus:bg-white outline-none transition-all shadow-inner text-slate-800"
+                    placeholder="Ketik alamat domisili..."
+                    className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-medium focus:border-[#FF6600] focus:ring-2 focus:ring-[#FF6600]/20 focus:bg-white outline-none transition-all shadow-inner text-slate-800 placeholder:text-slate-400"
                     value={formData.address}
                     onChange={(e) => handleAddressSearch(e.target.value)}
                   />
@@ -381,9 +369,9 @@ export const CourierPromoPage: React.FC = () => {
                         <div
                           key={idx}
                           onClick={() => selectLocation(item)}
-                          className="p-3 hover:bg-orange-50 cursor-pointer text-[10px] md:text-[11px] border-b border-slate-50 font-black text-slate-700"
+                          className="p-3 hover:bg-orange-50 cursor-pointer text-[12px] border-b border-slate-50 font-medium text-slate-700"
                         >
-                          {item.formatted_address.toUpperCase()}
+                          {item.formatted_address}
                         </div>
                       ))}
                     </div>
@@ -391,8 +379,12 @@ export const CourierPromoPage: React.FC = () => {
                 </div>
 
                 <div className="h-48 md:h-60 w-full rounded-2xl border-2 border-slate-200 overflow-hidden z-0 shadow-inner relative bg-slate-100">
-                  <div className="absolute top-2 right-2 z-[1000] bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-700 border shadow-sm pointer-events-none uppercase tracking-widest">
-                    Geser Pin ke Rumah Anda
+                  <div className="absolute top-2 right-2 z-[1000] bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-700 border shadow-sm pointer-events-none uppercase tracking-widest flex items-center gap-1">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                    </span>
+                    GPS Aktif
                   </div>
                   <MapContainer
                     center={[coords.lat, coords.lng]}
@@ -414,6 +406,7 @@ export const CourierPromoPage: React.FC = () => {
                         dragend: (e) => {
                           const position = e.target.getLatLng();
                           setCoords({ lat: position.lat, lng: position.lng });
+                          fetchAddressFromCoords(position.lat, position.lng); // Auto-isi saat pin digeser
                         },
                       }}
                     />
@@ -421,7 +414,7 @@ export const CourierPromoPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* 🚀 FIX: DOKUMEN UPLOAD - Diperjelas dan Dibuat Berbaris Kebawah (List) */}
+              {/* DOKUMEN UPLOAD */}
               <div className="space-y-2 pt-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase ml-1 tracking-widest">
                   Dokumen Pendukung
@@ -440,7 +433,7 @@ export const CourierPromoPage: React.FC = () => {
                     onSelect={(f: File) => setFiles({ ...files, sim: f })}
                   />
                   <FileBoxRow
-                    label="Upload Foto Selfi Sambil Memegang KTP"
+                    label="Upload Foto Selfie KTP"
                     icon={<Camera size={20} />}
                     file={files.selfie}
                     onSelect={(f: File) => setFiles({ ...files, selfie: f })}
@@ -517,13 +510,12 @@ const InputGroup = ({
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#FF6600] focus:ring-2 focus:ring-[#FF6600]/20 focus:bg-white outline-none text-[12px] font-bold uppercase tracking-widest transition-all placeholder:text-slate-400 placeholder:tracking-widest shadow-inner text-slate-800"
+      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-[#FF6600] focus:ring-2 focus:ring-[#FF6600]/20 focus:bg-white outline-none text-[13px] font-medium transition-all shadow-inner text-slate-800 placeholder:text-slate-400"
       required
     />
   </div>
 );
 
-// 🚀 FIX: Komponen FileBox Baru (Baris Horizontal agar teks panjang tidak terpotong)
 const FileBoxRow = ({
   label,
   icon,
@@ -545,12 +537,12 @@ const FileBoxRow = ({
     </div>
     <div className="flex-1 overflow-hidden">
       <p
-        className={`text-[11px] font-black uppercase tracking-wider leading-snug truncate ${file ? "text-[#FF6600]" : "text-slate-600"}`}
+        className={`text-[12px] font-bold tracking-wide leading-snug truncate ${file ? "text-[#FF6600]" : "text-slate-600"}`}
       >
         {file ? file.name : label}
       </p>
-      <p className="text-[9px] font-bold text-slate-400 mt-0.5 uppercase tracking-widest">
-        {file ? "BERKAS SIAP" : "Ketuk untuk memilih foto"}
+      <p className="text-[10px] font-medium text-slate-400 mt-0.5">
+        {file ? "Berkas Siap" : "Ketuk untuk memilih foto"}
       </p>
     </div>
     <input

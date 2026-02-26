@@ -31,6 +31,9 @@ interface Props {
     marketFinance: { revenue: number; serviceFees: number };
     profile: any;
     isLoaded: boolean;
+    // 🚀 TAMBAHKAN DUA DATA BARU INI DI PROPS
+    weeklyChartData?: any[];
+    recentActivities?: any[];
   };
   actions: {
     fetchData: () => void;
@@ -92,6 +95,9 @@ export const LocalAdminContent: React.FC<Props> = ({
                 couriers: data.myCouriers.length,
                 adminShare: data.marketFinance.serviceFees,
               }}
+              // 🚀 TERUSKAN DATA ASLI KE KOMPONEN GRAFIK
+              chartData={data.weeklyChartData}
+              activities={data.recentActivities}
             />
           </div>
         </div>

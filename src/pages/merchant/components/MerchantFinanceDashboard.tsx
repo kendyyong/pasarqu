@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useToast } from "../../../contexts/ToastContext";
@@ -13,37 +13,54 @@ import {
   Banknote,
   BadgePercent,
   X,
-  Building,
   CreditCard,
   ArrowRight,
+  Lock,
+  Clock,
 } from "lucide-react";
 
-// SUB-KOMPONEN STATS ITEM (Dipindah ke atas agar tidak error "Cannot find name")
-const StatItem = ({ label, value, icon, color, bg, isMinus }: any) => (
+// SUB-KOMPONEN STATS ITEM (Gahar & Solid)
+const StatItem = ({
+  label,
+  value,
+  icon,
+  color,
+  bg,
+  isMinus,
+  subLabel,
+}: any) => (
   <div
-    className={`${bg} border border-slate-200 p-6 rounded-[1.5rem] shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow group`}
+    className={`${bg} border-2 border-slate-100 p-6 rounded-xl shadow-sm flex flex-col justify-between hover:border-[#008080] transition-colors group relative overflow-hidden`}
   >
-    <div className="flex items-center justify-between mb-4">
+    <div className="flex items-center justify-between mb-4 relative z-10">
       <p
-        className={`text-[10px] font-bold tracking-widest uppercase ${
-          color.includes("white") ? "text-teal-100" : "text-slate-400"
-        }`}
+        className={`text-[10px] font-black tracking-widest uppercase ${color.includes("white") ? "text-teal-100" : "text-slate-500"}`}
       >
         {label}
       </p>
       <div
-        className={`${
-          color.includes("white")
-            ? "text-white"
-            : "text-slate-300 group-hover:text-[#008080]"
-        } transition-colors`}
+        className={`p-2 rounded-md ${color.includes("white") ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500 group-hover:bg-teal-50 group-hover:text-[#008080]"} transition-colors`}
       >
         {icon}
       </div>
     </div>
-    <p className={`text-xl font-bold tracking-tighter ${color}`}>
-      {isMinus ? "- " : ""}RP {value.toLocaleString()}
-    </p>
+    <div className="relative z-10">
+      <p
+        className={`text-2xl font-black tracking-tighter leading-none ${color}`}
+      >
+        {isMinus ? "- " : ""}RP {value.toLocaleString()}
+      </p>
+      {subLabel && (
+        <p
+          className={`text-[9px] font-bold mt-2 uppercase tracking-widest ${color.includes("white") ? "text-teal-200" : "text-slate-400"}`}
+        >
+          {subLabel}
+        </p>
+      )}
+    </div>
+    <div className="absolute -right-6 -bottom-6 opacity-5 pointer-events-none">
+      {icon}
+    </div>
   </div>
 );
 
@@ -52,27 +69,27 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [merchantData, setMerchantData] = useState<any>(null);
+
   const [stats, setStats] = useState({
     total_gross_sales: 0,
     total_admin_fees: 0,
     total_net_sales: 0,
     pending_orders: 0,
+    pending_balance: 0,
+    admin_rate: 0,
   });
-  const [recentOrders, setRecentOrders] = useState<any[]>([]);
 
-  // STATE MODAL WITHDRAWAL
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState("ALL");
+
   const [showWDModal, setShowWDModal] = useState(false);
   const [wdAmount, setWdAmount] = useState<number | "">("");
   const [wdLoading, setWdLoading] = useState(false);
-  const [wdForm, setWdForm] = useState({
-    bank: "BCA",
-    accNo: "",
-    accName: "",
-  });
+  const [wdForm, setWdForm] = useState({ bank: "BCA", accNo: "", accName: "" });
 
   const MIN_WITHDRAWAL = 50000;
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
@@ -83,31 +100,20 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
         .maybeSingle();
 
       if (profileError) throw profileError;
-
-      if (!profile) {
-        setLoading(false);
-        return;
-      }
-
+      if (!profile) return setLoading(false);
       setMerchantData(profile);
 
-      if (!profile.merchant_id) {
-        setStats({
-          total_gross_sales: 0,
-          total_admin_fees: 0,
-          total_net_sales: 0,
-          pending_orders: 0,
-        });
-        setRecentOrders([]);
-        setLoading(false);
-        return;
-      }
+      if (!profile.merchant_id) return setLoading(false);
 
       // Ambil transaksi orders
       const { data: orders, error: ordersError } = await supabase
         .from("order_items")
         .select(
-          `quantity, price_at_purchase, orders!inner(status, shipping_status, seller_admin_fee_percent)`,
+          `
+          quantity, 
+          price_at_purchase, 
+          orders (status, shipping_status, seller_admin_fee_percent)
+        `,
         )
         .eq("merchant_id", profile.merchant_id);
 
@@ -116,19 +122,31 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
       if (orders && orders.length > 0) {
         let gross = 0;
         let fees = 0;
-        let pending = 0;
+        let pendingCount = 0;
+        let pendingBal = 0;
+
+        // FIX: Ambil admin rate dari item pertama secara aman
+        const firstOrderData: any = orders[0]?.orders;
+        let currentAdminRate = firstOrderData?.seller_admin_fee_percent || 0;
 
         orders.forEach((item: any) => {
+          const orderInfo = item.orders;
+          if (!orderInfo) return;
+
           const itemTotal = item.quantity * item.price_at_purchase;
-          const adminPercent = item.orders?.seller_admin_fee_percent || 0;
+          const adminPercent = orderInfo.seller_admin_fee_percent || 0;
           const itemFee = (itemTotal * adminPercent) / 100;
+          const netItem = itemTotal - itemFee;
+
           gross += itemTotal;
           fees += itemFee;
+
           if (
-            item.orders?.status === "PAID" &&
-            item.orders?.shipping_status !== "COMPLETED"
+            orderInfo.status === "PAID" &&
+            orderInfo.shipping_status !== "COMPLETED"
           ) {
-            pending++;
+            pendingCount++;
+            pendingBal += netItem;
           }
         });
 
@@ -136,19 +154,24 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
           total_gross_sales: gross,
           total_admin_fees: fees,
           total_net_sales: gross - fees,
-          pending_orders: pending,
+          pending_orders: pendingCount,
+          pending_balance: pendingBal,
+          admin_rate: currentAdminRate,
         });
       }
 
-      // Ambil History Order
       const { data: history } = await supabase
         .from("order_items")
         .select(
-          `id, quantity, price_at_purchase, products(name), orders!inner(id, created_at, shipping_status, seller_admin_fee_percent)`,
+          `
+          id, quantity, price_at_purchase, 
+          products(name), 
+          orders(id, created_at, shipping_status, seller_admin_fee_percent)
+        `,
         )
         .eq("merchant_id", profile.merchant_id)
         .order("id", { ascending: false })
-        .limit(10);
+        .limit(30);
 
       setRecentOrders(history || []);
     } catch (err) {
@@ -156,34 +179,26 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchData();
-  }, [user]);
+  }, [fetchData]);
 
   const handleRequestWD = async () => {
     const amountToWithdraw = Number(wdAmount);
-
-    if (amountToWithdraw < MIN_WITHDRAWAL) {
-      showToast(
-        `MINIMAL PENARIKAN RP ${MIN_WITHDRAWAL.toLocaleString()}`,
+    if (amountToWithdraw < MIN_WITHDRAWAL)
+      return showToast(
+        `MIN. TARIK RP ${MIN_WITHDRAWAL.toLocaleString()}`,
         "error",
       );
-      return;
-    }
-    if (amountToWithdraw > (merchantData?.wallet_balance || 0)) {
-      showToast("SALDO TIDAK MENCUKUPI!", "error");
-      return;
-    }
-    if (!wdForm.accNo || !wdForm.accName) {
-      showToast("LENGKAPI DATA REKENING!", "error");
-      return;
-    }
+    if (amountToWithdraw > (merchantData?.wallet_balance || 0))
+      return showToast("SALDO TIDAK MENCUKUPI!", "error");
+    if (!wdForm.accNo || !wdForm.accName)
+      return showToast("LENGKAPI DATA REKENING!", "error");
 
     setWdLoading(true);
     try {
-      // 1. Simpan request pencairan
       const { error: wdErr } = await supabase.from("payout_requests").insert({
         merchant_id: merchantData.merchant_id,
         amount: amountToWithdraw,
@@ -194,7 +209,6 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
       });
       if (wdErr) throw wdErr;
 
-      // 2. Potong saldo melalui RPC
       const { error: balanceErr } = await supabase.rpc("decrement_wallet", {
         user_id: user?.id,
         amount: amountToWithdraw,
@@ -203,8 +217,8 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
 
       showToast("PENCAIRAN DANA SEDANG DIPROSES!", "success");
       setShowWDModal(false);
-      setWdAmount(""); // Reset input
-      fetchData(); // Refresh data saldo terbaru
+      setWdAmount("");
+      fetchData();
     } catch (err: any) {
       showToast(err.message, "error");
     } finally {
@@ -212,235 +226,276 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
     }
   };
 
+  const filteredOrders = recentOrders.filter((item) => {
+    const orderInfo = item.orders;
+    if (!orderInfo) return false;
+    if (activeTab === "ALL") return true;
+    if (activeTab === "IN") return orderInfo.shipping_status === "COMPLETED";
+    if (activeTab === "PENDING")
+      return orderInfo.shipping_status !== "COMPLETED";
+    return true;
+  });
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4 font-sans uppercase">
         <Loader2 className="animate-spin text-[#008080]" size={40} />
-        <p className="text-[10px] font-bold tracking-widest text-slate-400">
-          Memuat Data Keuangan...
+        <p className="text-[10px] font-black tracking-widest text-slate-400">
+          MEMBUKA BRANKAS...
         </p>
       </div>
     );
   }
 
   return (
-    <div className="w-full space-y-8 animate-in fade-in duration-500 pb-20 text-left font-sans">
-      {/* 1. HEADER & SALDO UTAMA */}
-      <div className="flex flex-col md:flex-row gap-6">
-        {/* CARD SALDO ELEGAN */}
-        <div className="flex-1 bg-[#008080] p-8 rounded-[2rem] text-white relative overflow-hidden shadow-xl shadow-teal-900/10">
-          <div className="absolute -right-10 -top-10 opacity-10 rotate-12">
-            <Wallet size={200} />
-          </div>
-          <div className="relative z-10">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-teal-200/80">
-              Saldo Dompet Anda
-            </p>
-            <h2 className="text-3xl md:text-4xl font-black mt-2 tracking-tighter leading-none">
+    <div className="w-full space-y-6 animate-in fade-in duration-500 pb-20 text-left font-sans font-black uppercase tracking-tighter">
+      {/* 1. HEADER & VAULT */}
+      <div className="flex flex-col xl:flex-row gap-6">
+        <div className="flex-1 bg-slate-900 rounded-xl text-white relative overflow-hidden shadow-xl flex flex-col md:flex-row border-b-8 border-[#FF6600]">
+          <div className="p-6 md:p-8 flex-1 relative z-10 border-b md:border-b-0 md:border-r border-slate-700/50">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[10px] tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                <CheckCircle2 size={12} className="text-[#008080]" /> SALDO
+                AKTIF (BISA DITARIK)
+              </p>
+              <button
+                onClick={fetchData}
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-md transition-all active:scale-90"
+              >
+                <RefreshCw size={14} />
+              </button>
+            </div>
+            <h2 className="text-4xl md:text-5xl text-[#008080] leading-none mb-6">
               RP{" "}
               {Number(merchantData?.wallet_balance || 0).toLocaleString(
                 "id-ID",
               )}
             </h2>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <button
-                onClick={() => setShowWDModal(true)}
-                className="px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95 flex items-center gap-2"
-              >
-                <ArrowUpRight size={16} /> Tarik Dana
-              </button>
-              <button
-                onClick={fetchData}
-                className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-xl border border-white/10 transition-all"
-              >
-                <RefreshCw size={18} />
-              </button>
-            </div>
+            <button
+              onClick={() => setShowWDModal(true)}
+              className="w-full md:w-auto px-8 py-3.5 bg-[#FF6600] hover:bg-orange-600 text-white text-[11px] tracking-widest rounded-md transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+            >
+              <ArrowUpRight size={16} /> TARIK SALDO KE REKENING
+            </button>
           </div>
+
+          <div className="p-6 md:p-8 md:w-[35%] relative z-10 bg-white/5 flex flex-col justify-center">
+            <p className="text-[10px] tracking-[0.2em] text-slate-400 flex items-center gap-2 mb-2">
+              <Clock size={12} className="text-orange-500" /> DANA DALAM PROSES
+            </p>
+            <h3 className="text-2xl text-slate-200 leading-none mb-1">
+              RP {stats.pending_balance.toLocaleString("id-ID")}
+            </h3>
+            <p className="text-[9px] text-slate-500 tracking-widest normal-case font-bold">
+              Dari {stats.pending_orders} pesanan tertunda.
+            </p>
+          </div>
+          <Wallet
+            size={200}
+            className="absolute -left-10 -bottom-10 text-white opacity-5 pointer-events-none"
+          />
         </div>
 
-        {/* INFO RINGKASAN REKENING */}
-        <div className="md:w-80 bg-white border border-slate-200 p-6 rounded-[2rem] shadow-sm flex flex-col justify-center">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">
-            Tujuan Pencairan
-          </p>
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center">
-              <Building size={24} />
-            </div>
-            <div>
-              <h4 className="text-[14px] font-bold text-slate-800 uppercase leading-none">
-                Data Rekening
-              </h4>
-              <p className="text-[11px] font-medium text-slate-400 mt-2 uppercase">
-                Siap Dicairkan
-              </p>
-            </div>
+        <div className="xl:w-[350px] bg-slate-800 p-6 rounded-xl shadow-xl relative overflow-hidden border border-slate-700 flex flex-col justify-between">
+          <div className="relative z-10 flex justify-between items-start mb-6">
+            <div className="w-12 h-8 bg-amber-400/80 rounded-md opacity-80 shadow-inner"></div>
+            <p className="text-[10px] text-slate-400 tracking-widest flex items-center gap-1">
+              <Lock size={10} /> REKENING PENCAIRAN
+            </p>
           </div>
-          <button className="mt-6 text-[10px] font-bold text-[#008080] uppercase tracking-widest flex items-center gap-2 hover:gap-3 transition-all">
-            Lengkapi Data <ArrowRight size={14} />
+          <div className="relative z-10 space-y-1">
+            <h4 className="text-[18px] text-white tracking-[0.2em] font-mono">
+              **** **** 1234
+            </h4>
+            <p className="text-[11px] text-slate-300">
+              BANK BCA • A.N JURAGAN PASAR
+            </p>
+          </div>
+          <button className="relative z-10 mt-6 text-[9px] bg-white/10 hover:bg-white/20 text-white py-2 px-4 rounded-md tracking-widest flex items-center justify-center gap-2 transition-all border border-white/5">
+            UBAH DATA REKENING <ArrowRight size={12} />
           </button>
+          <CreditCard
+            size={150}
+            className="absolute -right-10 -bottom-10 text-white opacity-5 pointer-events-none rotate-12"
+          />
         </div>
       </div>
 
-      {/* 2. STATS GRID (MINIMALIST) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* 2. STATS GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatItem
-          label="Omzet Kotor"
+          label="OMZET KOTOR (GROSS)"
           value={stats.total_gross_sales}
           icon={<TrendingUp size={20} />}
-          color="text-slate-700"
+          color="text-slate-800"
           bg="bg-white"
+          subLabel="Total nilai barang terjual"
         />
         <StatItem
-          label="Biaya Admin"
+          label={`BIAYA APLIKASI (${stats.admin_rate}%)`}
           value={stats.total_admin_fees}
           icon={<BadgePercent size={20} />}
-          color="text-orange-600"
-          bg="bg-white"
+          color="text-red-500"
+          bg="bg-red-50/50"
           isMinus={true}
+          subLabel="Potongan sistem otomatis"
         />
         <StatItem
-          label="Pendapatan Bersih"
+          label="PENDAPATAN BERSIH (NET)"
           value={stats.total_net_sales}
           icon={<CheckCircle2 size={20} />}
           color="text-white"
           bg="bg-[#008080]"
+          subLabel="Uang murni milik toko"
         />
       </div>
 
-      {/* 3. LOG TRANSAKSI ELEGAN */}
-      <div className="bg-white border border-slate-200 rounded-[2rem] overflow-hidden shadow-sm">
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-          <h3 className="text-[12px] font-bold text-slate-800 uppercase tracking-widest flex items-center gap-2">
-            <History size={16} className="text-orange-500" /> Riwayat Transaksi
-            Terakhir
+      {/* 3. LOG TRANSAKSI */}
+      <div className="bg-white border-2 border-slate-100 rounded-xl shadow-sm overflow-hidden">
+        <div className="p-4 md:p-6 border-b-2 border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h3 className="text-[14px] text-slate-800 flex items-center gap-2">
+            <History size={18} className="text-[#008080]" /> MUTASI REKENING
+            (AUTO)
           </h3>
-          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">
-            Update Otomatis
-          </span>
+          <div className="flex bg-slate-50 border border-slate-200 p-1 rounded-lg">
+            <button
+              onClick={() => setActiveTab("ALL")}
+              className={`px-4 py-2 text-[9px] rounded-md transition-all ${activeTab === "ALL" ? "bg-slate-800 text-white shadow-sm" : "text-slate-500"}`}
+            >
+              SEMUA
+            </button>
+            <button
+              onClick={() => setActiveTab("IN")}
+              className={`px-4 py-2 text-[9px] rounded-md transition-all ${activeTab === "IN" ? "bg-[#008080] text-white shadow-sm" : "text-slate-500"}`}
+            >
+              UANG MASUK
+            </button>
+            <button
+              onClick={() => setActiveTab("PENDING")}
+              className={`px-4 py-2 text-[9px] rounded-md transition-all ${activeTab === "PENDING" ? "bg-orange-500 text-white shadow-sm" : "text-slate-500"}`}
+            >
+              TERTAHAN
+            </button>
+          </div>
         </div>
-        <div className="divide-y divide-slate-50">
-          {recentOrders.length > 0 ? (
-            recentOrders.map((item: any) => {
+
+        <div className="divide-y-2 divide-slate-50 max-h-[400px] overflow-y-auto no-scrollbar">
+          {filteredOrders.length > 0 ? (
+            filteredOrders.map((item: any) => {
+              const orderInfo = item.orders;
+              if (!orderInfo) return null;
+
               const itemTotal = item.quantity * item.price_at_purchase;
-              const adminPercent = item.orders?.seller_admin_fee_percent || 0;
+              const adminPercent = orderInfo.seller_admin_fee_percent || 0;
               const netAmount = itemTotal - (itemTotal * adminPercent) / 100;
+              const isDone = orderInfo.shipping_status === "COMPLETED";
+
               return (
                 <div
                   key={item.id}
-                  className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                  className="p-4 md:p-6 flex items-center justify-between hover:bg-slate-50 transition-colors"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400">
-                      <Banknote size={18} />
+                    <div
+                      className={`w-10 h-10 rounded-md flex items-center justify-center shrink-0 border ${isDone ? "bg-teal-50 border-teal-200 text-[#008080]" : "bg-orange-50 border-orange-200 text-orange-500"}`}
+                    >
+                      {isDone ? <Banknote size={18} /> : <Clock size={18} />}
                     </div>
-                    <div>
-                      <p className="text-[13px] font-bold text-slate-800 uppercase truncate max-w-[150px] md:max-w-xs">
+                    <div className="min-w-0">
+                      <p className="text-[12px] text-slate-800 leading-none truncate max-w-[150px] md:max-w-xs mb-1">
                         {item.products?.name || "Produk Umum"}
                       </p>
-                      <p className="text-[10px] font-medium text-slate-400 mt-1 uppercase tracking-tighter">
-                        {item.quantity} Unit •{" "}
-                        {new Date(item.orders?.created_at).toLocaleDateString()}
+                      <p className="text-[9px] text-slate-400 tracking-widest flex items-center gap-2">
+                        {item.quantity} UNIT{" "}
+                        <span className="text-slate-200">•</span>{" "}
+                        {new Date(orderInfo.created_at).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-[13px] font-black text-[#008080] tracking-tighter leading-none">
-                      + Rp {netAmount.toLocaleString()}
+                  <div className="text-right shrink-0">
+                    <p
+                      className={`text-[14px] leading-none ${isDone ? "text-[#008080]" : "text-orange-500"}`}
+                    >
+                      + RP {netAmount.toLocaleString()}
                     </p>
                     <div
-                      className={`mt-2 inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
-                        item.orders?.shipping_status === "COMPLETED"
-                          ? "bg-teal-50 text-teal-600"
-                          : "bg-orange-50 text-orange-600"
-                      }`}
+                      className={`mt-1.5 inline-block px-2 py-0.5 rounded-sm border text-[8px] tracking-widest ${isDone ? "bg-teal-50 border-teal-200 text-teal-600" : "bg-orange-50 border-orange-200 text-orange-600"}`}
                     >
-                      {item.orders?.shipping_status === "COMPLETED"
-                        ? "Selesai"
-                        : "Proses"}
+                      {isDone ? "MASUK SALDO" : "DITAHAN"}
                     </div>
                   </div>
                 </div>
               );
             })
           ) : (
-            <div className="p-20 text-center flex flex-col items-center gap-4">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-200">
-                <History size={32} />
-              </div>
-              <p className="text-slate-400 text-[12px] font-bold uppercase tracking-widest">
-                Belum Ada Transaksi Masuk
+            <div className="p-20 text-center flex flex-col items-center gap-3">
+              <History size={32} className="text-slate-200" />
+              <p className="text-slate-400 text-[10px] tracking-widest">
+                TIDAK ADA DATA TRANSAKSI
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* MODAL WD (ELEGAN CLEAN) */}
+      {/* 4. MODAL WD */}
       {showWDModal && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 relative shadow-2xl animate-in zoom-in-95 duration-300 border border-slate-100">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-xl p-8 relative shadow-2xl border-t-8 border-[#FF6600]">
             <button
               onClick={() => setShowWDModal(false)}
-              className="absolute top-6 right-6 text-slate-400 hover:text-slate-900 transition-colors"
+              className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-500 hover:bg-red-500 hover:text-white rounded-md transition-colors"
             >
-              <X size={24} />
+              <X size={16} />
             </button>
-
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-teal-50 text-[#008080] rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <CreditCard size={32} />
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 bg-orange-50 text-[#FF6600] rounded-md flex items-center justify-center mx-auto mb-3 border border-orange-200 shadow-sm">
+                <ArrowUpRight size={24} />
               </div>
-              <h2 className="text-xl font-bold text-slate-800 uppercase tracking-tight">
-                Pencairan Dana
+              <h2 className="text-xl text-slate-900 leading-none">
+                PENCAIRAN DANA
               </h2>
-              <div className="mt-2 inline-block px-4 py-1 bg-teal-50 rounded-full">
-                <p className="text-[12px] font-bold text-[#008080] tracking-widest">
-                  SALDO: RP{" "}
-                  {(merchantData?.wallet_balance || 0).toLocaleString()}
-                </p>
-              </div>
+              <p className="text-[10px] text-slate-400 mt-2 tracking-widest">
+                SALDO AKTIF:{" "}
+                <span className="text-[#008080]">
+                  RP {(merchantData?.wallet_balance || 0).toLocaleString()}
+                </span>
+              </p>
             </div>
-
-            <div className="space-y-5">
-              <div className="space-y-1.5">
+            <div className="space-y-4">
+              <div className="space-y-1">
                 <div className="flex justify-between items-end">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
-                    Nominal Penarikan
+                  <label className="text-[9px] text-slate-400 tracking-widest">
+                    NOMINAL PENARIKAN
                   </label>
                   <button
                     onClick={() =>
                       setWdAmount(merchantData?.wallet_balance || 0)
                     }
-                    className="text-[9px] font-bold text-orange-500 hover:text-orange-600 uppercase"
+                    className="text-[9px] text-[#008080] hover:underline"
                   >
-                    Tarik Semua
+                    TARIK SEMUA
                   </button>
                 </div>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400">
-                    Rp
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    RP
                   </span>
                   <input
                     type="number"
                     placeholder="0"
-                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#008080] text-[16px] font-black transition-all"
+                    className="w-full pl-12 pr-4 py-3 bg-slate-50 border-2 border-slate-200 rounded-md outline-none focus:border-[#008080] text-[14px] transition-all font-black"
                     value={wdAmount}
                     onChange={(e) => setWdAmount(Number(e.target.value))}
                   />
                 </div>
-                <p className="text-[9px] font-medium text-slate-400 ml-1">
-                  Min. penarikan Rp {MIN_WITHDRAWAL.toLocaleString()}
-                </p>
               </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
-                  Pilih Bank / E-Wallet
+              <div className="space-y-1">
+                <label className="text-[9px] text-slate-400 tracking-widest">
+                  BANK / E-WALLET
                 </label>
                 <select
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#008080] text-[13px] font-bold transition-all cursor-pointer"
+                  className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-md outline-none focus:border-[#008080] text-[12px] cursor-pointer font-bold"
                   value={wdForm.bank}
                   onChange={(e) =>
                     setWdForm({ ...wdForm, bank: e.target.value })
@@ -453,30 +508,28 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
                   <option>DANA</option>
                 </select>
               </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
-                  Nomor Rekening / HP
+              <div className="space-y-1">
+                <label className="text-[9px] text-slate-400 tracking-widest">
+                  NOMOR REKENING / HP
                 </label>
                 <input
                   type="text"
-                  placeholder="Masukkan Nomor..."
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#008080] text-[13px] font-bold transition-all"
+                  placeholder="1234567890"
+                  className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-md outline-none focus:border-[#008080] text-[12px] font-bold"
                   value={wdForm.accNo}
                   onChange={(e) =>
                     setWdForm({ ...wdForm, accNo: e.target.value })
                   }
                 />
               </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
-                  Nama Pemilik
+              <div className="space-y-1">
+                <label className="text-[9px] text-slate-400 tracking-widest">
+                  NAMA PEMILIK
                 </label>
                 <input
                   type="text"
-                  placeholder="Sesuai Buku Tabungan..."
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#008080] text-[13px] font-bold transition-all uppercase"
+                  placeholder="JONATHAN DOE"
+                  className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-md outline-none focus:border-[#008080] text-[12px] font-bold uppercase"
                   value={wdForm.accName}
                   onChange={(e) =>
                     setWdForm({
@@ -486,20 +539,19 @@ export const MerchantFinanceDashboard: React.FC<any> = () => {
                   }
                 />
               </div>
-
               <button
                 disabled={
                   wdLoading || !wdAmount || Number(wdAmount) < MIN_WITHDRAWAL
                 }
                 onClick={handleRequestWD}
-                className="w-full py-5 mt-4 bg-[#008080] text-white text-[13px] font-bold uppercase tracking-widest rounded-2xl hover:bg-slate-900 transition-all shadow-xl shadow-teal-900/10 flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
+                className="w-full py-4 mt-2 bg-[#FF6600] text-white text-[11px] tracking-widest rounded-md hover:bg-orange-700 shadow-md flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:bg-slate-300"
               >
                 {wdLoading ? (
-                  <Loader2 className="animate-spin" size={20} />
+                  <Loader2 className="animate-spin" size={16} />
                 ) : (
-                  <ArrowUpRight size={20} />
+                  <CheckCircle2 size={16} />
                 )}
-                Konfirmasi Penarikan
+                KONFIRMASI PENARIKAN
               </button>
             </div>
           </div>

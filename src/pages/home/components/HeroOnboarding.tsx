@@ -25,6 +25,7 @@ export const HeroOnboarding: React.FC<HeroOnboardingProps> = ({
   // TAMPILAN SAAT LOADING
   if (isLoading) {
     return (
+      /* 🚀 FIX: Menggunakan Negative Margin agar skeleton menempel ke atas */
       <div className="w-full flex justify-center -mt-1 md:-mt-[1px]">
         <div className="w-full md:max-w-[1200px]">
           <div className="w-full aspect-[2/1] md:aspect-[3/1] bg-slate-200 animate-pulse border-none"></div>
@@ -47,11 +48,11 @@ export const HeroOnboarding: React.FC<HeroOnboardingProps> = ({
   };
 
   return (
-    /* 🚀 FIX: Menggunakan Negative Margin untuk memaksa iklan naik menempel/menutup garis bawah header */
+    /* 🚀 FIX: Menggunakan Negative Margin (-mt-1) untuk memaksa iklan menempel ketat ke topbar */
     <div className="w-full flex justify-center -mt-1 md:-mt-[1px] relative z-0">
       {/* 🚀 PEMBATAS UKURAN DESKTOP */}
       <div className="w-full md:max-w-[1200px] overflow-hidden">
-        {/* 🚀 FIX: Menghapus total padding, rounded, dan border di mobile agar rapat sempurna */}
+        {/* 🚀 BOX IKLAN: Menghapus padding/rounded mobile agar rapat sempurna */}
         <div className="relative w-full aspect-[2/1] md:aspect-[3/1] overflow-hidden group md:rounded-2xl shadow-sm bg-slate-50 border-none">
           {/* TRACK SLIDER */}
           <div
@@ -87,8 +88,8 @@ export const HeroOnboarding: React.FC<HeroOnboardingProps> = ({
                     className={`w-full h-full block border-none outline-none ${fitMode}`}
                     style={{ objectPosition: `${posX}% ${posY}%` }}
                   />
-                  {/* Overlay tipis agar transisi header ke iklan lebih smooth */}
-                  <div className="absolute inset-0 bg-black/[0.03] pointer-events-none"></div>
+                  {/* Overlay tipis agar visual lebih menyatu */}
+                  <div className="absolute inset-0 bg-black/[0.02] pointer-events-none"></div>
                 </div>
               );
             })}

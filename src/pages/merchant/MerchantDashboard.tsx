@@ -89,6 +89,26 @@ export const MerchantDashboard: React.FC = () => {
     setActiveTab("products");
   };
 
+  // 🚀 FUNGSI HITUNG OTOMATIS UNTUK OVERVIEW DASHBOARD
+  const calculateTodayOmzet = () => {
+    if (!orders) return 0;
+    const today = new Date().toDateString();
+    return orders
+      .filter((o: any) => {
+        const orderDate = new Date(o.created_at).toDateString();
+        // Hitung yang hari ini DAN sudah dibayar (bukan UNPAID)
+        return orderDate === today && o.status !== "UNPAID";
+      })
+      .reduce((sum: number, o: any) => sum + (o.total_price || 0), 0);
+  };
+
+  const calculatePendingOrders = () => {
+    if (!orders) return 0;
+    return orders.filter(
+      (o: any) => o.shipping_status === "PACKING" || o.status === "UNPAID",
+    ).length;
+  };
+
   if (!merchantProfile) {
     return (
       <div
@@ -140,11 +160,9 @@ export const MerchantDashboard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* 🚀 TOMBOL BELANJA (MODE PEMBELI) - FIX: ALAMAT BENAR & MUNCUL DI HP */}
+            {/* TOMBOL BELANJA (MODE PEMBELI) */}
             <button
               onClick={() => {
-                console.log("Meluncur ke Customer Dashboard...");
-                // 💡 PAKAI ALAMAT ASLI DARI CUSTOMER ROUTES BOS
                 window.location.href = "/customer-dashboard";
               }}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] md:text-[11px] uppercase tracking-tighter transition-all active:scale-90 border shadow-md bg-[#FF6600] text-white border-orange-400"
@@ -185,6 +203,7 @@ export const MerchantDashboard: React.FC = () => {
           className={`flex-1 overflow-y-auto no-scrollbar pb-24 md:pb-10 transition-colors duration-300 ${isDarkMode ? "bg-slate-950" : "bg-slate-50/50"} p-4 md:p-8`}
         >
           <div className="w-full max-w-[1400px] mx-auto relative text-left">
+            {/* 🚀 1. TAB OVERVIEW (SUDAH TERSAMBUNG KABEL) */}
             <div
               className={
                 activeTab === "overview"
@@ -197,6 +216,14 @@ export const MerchantDashboard: React.FC = () => {
                 stats={{
                   orders: validOrdersCount,
                   products: validProductsCount,
+                  todayOmzet: calculateTodayOmzet(),
+                  pendingOrders: calculatePendingOrders(),
+                }}
+                recentOrders={orders || []}
+                onNavigate={(tab) => {
+                  setActiveTab(tab as TabType);
+                  if (tab === "products")
+                    setTriggerAddProduct((prev) => prev + 1);
                 }}
               />
             </div>

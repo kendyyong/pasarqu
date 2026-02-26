@@ -11,13 +11,16 @@ import {
   Search,
   Loader2,
   RefreshCcw,
-  ShoppingBag, // 🚀 Tambahkan Icon ShoppingBag
+  ShoppingBag,
 } from "lucide-react";
 
 export const WaitingApprovalPage = () => {
   const navigate = useNavigate();
-  const { user, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [isChecking, setIsChecking] = useState(false);
+
+  // Mengambil nama dari KTP (profile) jika ada, jika tidak pakai sapaan default
+  const userName = profile?.name || profile?.full_name || "Mitra";
 
   // ✅ 1. FUNGSI CEK STATUS DENGAN PAKSA REFRESH
   const checkStatusManual = async () => {
@@ -111,12 +114,12 @@ export const WaitingApprovalPage = () => {
           </div>
         </div>
 
-        <h1 className="text-xl font-black text-slate-800 mb-2 uppercase tracking-tight">
-          Pendaftaran Ditinjau
+        <h1 className="text-xl font-black text-slate-800 mb-1 uppercase tracking-tight">
+          Halo, {userName}!
         </h1>
         <p className="text-[11px] text-slate-500 leading-relaxed mb-8 px-6 font-bold uppercase tracking-wide">
-          Data Anda telah kami terima. Tim Admin sedang melakukan verifikasi
-          berkas untuk memastikan keamanan ekosistem Pasarqu.
+          Berkasmu sedang dicek Admin. Sambil menunggu disetujui, yuk
+          jalan-jalan ke Pasar dulu!
         </p>
 
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm text-left mb-8 space-y-5">
@@ -148,12 +151,15 @@ export const WaitingApprovalPage = () => {
 
         {/* 🚀 ACTION BUTTONS AREA */}
         <div className="space-y-3">
-          {/* TOMBOL UTAMA: BELANJA (MENGALIHKAN FOKUS USER) */}
+          {/* TOMBOL UTAMA: BELANJA SEKARANG KE CUSTOMER DASHBOARD */}
           <button
-            onClick={() => navigate("/")}
+            onClick={() => {
+              // 🚀 LEMPAR LANGSUNG KE ALAMAT PEMBELI YANG BENAR
+              window.location.href = "/customer-dashboard";
+            }}
             className="w-full py-4 bg-[#FF6600] hover:bg-orange-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 transition-all shadow-xl shadow-orange-500/20 active:scale-95"
           >
-            <ShoppingBag size={18} /> Mulai Belanja Sekarang
+            <ShoppingBag size={18} /> MULAI BELANJA SEKARANG
           </button>
 
           <div className="grid grid-cols-2 gap-3 mt-4">

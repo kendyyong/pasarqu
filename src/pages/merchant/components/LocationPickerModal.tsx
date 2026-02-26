@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   GoogleMap,
   useJsApiLoader,
   MarkerF,
   CircleF,
+  StandaloneSearchBox,
 } from "@react-google-maps/api";
 import {
   MapPin,
@@ -14,13 +15,17 @@ import {
   AlertTriangle,
   ArrowLeft,
   Store,
+  Search,
+  Crosshair,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabaseClient";
 import { useToast } from "../../../contexts/ToastContext";
 
 // --- GLOBAL CONFIG ---
+// 🚀 PERUBAHAN: Menambahkan library 'places' untuk fitur pencarian
 const LIBRARIES: ("geometry" | "drawing" | "places" | "visualization")[] = [
   "geometry",
+  "places",
 ];
 
 const MAP_OPTIONS: google.maps.MapOptions = {
@@ -55,7 +60,6 @@ export const LocationPickerModal: React.FC<Props> = ({
 }) => {
   const { showToast } = useToast();
 
-  // ✅ STATE UNTUK RADIUS (Default 1KM)
   const [maxDistanceKm, setMaxDistanceKm] = useState<number>(1);
 
   const { isLoaded } = useJsApiLoader({
@@ -78,10 +82,11 @@ export const LocationPickerModal: React.FC<Props> = ({
     lng: parseFloat(merchantProfile?.longitude || "116.852"),
   });
 
-  // 1. AMBIL DATA PASAR DAN SETTING DARI SUPABASE
+  // 🚀 REF UNTUK SEARCH BOX GOOGLE
+  const searchBoxRef = useRef<google.maps.places.SearchBox | null>(null);
+
   useEffect(() => {
     const fetchData = async () => {
-      // ✅ A. Tarik setting radius dari Super Admin
       let currentMaxDist = 1;
       const { data: settings } = await supabase
         .from("app_settings")
@@ -94,7 +99,6 @@ export const LocationPickerModal: React.FC<Props> = ({
         setMaxDistanceKm(currentMaxDist);
       }
 
-      // ✅ B. Tarik data lokasi pasar
       if (!merchantProfile?.market_id) return;
 
       const { data, error } = await supabase
@@ -103,10 +107,7 @@ export const LocationPickerModal: React.FC<Props> = ({
         .eq("id", merchantProfile.market_id)
         .maybeSingle();
 
-      if (error) {
-        console.error("Gagal load data pasar:", error);
-        return;
-      }
+      if (error) return;
 
       if (data) {
         const lat = parseFloat(data.lat || data.latitude || "0");
@@ -123,7 +124,6 @@ export const LocationPickerModal: React.FC<Props> = ({
                 new google.maps.LatLng(position.lat, position.lng),
                 new google.maps.LatLng(center.lat, center.lng),
               );
-            // Cek menggunakan radius yang baru ditarik
             setIsWithinRange(distance <= currentMaxDist * 1000);
           }
         }
@@ -133,7 +133,6 @@ export const LocationPickerModal: React.FC<Props> = ({
     if (isLoaded) fetchData();
   }, [merchantProfile, isLoaded]);
 
-  // 2. LOGIKA HITUNG JARAK KETIKA DIGESER
   const checkDistance = useCallback(
     (
       currentPos: { lat: number; lng: number },
@@ -147,7 +146,7 @@ export const LocationPickerModal: React.FC<Props> = ({
       setIsWithinRange(distance <= maxDistanceKm * 1000);
     },
     [maxDistanceKm],
-  ); // Bergantung pada maxDistanceKm terbaru
+  );
 
   const onMapClick = useCallback(
     (e: google.maps.MapMouseEvent) => {
@@ -160,10 +159,25 @@ export const LocationPickerModal: React.FC<Props> = ({
     [marketCenter, checkDistance],
   );
 
+  // 🚀 FUNGSI KETIKA ALAMAT DIKETIK & DIPILIH
+  const onPlacesChanged = () => {
+    const places = searchBoxRef.current?.getPlaces();
+    if (places && places.length > 0) {
+      const location = places[0].geometry?.location;
+      if (location) {
+        const newPos = { lat: location.lat(), lng: location.lng() };
+        setPosition(newPos);
+        map?.panTo(newPos);
+        map?.setZoom(17);
+        if (marketCenter) checkDistance(newPos, marketCenter);
+      }
+    }
+  };
+
   const handleSaveLocation = async () => {
     if (!isWithinRange) {
       showToast(
-        `TITIK TERLALU JAUH! MAKSIMAL ${maxDistanceKm}KM DARI PASAR!`,
+        `TITIK TERLALU JAUH! MAKSIMAL ${maxDistanceKm}KM DARI PUSAT PASAR!`,
         "error",
       );
       return;
@@ -181,7 +195,7 @@ export const LocationPickerModal: React.FC<Props> = ({
           .eq("id", merchantProfile.id),
       ]);
 
-      showToast("LOKASI BERHASIL DISIMPAN!", "success");
+      showToast("KOORDINAT BERHASIL DISIMPAN!", "success");
       onUpdate();
       onClose();
     } catch (err: any) {
@@ -195,7 +209,7 @@ export const LocationPickerModal: React.FC<Props> = ({
     if (marketCenter && marketCenter.lat !== 0) {
       map?.panTo(marketCenter);
       map?.setZoom(15);
-      showToast(`MENUJU PUSAT ${marketName}`, "success");
+      showToast(`MENUJU KOORDINAT ${marketName}`, "success");
     } else {
       showToast("Titik Koordinat Pasar Belum Diatur Admin!", "error");
     }
@@ -212,53 +226,120 @@ export const LocationPickerModal: React.FC<Props> = ({
           setPosition(newPos);
           if (marketCenter) checkDistance(newPos, marketCenter);
           map?.panTo(newPos);
+          map?.setZoom(18); // Zoom lebih dekat
         },
-        () => showToast("Gagal akses GPS", "error"),
+        () =>
+          showToast("Gagal akses GPS, mohon izinkan browser Anda.", "error"),
       );
     }
   };
 
   return (
-    <div className="w-full bg-slate-50 min-h-screen animate-in fade-in duration-500 font-sans text-left pb-20">
-      {/* HEADER ELEGAN */}
-      <div className="bg-white border-b border-slate-200 p-4 md:p-6 sticky top-0 z-50 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+    <div className="w-full bg-slate-50 min-h-screen animate-in fade-in duration-500 font-sans font-black uppercase tracking-tighter text-left pb-20">
+      {/* 🟢 HEADER GAHAR */}
+      <div className="bg-slate-900 border-b-4 border-[#008080] p-4 md:p-6 sticky top-0 z-50 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-4">
           <button
             onClick={onClose}
-            className="w-10 h-10 flex items-center justify-center text-slate-400 hover:bg-slate-100 rounded-xl transition-all"
+            className="w-10 h-10 flex items-center justify-center text-slate-400 hover:bg-slate-800 hover:text-white rounded-md transition-all border border-slate-700"
           >
-            <ArrowLeft size={24} />
+            <ArrowLeft size={20} />
           </button>
           <div>
-            <h2 className="text-[16px] font-bold text-slate-800 uppercase leading-none">
-              Presisi Lokasi Toko
+            <h2 className="text-xl text-white leading-none flex items-center gap-2">
+              <Crosshair className="text-[#008080]" size={20} /> RADAR LOKASI
             </h2>
-            <p className="text-[10px] font-semibold text-[#008080] uppercase tracking-widest mt-1">
-              Wilayah: {marketName || "MEMERIKSA DATA PASAR..."}
+            <p className="text-[10px] text-slate-400 mt-1">
+              WILAYAH OPERASI:{" "}
+              <span className="text-[#FF6600]">
+                {marketName || "MEMERIKSA..."}
+              </span>
             </p>
           </div>
         </div>
 
-        <button
-          disabled={loading || !isWithinRange}
-          onClick={handleSaveLocation}
-          className={`px-8 py-3 rounded-xl font-bold text-[12px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg ${
-            isWithinRange
-              ? "bg-[#008080] text-white shadow-teal-900/10 hover:bg-slate-800 active:scale-95"
-              : "bg-slate-200 text-slate-400 cursor-not-allowed"
-          }`}
-        >
-          {loading ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <CheckCircle size={16} />
-          )}
-          Simpan Lokasi
-        </button>
+        {/* 🚀 INDIKATOR STATUS (Dipindah ke Header agar selalu terlihat) */}
+        <div className="flex items-center gap-4">
+          <div
+            className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-md border-2 ${
+              isWithinRange
+                ? "bg-teal-900/30 border-[#008080] text-[#008080]"
+                : "bg-red-900/30 border-red-500 text-red-500"
+            }`}
+          >
+            <span className="flex h-2 w-2 relative">
+              <span
+                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isWithinRange ? "bg-[#008080]" : "bg-red-500"}`}
+              ></span>
+              <span
+                className={`relative inline-flex rounded-full h-2 w-2 ${isWithinRange ? "bg-[#008080]" : "bg-red-500"}`}
+              ></span>
+            </span>
+            <span className="text-[10px]">
+              {isWithinRange ? "ZONA AMAN (VALID)" : "DILUAR JANGKAUAN"}
+            </span>
+          </div>
+
+          <button
+            disabled={loading || !isWithinRange}
+            onClick={handleSaveLocation}
+            className={`px-8 py-3.5 rounded-md text-[12px] transition-all flex items-center justify-center gap-2 shadow-lg ${
+              isWithinRange
+                ? "bg-[#008080] text-white hover:bg-teal-700 active:scale-95"
+                : "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
+            }`}
+          >
+            {loading ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <CheckCircle size={16} />
+            )}
+            KUNCI KOORDINAT
+          </button>
+        </div>
       </div>
 
-      <div className="max-w-6xl mx-auto md:p-6">
-        <div className="bg-white border border-slate-200 md:rounded-[2rem] overflow-hidden shadow-xl relative">
+      <div className="max-w-6xl mx-auto md:p-6 space-y-4 mt-4">
+        {/* 🚀 PANEL INFO & SEARCH (DIATAS PETA) */}
+        <div className="flex flex-col lg:flex-row gap-4 px-4 md:px-0">
+          {/* Tracker Koordinat */}
+          <div className="bg-slate-900 p-4 rounded-xl shadow-sm flex items-center gap-4 shrink-0 border-l-4 border-[#FF6600]">
+            <div className="w-10 h-10 bg-white/10 rounded-md flex items-center justify-center text-[#FF6600]">
+              <MapPin size={20} />
+            </div>
+            <div>
+              <p className="text-[9px] text-slate-400 mb-1">
+                TITIK SAAT INI (LAT, LNG)
+              </p>
+              <p className="text-[14px] text-white font-mono leading-none tracking-widest">
+                {position.lat.toFixed(5)}, {position.lng.toFixed(5)}
+              </p>
+            </div>
+          </div>
+
+          {/* Bar Pencarian Google Places */}
+          {isLoaded && (
+            <div className="flex-1 bg-white p-2 rounded-xl border-2 border-slate-200 shadow-sm flex items-center">
+              <div className="pl-3 pr-2 text-slate-400">
+                <Search size={18} />
+              </div>
+              <StandaloneSearchBox
+                onLoad={(ref) => (searchBoxRef.current = ref)}
+                onPlacesChanged={onPlacesChanged}
+              >
+                <input
+                  type="text"
+                  placeholder="Ketik alamat atau nama jalan untuk mencari cepat..."
+                  className="w-full bg-transparent border-none outline-none py-2 text-[12px] text-slate-800 placeholder:text-slate-400"
+                  style={{ minWidth: "300px" }}
+                />
+              </StandaloneSearchBox>
+            </div>
+          )}
+        </div>
+
+        {/* 🗺️ AREA PETA */}
+        <div className="bg-white border-2 border-slate-200 rounded-xl overflow-hidden shadow-xl relative mx-4 md:mx-0">
           {isLoaded ? (
             <GoogleMap
               mapContainerStyle={CONTAINER_STYLE}
@@ -291,7 +372,7 @@ export const LocationPickerModal: React.FC<Props> = ({
                       fillColor: isWithinRange ? "#008080" : "#ef4444",
                       fillOpacity: 0.1,
                       strokeColor: isWithinRange ? "#008080" : "#ef4444",
-                      strokeWeight: 1,
+                      strokeWeight: 2,
                     }}
                   />
                   <MarkerF
@@ -300,17 +381,17 @@ export const LocationPickerModal: React.FC<Props> = ({
                     label={{
                       text: "PUSAT PASAR",
                       className:
-                        "text-[9px] font-black text-orange-600 mt-8 bg-white/90 px-1.5 py-0.5 rounded border border-orange-200",
+                        "text-[10px] font-black text-white mt-10 bg-slate-900 px-2 py-1 rounded-md border-2 border-[#FF6600] shadow-xl",
                     }}
                   />
                 </>
               )}
             </GoogleMap>
           ) : (
-            <div className="h-[500px] flex flex-col items-center justify-center bg-slate-50 gap-3">
-              <Loader2 className="animate-spin text-[#008080]" size={32} />
-              <span className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">
-                Sinkronisasi Radar...
+            <div className="h-[500px] flex flex-col items-center justify-center bg-slate-50 gap-4">
+              <Loader2 className="animate-spin text-[#008080]" size={40} />
+              <span className="text-[10px] text-slate-400 tracking-widest">
+                MENYINKRONKAN SATELIT...
               </span>
             </div>
           )}
@@ -320,92 +401,40 @@ export const LocationPickerModal: React.FC<Props> = ({
             <button
               onClick={goToMarketCenter}
               title="Arahkan ke Pusat Pasar"
-              className="p-4 bg-orange-600 text-white rounded-2xl shadow-2xl hover:bg-slate-900 transition-all active:scale-90 flex items-center justify-center"
+              className="p-4 bg-slate-900 text-[#FF6600] rounded-xl shadow-lg border-2 border-slate-700 hover:bg-black transition-all active:scale-90 flex items-center justify-center group"
             >
-              <Store size={22} />
+              <Store
+                size={20}
+                className="group-hover:scale-110 transition-transform"
+              />
             </button>
             <button
               onClick={getMyLocation}
-              title="Cari Lokasi Saya"
-              className="p-4 bg-white text-[#008080] rounded-2xl shadow-2xl border border-slate-100 hover:bg-[#008080] hover:text-white transition-all active:scale-90 flex items-center justify-center"
+              title="Gunakan GPS HP Saat Ini"
+              className="p-4 bg-white text-[#008080] rounded-xl shadow-lg border-2 border-slate-200 hover:border-[#008080] transition-all active:scale-90 flex items-center justify-center group"
             >
-              <Navigation size={22} />
+              <Navigation
+                size={20}
+                className="group-hover:scale-110 transition-transform"
+              />
             </button>
-          </div>
-
-          {/* FLOATING STATUS INFO */}
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-sm px-4">
-            <div
-              className={`p-4 rounded-2xl border shadow-2xl backdrop-blur-md flex items-center gap-4 transition-all ${
-                !marketCenter
-                  ? "bg-slate-800/90 border-slate-700"
-                  : isWithinRange
-                    ? "bg-white/90 border-teal-100"
-                    : "bg-red-50/90 border-red-200"
-              }`}
-            >
-              <div
-                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                  !marketCenter
-                    ? "bg-slate-700 text-white"
-                    : isWithinRange
-                      ? "bg-teal-50 text-[#008080]"
-                      : "bg-red-100 text-red-600"
-                }`}
-              >
-                {!marketCenter ? (
-                  <AlertTriangle size={20} />
-                ) : isWithinRange ? (
-                  <MapPin size={20} />
-                ) : (
-                  <AlertTriangle size={20} />
-                )}
-              </div>
-              <div className="text-left">
-                <h4
-                  className={`text-[12px] font-bold uppercase tracking-tight ${
-                    !marketCenter
-                      ? "text-white"
-                      : isWithinRange
-                        ? "text-slate-800"
-                        : "text-red-700"
-                  }`}
-                >
-                  {!marketCenter
-                    ? "Pusat Belum Diset"
-                    : isWithinRange
-                      ? "Area Sesuai"
-                      : "Terlalu Jauh"}
-                </h4>
-                <p
-                  className={`text-[10px] font-medium uppercase mt-1 leading-none ${!marketCenter ? "text-slate-300" : "text-slate-500"}`}
-                >
-                  {!marketCenter
-                    ? "Hubungi Admin Lokal"
-                    : isWithinRange
-                      ? `Radius Aman ${marketName}`
-                      : `Maks ${maxDistanceKm}KM Dari Pusat Pasar`}
-                </p>
-              </div>
-            </div>
           </div>
         </div>
 
-        <div className="mt-8 p-6 bg-white border border-slate-200 rounded-[1.5rem] flex items-start gap-4 shadow-sm">
-          <div className="w-10 h-10 bg-orange-50 text-orange-500 rounded-xl flex items-center justify-center shrink-0">
+        {/* ℹ️ KOTAK INSTRUKSI BAWAH */}
+        <div className="mx-4 md:mx-0 p-6 bg-slate-900 border-l-4 border-[#008080] rounded-xl flex items-start gap-4 shadow-md">
+          <div className="w-10 h-10 bg-white/10 text-white rounded-md flex items-center justify-center shrink-0">
             <Info size={20} />
           </div>
-          <div className="text-left">
-            <h4 className="text-[12px] font-bold text-slate-800 uppercase tracking-tight">
-              Ketentuan Lokasi
+          <div>
+            <h4 className="text-[12px] text-white">
+              INSTRUKSI PENEMPATAN RADAR
             </h4>
-            <p className="text-[12px] text-slate-500 mt-1 leading-relaxed">
-              Titik map ini digunakan kurir untuk menjemput pesanan. Pastikan
-              lokasi toko berada di area pasar yang terdaftar. Tekan ikon{" "}
-              <span className="text-orange-600 font-bold underline">
-                Toko Orange
-              </span>{" "}
-              untuk melihat batas wilayah operasi pasar Anda.
+            <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed tracking-wider normal-case font-semibold">
+              Gunakan kolom pencarian di atas untuk mencari alamat secara cepat.
+              Atau, klik ikon <b>Navigasi (Panah)</b> di pojok kanan bawah peta
+              untuk mendeteksi GPS HP Anda secara otomatis. Pastikan indikator
+              di atas berwarna <b>Hijau</b> sebelum menyimpan.
             </p>
           </div>
         </div>

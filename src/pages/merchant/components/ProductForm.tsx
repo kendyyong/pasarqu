@@ -272,14 +272,14 @@ export const ProductForm: React.FC<ProductFormProps> = ({
       if (isEditMode) {
         const { error: updateErr } = await supabase
           .from("products")
-          .update(productData)
+          // 🚀 UBAH KE FALSE SAAT UPDATE AGAR DIREVIEW ULANG ADMIN
+          .update({ ...productData, is_verified: false })
           .eq("id", initialData.id);
         if (updateErr) throw new Error(`DATABASE ERROR: ${updateErr.message}`);
-        showToast("DATA PRODUK DIPERBARUI", "success");
+        showToast("PRODUK DIPERBARUI & MENUNGGU REVIEW ULANG", "success");
       } else {
         const { error: insertErr } = await supabase
           .from("products")
-          // 🚀 KEMBALIKAN KE SOP PASARQU: is_verified harus FALSE agar masuk antrean Admin
           .insert([{ ...productData, is_verified: false }]);
         if (insertErr) throw new Error(`DATABASE ERROR: ${insertErr.message}`);
         showToast("PRODUK MENUNGGU VERIFIKASI ADMIN", "success");

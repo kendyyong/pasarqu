@@ -15,6 +15,7 @@ import {
   TrendingUp,
   MapPin,
   ShieldCheck,
+  ShoppingBag, // 🚀 ICON BELANJA
 } from "lucide-react";
 
 // --- IMPORT LOGIKA & UTILS ---
@@ -35,7 +36,7 @@ import { KurirTopUp } from "./components/KurirTopUp";
 import { WithdrawalModal } from "../../components/finance/WithdrawalModal";
 
 export const CourierDashboard: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, profile, logout } = useAuth(); // 🚀 TAMBAHKAN PROFILE
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -59,6 +60,10 @@ export const CourierDashboard: React.FC = () => {
   } = useCourierDashboard();
 
   const MIN_WITHDRAWAL = 20000;
+
+  // 🚀 AMBIL NAMA KURIR DARI PROFILE KTP
+  const courierName =
+    profile?.name || profile?.full_name || courierData?.name || "KURIR JAGOAN";
 
   // HANDLERS
   const handleToggleOnline = async () => {
@@ -122,53 +127,80 @@ export const CourierDashboard: React.FC = () => {
     <div className="h-[100dvh] w-screen bg-slate-200 flex justify-center font-black text-left uppercase tracking-tighter not-italic text-[12px] overflow-hidden">
       {/* 🚀 KOTAK APLIKASI: Relative dan h-full */}
       <div className="w-full max-w-[480px] bg-[#F8FAFC] h-full relative flex flex-col shadow-2xl border-x border-slate-300">
-        {/* HEADER TOP BAR (DIKUNCI DI ATAS) */}
+        {/* 🚀 HEADER TOP BAR BARU (MENDUKUNG NAMA & TOMBOL BELANJA) */}
         <header className="shrink-0 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm z-[50]">
-          <button
-            onClick={() => setShowLocationModal(true)}
-            className="w-12 h-12 shrink-0 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center text-slate-500 hover:text-[#008080] hover:border-[#008080] transition-colors active:scale-90"
-          >
-            <MapPin size={20} strokeWidth={2.5} />
-          </button>
+          {/* INFO NAMA KURIR DI KIRI */}
+          <div className="flex flex-col min-w-0 flex-1 pr-2">
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+              <h1 className="text-[12px] font-[1000] text-slate-800 truncate uppercase tracking-tighter">
+                {courierName}
+              </h1>
+            </div>
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest truncate">
+              Driver Aktif PasarQu
+            </p>
+          </div>
 
-          <button
-            onClick={handleToggleOnline}
-            className={`flex-1 mx-3 py-3 rounded-full flex items-center justify-center gap-2 font-[1000] text-[13px] tracking-widest transition-all shadow-sm active:scale-95 ${
-              isOnline
-                ? "bg-[#008080] text-white"
-                : "bg-slate-200 text-slate-500"
-            }`}
-          >
-            <Power size={18} strokeWidth={3} />
-            {isOnline ? "ONLINE" : "OFFLINE"}
-          </button>
+          {/* AREA TOMBOL KANAN */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* 🚀 TOMBOL BELANJA ORANYE */}
+            <button
+              onClick={() => {
+                window.location.href = "/customer-dashboard";
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] uppercase tracking-tighter transition-all active:scale-90 border shadow-md bg-[#FF6600] text-white border-orange-400"
+            >
+              <ShoppingBag size={14} strokeWidth={3} />
+              <span className="hidden sm:inline-block">BELANJA</span>
+            </button>
 
-          <button
-            onClick={() => setActiveTab("messages")}
-            className={`w-12 h-12 shrink-0 rounded-full border flex items-center justify-center transition-colors active:scale-90 ${
-              activeTab === "messages"
-                ? "bg-teal-50 border-[#008080] text-[#008080]"
-                : "bg-slate-50 border-slate-200 text-slate-500"
-            }`}
-          >
-            <MessageSquare size={20} strokeWidth={2.5} />
-          </button>
+            {/* TOMBOL CHAT */}
+            <button
+              onClick={() => setActiveTab("messages")}
+              className={`w-9 h-9 shrink-0 rounded-xl border flex items-center justify-center transition-colors active:scale-90 ${
+                activeTab === "messages"
+                  ? "bg-teal-50 border-[#008080] text-[#008080]"
+                  : "bg-slate-50 border-slate-200 text-slate-500"
+              }`}
+            >
+              <MessageSquare size={16} strokeWidth={2.5} />
+            </button>
+          </div>
         </header>
 
         {/* QUICK STATS (Hanya muncul di tab Radar) */}
         {activeTab === "bid" && (
-          <div className="shrink-0 bg-slate-900 pt-5 pb-6 px-4 rounded-b-2xl shadow-md z-40">
+          <div className="shrink-0 bg-slate-900 pt-5 pb-6 px-4 rounded-b-2xl shadow-md z-40 relative">
+            {/* TOMBOL TOGGLE ONLINE/OFFLINE DI PINDAH KE SINI AGAR LEBIH GAGAH */}
+            <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 w-[80%] max-w-[300px]">
+              <button
+                onClick={handleToggleOnline}
+                className={`w-full py-3.5 rounded-full flex items-center justify-center gap-2 font-[1000] text-[13px] tracking-widest transition-all shadow-xl active:scale-95 border-2 ${
+                  isOnline
+                    ? "bg-[#008080] text-white border-teal-500 shadow-teal-900/50"
+                    : "bg-slate-200 text-slate-500 border-white shadow-black/20"
+                }`}
+              >
+                <Power size={18} strokeWidth={3} />
+                {isOnline ? "STATUS: ONLINE" : "STATUS: OFFLINE"}
+              </button>
+            </div>
+
             <div className="flex justify-between items-center text-slate-300 mb-4 px-1">
-              <span className="text-[10px] tracking-widest flex items-center gap-1">
+              <button
+                onClick={() => setShowLocationModal(true)}
+                className="text-[10px] tracking-widest flex items-center gap-1 hover:text-white transition-colors"
+              >
                 <MapPin size={12} />{" "}
                 {courierData?.markets?.name || "MUARA JAWA"}
-              </span>
+              </button>
               <span className="text-[10px] tracking-widest flex items-center gap-1 text-teal-400">
                 <TrendingUp size={14} /> PERFORMA: 100%
               </span>
             </div>
 
-            <div className="bg-white rounded-md p-4 shadow-sm flex items-center justify-between border border-slate-100">
+            <div className="bg-white rounded-md p-4 shadow-sm flex items-center justify-between border border-slate-100 pb-8">
               <div>
                 <p className="text-[10px] text-slate-400 font-black tracking-widest">
                   SALDO DOMPET
@@ -188,7 +220,7 @@ export const CourierDashboard: React.FC = () => {
         )}
 
         {/* 🚀 MAIN AREA: HANYA BAGIAN INI YANG BISA SCROLL */}
-        <main className="flex-1 w-full overflow-y-auto px-4 pt-4 pb-[90px] relative z-0">
+        <main className="flex-1 w-full overflow-y-auto px-4 pt-6 pb-[90px] relative z-0">
           {activeTab === "bid" && (
             <CourierRadar
               activeOrder={activeOrder}

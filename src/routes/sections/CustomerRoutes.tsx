@@ -12,6 +12,9 @@ import { CheckoutPaymentPage } from "../../pages/checkout/CheckoutPaymentPage";
 import { ProtectedRoute } from "../../components/layout/ProtectedRoute";
 import { ChatRoom } from "../../pages/chat/ChatRoom";
 
+// 🚀 FIX KABEL IMPORT: Mengarah ke folder courier/components/ sesuai lokasi asli file Bos
+import { DigitalPaymentsPage } from "../../pages/courier/components/DigitalPaymentsPage";
+
 // 🚀 DAFTAR ROLE YANG DIPERBOLEHKAN BELANJA (KONSISTEN)
 const ALL_SHOPPERS = ["USER", "CUSTOMER", "MERCHANT", "COURIER", "SUPER_ADMIN"];
 
@@ -75,6 +78,17 @@ export const CustomerRoutes = () => [
     element={
       <ProtectedRoute allowedRoles={ALL_SHOPPERS}>
         <OrderHistoryPage />
+      </ProtectedRoute>
+    }
+  />,
+
+  // 🚀 RUTE BARU: PRODUK DIGITAL (PULSA, DATA, LISTRIK)
+  <Route
+    key="digital-payments"
+    path="/digital-payments"
+    element={
+      <ProtectedRoute allowedRoles={ALL_SHOPPERS}>
+        <DigitalPaymentsPage />
       </ProtectedRoute>
     }
   />,
