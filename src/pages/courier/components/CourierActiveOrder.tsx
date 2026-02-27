@@ -29,9 +29,10 @@ import { OrderChatRoom } from "../../../features/chat/OrderChatRoom";
 const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
   ["places", "routes", "geometry", "drawing"];
 
-// 🚀 IKON CUSTOM SUPER PRO
+// 🚀 IKON MOTOR ORANYE SUPER JELAS (Diupdate!)
 const ICONS = {
-  courier: "https://cdn-icons-png.flaticon.com/512/4819/4819129.png",
+  // Ikon kurir motor warna Oranye dengan kotak Box di belakang
+  courier: "https://cdn-icons-png.flaticon.com/512/5696/5696184.png",
   store: "https://cdn-icons-png.flaticon.com/512/1055/1055672.png",
   home: "https://cdn-icons-png.flaticon.com/512/1946/1946488.png",
 };
@@ -148,7 +149,6 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
     if (currentPos?.lat && currentPos?.lng) {
       url = `https://www.google.com/maps/dir/?api=1&origin=${currentPos.lat},${currentPos.lng}&destination=${destLat},${destLng}&travelmode=driving`;
     }
-    // Langsung pindah tanpa popup (_self fallback)
     window.location.href = url;
   };
 
@@ -246,7 +246,6 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
       {showChat &&
         createPortal(
           <div className="fixed inset-0 z-[999999] bg-white md:bg-slate-900/80 backdrop-blur-sm flex justify-center">
-            {/* Modal Chat Sama Seperti Sebelumnya */}
             <div className="w-full max-w-[480px] flex flex-col h-[100dvh] bg-white overflow-hidden shadow-2xl animate-in slide-in-from-bottom-8">
               <div className="p-4 flex justify-between items-center bg-[#008080] text-white shrink-0 shadow-sm">
                 <div className="flex items-center gap-3 ml-2">
@@ -324,7 +323,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
               options={{
                 disableDefaultUI: true,
                 gestureHandling: "greedy",
-                zoomControl: isNavigatingMode, // Munculkan zoom control kalau lagi full screen
+                zoomControl: isNavigatingMode,
               }}
             >
               {directions && (
@@ -340,17 +339,20 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                   }}
                 />
               )}
+
+              {/* 🚀 MOTOR ORANYE (DIPERBESAR JADI 64x64 BIAR GAGAH!) */}
               {currentPos && (
                 <MarkerF
                   position={currentPos}
                   icon={{
                     url: ICONS.courier,
-                    scaledSize: new window.google.maps.Size(55, 55),
-                    anchor: new window.google.maps.Point(27.5, 27.5),
+                    scaledSize: new window.google.maps.Size(64, 64),
+                    anchor: new window.google.maps.Point(32, 32),
                   }}
                   zIndex={999}
                 />
               )}
+
               {destLat && (
                 <MarkerF
                   position={{ lat: destLat, lng: destLng }}
@@ -377,7 +379,6 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
             </button>
           ) : (
             <>
-              {/* Tombol Pusatkan Peta (Recenter) */}
               <button
                 onClick={() =>
                   mapInstance?.panTo(
@@ -389,7 +390,6 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                 <Crosshair size={24} className="text-[#008080]" />
               </button>
 
-              {/* Tombol External App (Buat Jaga-Jaga) */}
               <button
                 onClick={handleOpenExternalMaps}
                 className="absolute left-4 bottom-32 bg-slate-900 text-white p-3 rounded-full shadow-2xl border border-slate-700 active:scale-90"
@@ -397,7 +397,6 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                 <ExternalLink size={20} className="text-slate-300" />
               </button>
 
-              {/* Action Footer Tetap Nempel di Bawah */}
               <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-slate-900/90 to-transparent pb-8 pt-10">
                 <ActionButton />
               </div>
@@ -405,10 +404,9 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           )}
         </div>
 
-        {/* ---------------- BAGIAN BAWAH INI AKAN SEMBUNYI SAAT FULLSCREEN ---------------- */}
+        {/* BAGIAN BAWAH SEMBUNYI SAAT FULLSCREEN */}
         {!isNavigatingMode && (
           <>
-            {/* STATUS BAR HEADER */}
             <div
               className={`p-4 rounded-xl flex justify-between items-center shadow-sm transition-all border-l-4 ${isCompleted ? "bg-slate-200 border-slate-400" : isCanceled ? "bg-red-50 border-red-500" : "bg-white border-[#008080]"}`}
             >
@@ -447,7 +445,6 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
               </button>
             </div>
 
-            {/* INFO LOKASI TOKO & PEMBELI */}
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
               <div
                 className={`flex gap-3 p-3 rounded-lg border ${isPickingUp ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-100"}`}
@@ -520,7 +517,6 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
               </div>
             </div>
 
-            {/* AREA TOMBOL EKSEKUSI (Versi Normal) */}
             {!isCompleted && !isCanceled && <ActionButton />}
           </>
         )}
