@@ -20,11 +20,14 @@ import {
   Search,
   MessageCircle,
   Ban,
+  CheckCircle2,
+  Trash2,
+  DownloadCloud, // 🚀 IKON BARU UNTUK EXCEL
 } from "lucide-react";
 
 interface Props {
   merchantProfile: any;
-  stopAlarm?: () => void; // 🚀 TAMBAHAN: Kabel untuk mematikan alaram dari dashboard
+  stopAlarm?: () => void;
 }
 
 export const MerchantOrders: React.FC<Props> = ({
@@ -40,13 +43,20 @@ export const MerchantOrders: React.FC<Props> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date().getTime());
-
-  // STATE UNTUK MODAL PIN AMBIL SENDIRI
+  const [hiddenOrders, setHiddenOrders] = useState<string[]>([]);
   const [pinModalOrder, setPinModalOrder] = useState<any>(null);
   const [pinInput, setPinInput] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
 
-  // 🚀 UPDATE TIMER SETIAP MENIT UNTUK SLA
+  useEffect(() => {
+    if (user?.id) {
+      const hidden = JSON.parse(
+        localStorage.getItem(`merchant_hidden_orders_${user.id}`) || "[]",
+      );
+      setHiddenOrders(hidden);
+    }
+  }, [user?.id]);
+
   useEffect(() => {
     const timer = setInterval(
       () => setCurrentTime(new Date().getTime()),
@@ -64,15 +74,7 @@ export const MerchantOrders: React.FC<Props> = ({
         const { data: items, error: itemsError } = await supabase
           .from("order_items")
           .select(
-            `
-            *,
-            orders!inner (
-              id, status, shipping_status, created_at, total_price,
-              shipping_cost, service_fee, courier_surge_fee,
-              total_merchants, address, notes, customer_id,
-              shipping_method, pickup_code, pickup_expired_at
-            )
-          `,
+            `*, orders!inner (id, status, shipping_status, created_at, total_price, shipping_cost, service_fee, courier_surge_fee, total_merchants, address, notes, customer_id, shipping_method, pickup_code, pickup_expired_at)`,
           )
           .eq("merchant_id", user.id);
 
@@ -134,7 +136,6 @@ export const MerchantOrders: React.FC<Props> = ({
           (a: any, b: any) =>
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
         );
-
         setOrders(sortedOrders);
       } catch (err: any) {
         console.error("Fetch Orders Error:", err.message);
@@ -145,12 +146,9 @@ export const MerchantOrders: React.FC<Props> = ({
     [user?.id],
   );
 
-  // 🚀 SENSOR LIVE AUTO-SYNC
   useEffect(() => {
     fetchOrders();
-
     if (!user?.id) return;
-
     const channel = supabase
       .channel(`live_orders_merchant_hub_${user.id}`)
       .on(
@@ -161,35 +159,63 @@ export const MerchantOrders: React.FC<Props> = ({
           table: "order_items",
           filter: `merchant_id=eq.${user.id}`,
         },
-        () => {
-          console.log("🔥 PESANAN BARU MASUK!");
-          fetchOrders(true);
-        },
+        () => fetchOrders(true),
       )
       .on(
         "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "orders",
-        },
-        () => {
-          console.log("🔄 STATUS BERUBAH!");
-          fetchOrders(true);
-        },
+        { event: "UPDATE", schema: "public", table: "orders" },
+        () => fetchOrders(true),
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(channel);
     };
   }, [fetchOrders, user?.id]);
 
-  // PROSES PESANAN MASUK (TERIMA)
-  const handleProcessOrder = async (order: any) => {
-    setIsUpdating(order.id);
-    const isPickup = order.shipping_method === "pickup";
+  // 🚀 FUNGSI EXPORT EXCEL/CSV LEVEL DEWA
+  const handleExportCSV = () => {
+    try {
+      if (orders.length === 0)
+        return showToast("Belum ada data untuk diexport", "error");
 
+      let csvContent =
+        "ID PESANAN,TANGGAL,PELANGGAN,NO HP,STATUS,TOTAL BAYAR (RP)\n";
+
+      orders.forEach((o) => {
+        const date = new Date(o.created_at).toLocaleString("id-ID");
+        const customer = o.customer?.full_name || "N/A";
+        const phone = o.customer?.phone_number || "N/A";
+        const status =
+          o.status === "COMPLETED" || o.shipping_status === "COMPLETED"
+            ? "SELESAI"
+            : o.status;
+        const total = o.total_price || 0;
+
+        csvContent += `"${o.id}","${date}","${customer}","${phone}","${status}","${total}"\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute(
+        "download",
+        `Laporan_PasarQu_${new Date().toISOString().split("T")[0]}.csv`,
+      );
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showToast("Laporan Berhasil Diunduh!", "success");
+    } catch (err) {
+      showToast("Gagal mengunduh laporan", "error");
+    }
+  };
+
+  const handleProcessOrder = async (order: any) => {
+    /* ... */ setIsUpdating(order.id);
+    const isPickup = order.shipping_method === "pickup";
     try {
       const { error } = await supabase
         .from("orders")
@@ -198,12 +224,8 @@ export const MerchantOrders: React.FC<Props> = ({
           shipping_status: isPickup ? "READY_TO_PICKUP" : "SEARCHING_COURIER",
         })
         .eq("id", order.id);
-
       if (error) throw error;
-
-      // 🔥 MATIKAN ALARAM SETELAH TOMBOL DIKLIK
       if (stopAlarm) stopAlarm();
-
       showToast(
         isPickup ? "PESANAN DISIAPKAN!" : "PESANAN DITERIMA. MENCARI KURIR...",
         "success",
@@ -215,28 +237,21 @@ export const MerchantOrders: React.FC<Props> = ({
       setIsUpdating(null);
     }
   };
-
-  // 🚀 FUNGSI TOLAK PESANAN OLEH TOKO
   const handleRejectOrder = async (order: any) => {
-    if (
+    /* ... */ if (
       !window.confirm(
         "Yakin ingin menolak pesanan ini? Saldo pembeli akan dikembalikan otomatis.",
       )
     )
       return;
-
     setIsUpdating(order.id);
     try {
       const { error } = await supabase.rpc("cancel_order_and_refund", {
         p_order_id: order.id,
         p_user_id: order.customer_id,
       });
-
       if (error) throw error;
-
-      // 🔥 MATIKAN ALARAM SETELAH TOMBOL DIKLIK
       if (stopAlarm) stopAlarm();
-
       showToast("PESANAN BERHASIL DITOLAK.", "info");
       fetchOrders(true);
     } catch (err: any) {
@@ -245,33 +260,22 @@ export const MerchantOrders: React.FC<Props> = ({
       setIsUpdating(null);
     }
   };
-
-  // VERIFIKASI PIN & CAIRKAN UANG UNTUK AMBIL SENDIRI
   const handleVerifyPIN = async () => {
-    if (!pinModalOrder || pinInput.length !== 4) {
+    /* ... */ if (!pinModalOrder || pinInput.length !== 4) {
       showToast("Masukkan 4 digit PIN dengan benar", "error");
       return;
     }
     setIsVerifying(true);
-
     try {
-      if (new Date() > new Date(pinModalOrder.pickup_expired_at)) {
-        throw new Error(
-          "WAKTU PENGAMBILAN 1x24 JAM SUDAH HABIS. DANA DITAHAN SISTEM.",
-        );
-      }
-
-      if (pinInput !== pinModalOrder.pickup_code) {
+      if (new Date() > new Date(pinModalOrder.pickup_expired_at))
+        throw new Error("WAKTU PENGAMBILAN HABIS. DANA DITAHAN SISTEM.");
+      if (pinInput !== pinModalOrder.pickup_code)
         throw new Error("PIN YANG DIMASUKKAN SALAH!");
-      }
-
       const { error: rpcError } = await supabase.rpc(
         "complete_order_transaction",
         { p_order_id: pinModalOrder.id },
       );
-
       if (rpcError) throw rpcError;
-
       showToast("PIN COCOK! PESANAN SELESAI & SALDO MASUK.", "success");
       setPinModalOrder(null);
       setPinInput("");
@@ -282,35 +286,48 @@ export const MerchantOrders: React.FC<Props> = ({
       setIsVerifying(false);
     }
   };
-
   const handlePrintLabel = (order: any) => {
     window.open(`/invoice/${order.id}`, "_blank");
   };
+  const handleHideOrder = (orderId: string) => {
+    if (!window.confirm("Sembunyikan pesanan ini dari daftar Anda?")) return;
+    const updatedHidden = [...hiddenOrders, orderId];
+    setHiddenOrders(updatedHidden);
+    if (user?.id)
+      localStorage.setItem(
+        `merchant_hidden_orders_${user.id}`,
+        JSON.stringify(updatedHidden),
+      );
+    showToast("Pesanan disembunyikan dari daftar.", "success");
+  };
 
-  // FILTERING GABUNGAN
   const filteredOrders = orders.filter((o) => {
+    if (hiddenOrders.includes(o.id)) return false;
     let matchTab = false;
     if (statusFilter === "pending")
       matchTab = ["PAID", "PENDING", "PROCESSING"].includes(o.status);
     else if (statusFilter === "shipping")
       matchTab =
-        ["PACKING", "ON_DELIVERY", "SHIPPING"].includes(o.status) ||
+        ["PACKING", "ON_DELIVERY", "SHIPPING", "DELIVERING"].includes(
+          o.status,
+        ) ||
         ["SEARCHING_COURIER", "READY_TO_PICKUP"].includes(o.shipping_status);
     else if (statusFilter === "completed")
-      matchTab = o.status === "COMPLETED" || o.status === "CANCELLED";
-
+      matchTab =
+        o.status === "COMPLETED" ||
+        o.status === "CANCELLED" ||
+        o.shipping_status === "COMPLETED";
     const matchSearch =
       o.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (o.customer?.full_name || "")
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
-
     return matchTab && matchSearch;
   });
 
   return (
     <>
-      {/* MODAL INPUT PIN PEMBELI */}
+      {/* MODAL PIN TETAP SAMA */}
       {pinModalOrder &&
         createPortal(
           <div className="fixed inset-0 z-[99999] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
@@ -331,9 +348,6 @@ export const MerchantOrders: React.FC<Props> = ({
                 <h3 className="font-black tracking-widest uppercase text-[16px]">
                   VERIFIKASI PIN
                 </h3>
-                <p className="text-[10px] mt-2 opacity-80 uppercase tracking-widest font-bold">
-                  Minta 4 Angka Rahasia ke Pembeli
-                </p>
               </div>
               <div className="p-8 space-y-6 text-center">
                 <input
@@ -355,7 +369,7 @@ export const MerchantOrders: React.FC<Props> = ({
                     <Loader2 size={18} className="animate-spin" />
                   ) : (
                     <UserCheck size={18} />
-                  )}
+                  )}{" "}
                   VALIDASI & CAIRKAN
                 </button>
               </div>
@@ -365,8 +379,8 @@ export const MerchantOrders: React.FC<Props> = ({
         )}
 
       <div className="w-full space-y-6 animate-in fade-in duration-500 text-left font-sans pb-20 font-black uppercase tracking-tighter">
-        {/* HEADER & SEARCH BAR */}
-        <div className="bg-white border-2 border-slate-100 p-6 rounded-xl shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b-8 border-[#008080]">
+        {/* 🚀 HEADER & SEARCH BAR & TOMBOL LAPORAN */}
+        <div className="bg-white border-2 border-slate-100 p-6 rounded-xl shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b-8 border-[#008080]">
           <div>
             <h2 className="text-2xl text-slate-900 leading-none flex items-center gap-2">
               <ShoppingBag className="text-[#008080]" size={24} /> DAFTAR
@@ -377,18 +391,27 @@ export const MerchantOrders: React.FC<Props> = ({
             </p>
           </div>
 
-          <div className="relative w-full md:w-72">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              size={16}
-            />
-            <input
-              type="text"
-              placeholder="CARI NAMA / ID PESANAN..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg pl-10 pr-4 py-3 text-[11px] font-black outline-none focus:border-[#008080] transition-all"
-            />
+          <div className="flex flex-col sm:flex-row w-full lg:w-auto gap-3">
+            <div className="relative w-full sm:w-72">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                size={16}
+              />
+              <input
+                type="text"
+                placeholder="CARI NAMA / ID PESANAN..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg pl-10 pr-4 py-3 text-[11px] font-black outline-none focus:border-[#008080] transition-all"
+              />
+            </div>
+            {/* 🚀 TOMBOL UNDUH LAPORAN */}
+            <button
+              onClick={handleExportCSV}
+              className="w-full sm:w-auto px-5 py-3 bg-slate-900 hover:bg-[#008080] text-white rounded-lg flex items-center justify-center gap-2 text-[11px] tracking-widest transition-colors shadow-md active:scale-95"
+            >
+              <DownloadCloud size={16} /> EXPORT CSV
+            </button>
           </div>
         </div>
 
@@ -399,8 +422,10 @@ export const MerchantOrders: React.FC<Props> = ({
             label="MASUK"
             onClick={() => setStatusFilter("pending")}
             count={
-              orders.filter((o) =>
-                ["PAID", "PENDING", "PROCESSING"].includes(o.status),
+              orders.filter(
+                (o) =>
+                  ["PAID", "PENDING", "PROCESSING"].includes(o.status) &&
+                  !hiddenOrders.includes(o.id),
               ).length
             }
           />
@@ -411,10 +436,16 @@ export const MerchantOrders: React.FC<Props> = ({
             count={
               orders.filter(
                 (o) =>
-                  ["PACKING", "ON_DELIVERY", "SHIPPING"].includes(o.status) ||
-                  ["SEARCHING_COURIER", "READY_TO_PICKUP"].includes(
-                    o.shipping_status,
-                  ),
+                  ([
+                    "PACKING",
+                    "ON_DELIVERY",
+                    "SHIPPING",
+                    "DELIVERING",
+                  ].includes(o.status) ||
+                    ["SEARCHING_COURIER", "READY_TO_PICKUP"].includes(
+                      o.shipping_status,
+                    )) &&
+                  !hiddenOrders.includes(o.id),
               ).length
             }
           />
@@ -448,8 +479,10 @@ export const MerchantOrders: React.FC<Props> = ({
                 order.status,
               );
               const isCancelled = order.status === "CANCELLED";
+              const isCompleted =
+                order.status === "COMPLETED" ||
+                order.shipping_status === "COMPLETED";
 
-              // HITUNG SLA TIMER
               const orderTime = new Date(order.created_at).getTime();
               const diffInMinutes = Math.floor(
                 (currentTime - orderTime) / (1000 * 60),
@@ -460,26 +493,20 @@ export const MerchantOrders: React.FC<Props> = ({
               return (
                 <div
                   key={order.id}
-                  className={`bg-white border-2 rounded-xl shadow-sm overflow-hidden transition-all relative ${
-                    isCancelled
-                      ? "border-red-200 opacity-60"
-                      : isNew && isLate
-                        ? "border-red-500"
-                        : isPickup
-                          ? "border-[#FF6600]/30 hover:border-[#FF6600]"
-                          : "border-slate-100 hover:border-[#008080]"
-                  }`}
+                  className={`bg-white border-2 rounded-xl shadow-sm overflow-hidden transition-all relative ${isCancelled ? "border-red-200 opacity-60" : isCompleted ? "border-green-200 opacity-80" : isNew && isLate ? "border-red-500" : isPickup ? "border-[#FF6600]/30 hover:border-[#FF6600]" : "border-slate-100 hover:border-[#008080]"}`}
                 >
-                  {/* TOP BAR */}
+                  {/* ORDER TOP BAR */}
                   <div
-                    className={`px-5 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b-2 ${isCancelled ? "bg-red-50 border-red-100" : isPickup ? "bg-orange-50/50 border-orange-100" : "bg-slate-50 border-slate-100"}`}
+                    className={`px-5 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b-2 ${isCancelled ? "bg-red-50 border-red-100" : isCompleted ? "bg-green-50 border-green-100" : isPickup ? "bg-orange-50/50 border-orange-100" : "bg-slate-50 border-slate-100"}`}
                   >
                     <div className="flex items-center gap-4">
                       <div
-                        className={`px-3 py-1.5 rounded-md border-2 flex items-center gap-2 shadow-sm ${isCancelled ? "bg-white border-red-200 text-red-500" : isPickup ? "bg-white border-orange-200 text-[#FF6600]" : "bg-white border-slate-200 text-[#008080]"}`}
+                        className={`px-3 py-1.5 rounded-md border-2 flex items-center gap-2 shadow-sm ${isCancelled ? "bg-white border-red-200 text-red-500" : isCompleted ? "bg-white border-green-200 text-green-600" : isPickup ? "bg-white border-orange-200 text-[#FF6600]" : "bg-white border-slate-200 text-[#008080]"}`}
                       >
                         {isCancelled ? (
                           <Ban size={14} />
+                        ) : isCompleted ? (
+                          <CheckCircle2 size={14} />
                         ) : isPickup ? (
                           <ShoppingBag size={14} />
                         ) : (
@@ -488,9 +515,11 @@ export const MerchantOrders: React.FC<Props> = ({
                         <span className="text-[11px] font-black uppercase tracking-widest">
                           {isCancelled
                             ? "DIBATALKAN"
-                            : isPickup
-                              ? "AMBIL SENDIRI"
-                              : "KURIR PASAR"}
+                            : isCompleted
+                              ? "TRANSAKSI SELESAI"
+                              : isPickup
+                                ? "AMBIL SENDIRI"
+                                : "KURIR PASAR"}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 text-slate-400">
@@ -505,7 +534,7 @@ export const MerchantOrders: React.FC<Props> = ({
                     </div>
 
                     <div className="flex items-center gap-3 w-full md:w-auto justify-between">
-                      {isNew && !isCancelled && (
+                      {isNew && !isCancelled && !isCompleted && (
                         <div
                           className={`text-[9px] px-3 py-1.5 rounded-md flex items-center gap-1 shadow-sm ${isLate ? "bg-red-600 text-white animate-pulse" : "bg-orange-100 text-orange-700"}`}
                         >
@@ -516,11 +545,13 @@ export const MerchantOrders: React.FC<Props> = ({
                         </div>
                       )}
                       <span
-                        className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest shadow-sm ${isCancelled ? "bg-red-500 text-white" : isNew ? "bg-[#008080] text-white" : "bg-slate-200 text-slate-500"}`}
+                        className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest shadow-sm ${isCancelled ? "bg-red-500 text-white" : isCompleted ? "bg-green-600 text-white" : isNew ? "bg-[#008080] text-white" : "bg-slate-200 text-slate-500"}`}
                       >
                         {order.status === "PROCESSING"
                           ? "COD - BARU"
-                          : order.status}
+                          : isCompleted
+                            ? "SELESAI"
+                            : order.status}
                       </span>
                     </div>
                   </div>
@@ -556,11 +587,11 @@ export const MerchantOrders: React.FC<Props> = ({
                     ))}
                   </div>
 
-                  {/* BOTTOM ACTION */}
+                  {/* BOTTOM INFO & ACTION */}
                   <div className="px-5 py-5 bg-white border-t-2 border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="flex items-start gap-3 w-full md:w-auto">
                       <div
-                        className={`w-10 h-10 rounded-md flex items-center justify-center shrink-0 border ${isCancelled ? "bg-red-50 border-red-200 text-red-500" : isPickup ? "bg-orange-50 border-orange-200 text-[#FF6600]" : "bg-teal-50 border-teal-200 text-[#008080]"}`}
+                        className={`w-10 h-10 rounded-md flex items-center justify-center shrink-0 border ${isCancelled ? "bg-red-50 border-red-200 text-red-500" : isCompleted ? "bg-green-50 border-green-200 text-green-600" : isPickup ? "bg-orange-50 border-orange-200 text-[#FF6600]" : "bg-teal-50 border-teal-200 text-[#008080]"}`}
                       >
                         <MapPin size={18} />
                       </div>
@@ -594,27 +625,41 @@ export const MerchantOrders: React.FC<Props> = ({
                       </div>
 
                       <div className="flex gap-2 w-full md:w-auto">
-                        <button
-                          onClick={() =>
-                            window.open(
-                              `https://wa.me/${order.customer?.phone_number?.replace(/^0/, "62") || ""}`,
-                              "_blank",
-                            )
-                          }
-                          className="p-3 bg-green-50 text-green-600 border border-green-200 rounded-xl hover:bg-green-600 hover:text-white transition-all shadow-sm"
-                          title="Chat Pembeli"
-                        >
-                          <MessageCircle size={18} />
-                        </button>
-                        <button
-                          onClick={() => handlePrintLabel(order)}
-                          className="p-3 bg-slate-50 text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-900 hover:text-white transition-all shadow-sm"
-                          title="Cetak Resi"
-                        >
-                          <Printer size={18} />
-                        </button>
+                        {!isCancelled && (
+                          <button
+                            onClick={() =>
+                              window.open(
+                                `https://wa.me/${order.customer?.phone_number?.replace(/^0/, "62") || ""}`,
+                                "_blank",
+                              )
+                            }
+                            className="p-3 bg-green-50 text-green-600 border border-green-200 rounded-xl hover:bg-green-600 hover:text-white transition-all shadow-sm"
+                            title="Chat Pembeli"
+                          >
+                            <MessageCircle size={18} />
+                          </button>
+                        )}
+                        {!isCancelled && (
+                          <button
+                            onClick={() => handlePrintLabel(order)}
+                            className="p-3 bg-slate-50 text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-900 hover:text-white transition-all shadow-sm"
+                            title="Cetak Resi"
+                          >
+                            <Printer size={18} />
+                          </button>
+                        )}
 
-                        {isNew && !isCancelled ? (
+                        {(isCancelled || isCompleted) && (
+                          <button
+                            onClick={() => handleHideOrder(order.id)}
+                            className="p-3 bg-red-50 text-red-500 border border-red-200 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                            title="Sembunyikan Pesanan"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
+
+                        {isNew && !isCancelled && !isCompleted ? (
                           <>
                             <button
                               disabled={isUpdating === order.id}
@@ -625,17 +670,13 @@ export const MerchantOrders: React.FC<Props> = ({
                                 <Loader2 size={16} className="animate-spin" />
                               ) : (
                                 <Ban size={16} />
-                              )}
+                              )}{" "}
                               <span className="hidden md:inline">TOLAK</span>
                             </button>
                             <button
                               disabled={isUpdating === order.id}
                               onClick={() => handleProcessOrder(order)}
-                              className={`flex-1 md:flex-none px-6 py-3 text-white font-black text-[11px] uppercase tracking-widest rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg ${
-                                isPickup
-                                  ? "bg-[#FF6600] hover:bg-orange-700"
-                                  : "bg-[#008080] hover:bg-teal-800"
-                              }`}
+                              className={`flex-1 md:flex-none px-6 py-3 text-white font-black text-[11px] uppercase tracking-widest rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg ${isPickup ? "bg-[#FF6600] hover:bg-orange-700" : "bg-[#008080] hover:bg-teal-800"}`}
                             >
                               {isUpdating === order.id ? (
                                 <Loader2 size={16} className="animate-spin" />
@@ -643,7 +684,7 @@ export const MerchantOrders: React.FC<Props> = ({
                                 <Package size={16} />
                               ) : (
                                 <Send size={16} />
-                              )}
+                              )}{" "}
                               {isPickup ? "SIAPKAN" : "TERIMA"}
                             </button>
                           </>
@@ -655,6 +696,10 @@ export const MerchantOrders: React.FC<Props> = ({
                             <KeyRound size={16} className="animate-pulse" />{" "}
                             INPUT PIN
                           </button>
+                        ) : isCompleted ? (
+                          <div className="flex-1 md:flex-none px-6 py-3 font-black text-[11px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 bg-green-100 text-green-700">
+                            <CheckCircle2 size={16} /> SELESAI
+                          </div>
                         ) : (
                           <div
                             className={`flex-1 md:flex-none px-6 py-3 font-black text-[11px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 ${isCancelled ? "bg-red-100 text-red-500" : "bg-slate-100 text-slate-500"}`}
@@ -685,11 +730,7 @@ export const MerchantOrders: React.FC<Props> = ({
 const TabButton = ({ active, label, onClick, count }: any) => (
   <button
     onClick={onClick}
-    className={`flex-1 px-4 py-3 text-[11px] font-black uppercase tracking-widest transition-all rounded-lg flex items-center justify-center gap-2 ${
-      active
-        ? "bg-slate-900 text-white shadow-md"
-        : "text-slate-500 hover:bg-slate-200"
-    }`}
+    className={`flex-1 px-4 py-3 text-[11px] font-black uppercase tracking-widest transition-all rounded-lg flex items-center justify-center gap-2 ${active ? "bg-slate-900 text-white shadow-md" : "text-slate-500 hover:bg-slate-200"}`}
   >
     {label}
     {count !== undefined && count > 0 && (

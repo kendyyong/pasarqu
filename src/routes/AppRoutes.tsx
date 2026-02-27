@@ -15,6 +15,9 @@ import { LoginPage } from "../pages/auth/LoginPage";
 import { ForgotPasswordPage } from "../pages/auth/ForgotPasswordPage";
 import { UpdatePasswordPage } from "../pages/auth/UpdatePasswordPage";
 
+// 🚀 IMPORT WALLET PAGE (DOMPET DIGITAL)
+import { WalletPage } from "../pages/wallet/WalletPage";
+
 // --- IMPORT SECTIONS ---
 import { AuthRoutes } from "./sections/AuthRoutes";
 import { CustomerRoutes } from "./sections/CustomerRoutes";
@@ -45,8 +48,8 @@ export const AppRoutes = () => {
     "/register",
     "/verify-otp",
     "/complete-profile",
-    "/forgot-password", // 🚀 DITAMBAHKAN
-    "/update-password", // 🚀 DITAMBAHKAN
+    "/forgot-password",
+    "/update-password",
     "/terms",
     "/privacy",
     "/register-merchant",
@@ -63,6 +66,7 @@ export const AppRoutes = () => {
     "/order-history",
     "/settings/address",
     "/info",
+    "/wallet", // 🚀 DITAMBAHKAN AGAR KURIR/TOKO BISA BUKA DOMPET TANPA PILIH PASAR
   ];
 
   const isBypassRoute = bypassRoutes.some((route) =>
@@ -88,6 +92,9 @@ export const AppRoutes = () => {
       {/* 🚀 JALUR LUPA KATA SANDI */}
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/update-password" element={<UpdatePasswordPage />} />
+
+      {/* 🚀 JALUR DOMPET DIGITAL (WALLET) */}
+      <Route path="/wallet" element={<WalletPage />} />
 
       {/* --- PENGGABUNGAN SEMUA SEKSI RUTE --- */}
       {AuthRoutes()}
