@@ -1,6 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { GoogleMap, useJsApiLoader, MarkerF } from "@react-google-maps/api";
+import {
+  GoogleMap,
+  useJsApiLoader,
+  MarkerF,
+  DirectionsRenderer,
+} from "@react-google-maps/api";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
@@ -14,18 +19,16 @@ import {
   Wallet,
   MapPin,
   Download,
-  ShieldAlert,
   HeadphonesIcon,
   X,
   Star,
   MessageCircle,
-  Clock,
   QrCode,
   Store,
   ReceiptText,
   Gift,
   Ban,
-  Trash2, // 🚀 Ikon Tong Sampah Baru
+  Trash2,
 } from "lucide-react";
 import QRCode from "react-qr-code";
 import { OrderChatRoom } from "../../features/chat/OrderChatRoom";
@@ -33,6 +36,13 @@ import { ComplaintForm } from "../../components/shared/ComplaintForm";
 import { MobileLayout } from "../../components/layout/MobileLayout";
 
 const mapContainerStyle = { width: "100%", height: "100%" };
+
+// 🚀 IKON CUSTOM LEVEL PRO
+const ICONS = {
+  courier: "https://cdn-icons-png.flaticon.com/512/713/713438.png",
+  home: "https://cdn-icons-png.flaticon.com/512/1946/1946488.png",
+  store: "https://cdn-icons-png.flaticon.com/512/1055/1055672.png",
+};
 
 export const OrderTrackingPage = () => {
   const { user, profile } = useAuth() as any;
@@ -51,6 +61,10 @@ export const OrderTrackingPage = () => {
   >("merchant_customer");
   const [orderItems, setOrderItems] = useState<any[]>([]);
 
+  // RADAR ROUTING STATE
+  const [directions, setDirections] = useState<any>(null);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+
   // REVIEW STATE
   const [hasReviewed, setHasReviewed] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -59,9 +73,11 @@ export const OrderTrackingPage = () => {
   const [reviewComment, setReviewComment] = useState("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
-  const { isLoaded } = useJsApiLoader({
+  // 🚀 LOAD GOOGLE MAPS API DENGAN LIBRARIES DIRECTIONS
+  const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+    libraries: ["places", "routes"], // Penting untuk DirectionsService
   });
 
   const steps = [
@@ -101,61 +117,61 @@ export const OrderTrackingPage = () => {
     return -1;
   };
 
-  useEffect(() => {
-    const fetchFullData = async () => {
-      if (!orderId) return;
-      try {
-        setLoading(true);
-        const { data: orderData, error: orderErr } = await supabase
-          .from("orders")
-          .select("*, market:markets(name)")
-          .eq("id", orderId)
-          .maybeSingle();
+  const fetchFullData = useCallback(async () => {
+    if (!orderId) return;
+    try {
+      setLoading(true);
+      const { data: orderData, error: orderErr } = await supabase
+        .from("orders")
+        .select(
+          "*, market:markets(name), merchant:merchants(latitude, longitude)",
+        )
+        .eq("id", orderId)
+        .maybeSingle();
 
-        if (orderErr) throw orderErr;
-        if (!orderData) {
-          setOrder(null);
-          return;
-        }
-
-        setOrder(orderData);
-
-        const { data: rawItems, error: itemsErr } = await supabase
-          .from("order_items")
-          .select("*, product:products(name, image_url)")
-          .eq("order_id", orderId);
-
-        if (itemsErr) throw itemsErr;
-        if (rawItems) setOrderItems(rawItems);
-
-        if (orderData.courier_id) {
-          const { data: cData } = await supabase
-            .from("couriers")
-            .select("*")
-            .eq("id", orderData.courier_id)
-            .maybeSingle();
-          setCourier(cData);
-        }
-
-        const { data: reviewData } = await supabase
-          .from("reviews")
-          .select("id")
-          .eq("order_id", orderId)
-          .maybeSingle();
-        if (reviewData) setHasReviewed(true);
-      } catch (err: any) {
-        console.error("Tracking Fetch Error:", err.message);
-        showToast("GAGAL MEMUAT DATA PESANAN", "error");
-      } finally {
-        setLoading(false);
+      if (orderErr) throw orderErr;
+      if (!orderData) {
+        setOrder(null);
+        return;
       }
-    };
-    fetchFullData();
+      setOrder(orderData);
+
+      const { data: rawItems } = await supabase
+        .from("order_items")
+        .select("*, product:products(name, image_url)")
+        .eq("order_id", orderId);
+      if (rawItems) setOrderItems(rawItems);
+
+      if (orderData.courier_id) {
+        const { data: cData } = await supabase
+          .from("couriers")
+          .select("*")
+          .eq("id", orderData.courier_id)
+          .maybeSingle();
+        setCourier(cData);
+      }
+
+      const { data: reviewData } = await supabase
+        .from("reviews")
+        .select("id")
+        .eq("order_id", orderId)
+        .maybeSingle();
+      if (reviewData) setHasReviewed(true);
+    } catch (err: any) {
+      showToast("GAGAL MEMUAT DATA PESANAN", "error");
+    } finally {
+      setLoading(false);
+    }
   }, [orderId]);
 
   useEffect(() => {
+    fetchFullData();
+  }, [fetchFullData]);
+
+  // 🚀 SENSOR LIVE TRACKING ORDER & KURIR
+  useEffect(() => {
     if (!orderId) return;
-    const channel = supabase
+    const orderChannel = supabase
       .channel(`live-order-${orderId}`)
       .on(
         "postgres_changes",
@@ -168,10 +184,78 @@ export const OrderTrackingPage = () => {
         (payload) => setOrder(payload.new),
       )
       .subscribe();
+
+    let courierChannel: any = null;
+    if (order?.courier_id) {
+      courierChannel = supabase
+        .channel(`live-courier-${order.courier_id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "couriers",
+            filter: `id=eq.${order.courier_id}`,
+          },
+          (payload) => setCourier(payload.new),
+        )
+        .subscribe();
+    }
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(orderChannel);
+      if (courierChannel) supabase.removeChannel(courierChannel);
     };
-  }, [orderId]);
+  }, [orderId, order?.courier_id]);
+
+  // 🚀 ENGINE POLYLINE MAPS (GARIS RUTE CERDAS) - FIXED TYPESCRIPT ERROR
+  useEffect(() => {
+    if (!isLoaded || !order?.delivery_lat) return;
+
+    const calculateRoute = () => {
+      const directionsService = new window.google.maps.DirectionsService();
+      let origin: google.maps.LatLng | null = null;
+      let destination = new window.google.maps.LatLng(
+        order.delivery_lat,
+        order.delivery_lng,
+      );
+
+      // Jika kurir sudah ada, origin adalah posisi kurir. Jika belum, origin adalah toko.
+      if (courier?.current_lat && courier?.current_lng) {
+        origin = new window.google.maps.LatLng(
+          courier.current_lat,
+          courier.current_lng,
+        );
+      } else if (order?.merchant?.latitude && order?.merchant?.longitude) {
+        origin = new window.google.maps.LatLng(
+          order.merchant.latitude,
+          order.merchant.longitude,
+        );
+      }
+
+      if (origin) {
+        directionsService.route(
+          {
+            origin,
+            destination,
+            // Menggunakan DRIVING yang 100% didukung TS Google Maps
+            travelMode: window.google.maps.TravelMode.DRIVING,
+          },
+          (result, status) => {
+            if (status === window.google.maps.DirectionsStatus.OK)
+              setDirections(result);
+          },
+        );
+      }
+    };
+
+    calculateRoute();
+  }, [
+    isLoaded,
+    courier?.current_lat,
+    order?.delivery_lat,
+    order?.merchant?.latitude,
+  ]);
 
   const handleSubmitReview = async () => {
     if (rating === 0) return showToast("PILIH JUMLAH BINTANG!", "error");
@@ -214,19 +298,15 @@ export const OrderTrackingPage = () => {
     }
   };
 
-  // 🚀 FUNGSI HAPUS DARI RIWAYAT (SOFT DELETE)
   const handleHideOrderFromDetail = () => {
     if (!window.confirm("Hapus pesanan ini dari riwayat belanja Anda?")) return;
-
-    // Ambil data lama, tambah ID baru, simpan kembali
     const currentHidden = JSON.parse(
       localStorage.getItem("hidden_orders") || "[]",
     );
     const updatedHidden = [...currentHidden, orderId];
     localStorage.setItem("hidden_orders", JSON.stringify(updatedHidden));
-
     showToast("Pesanan telah dihapus dari riwayat.", "success");
-    navigate("/order-history"); // Kembali ke riwayat
+    navigate("/order-history");
   };
 
   if (loading)
@@ -234,7 +314,7 @@ export const OrderTrackingPage = () => {
       <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-[100] gap-4 font-black">
         <Loader2 className="animate-spin text-[#008080]" size={32} />
         <p className="text-[12px] tracking-widest uppercase text-slate-400">
-          SINGKRONISASI DATA...
+          MEMUAT RADAR...
         </p>
       </div>
     );
@@ -246,6 +326,11 @@ export const OrderTrackingPage = () => {
     order?.status === "PENDING";
   const isFinished =
     order?.status === "COMPLETED" || order?.status === "CANCELLED";
+
+  // DEFAULT PUSAT PETA JIKA DATA BELUM LENGKAP
+  const defaultCenter = order?.delivery_lat
+    ? { lat: order.delivery_lat, lng: order.delivery_lng }
+    : { lat: -6.2, lng: 106.8 };
 
   return (
     <MobileLayout
@@ -281,7 +366,6 @@ export const OrderTrackingPage = () => {
                 </span>
               </div>
             </div>
-
             <div className="flex items-center gap-2">
               <div
                 className={`px-3 py-1.5 rounded-md text-[10px] font-black shadow-sm ${order?.status === "COMPLETED" ? "bg-green-500 text-white" : order?.status === "CANCELLED" ? "bg-white text-red-600" : "bg-[#FF6600] text-white animate-pulse"}`}
@@ -289,13 +373,10 @@ export const OrderTrackingPage = () => {
                 {statusMap[order?.shipping_status || order?.status] ||
                   "MEMPROSES"}
               </div>
-
-              {/* 🚀 TOMBOL TRASH DI HEADER (HANYA JIKA SELESAI/BATAL) */}
               {isFinished && (
                 <button
                   onClick={handleHideOrderFromDetail}
                   className="p-2 bg-white/20 text-white hover:bg-red-500 rounded-md transition-all shadow-sm"
-                  title="Hapus dari Riwayat"
                 >
                   <Trash2 size={18} strokeWidth={3} />
                 </button>
@@ -305,34 +386,74 @@ export const OrderTrackingPage = () => {
         </header>
 
         <main className="flex-1 w-full max-w-[1200px] mx-auto p-4 pb-32 grid grid-cols-1 md:grid-cols-12 gap-5">
-          {/* BAGIAN KIRI */}
+          {/* BAGIAN KIRI (PETA RADAR PRO) */}
           <div className="md:col-span-7 space-y-5">
-            {order?.status !== "CANCELLED" && (
-              <div className="h-[300px] md:h-[450px] bg-white rounded-md border border-slate-200 shadow-sm overflow-hidden relative">
-                {isLoaded ? (
+            {order?.status !== "CANCELLED" && !isPickup && (
+              <div className="h-[350px] md:h-[450px] bg-slate-200 rounded-md border border-slate-200 shadow-sm overflow-hidden relative">
+                {loadError ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-red-500">
+                    <MapPin size={32} />
+                    <p>GAGAL MEMUAT PETA</p>
+                  </div>
+                ) : !isLoaded ? (
+                  <div className="w-full h-full flex items-center justify-center bg-slate-100 animate-pulse text-[#008080]">
+                    MEMANASKAN RADAR...
+                  </div>
+                ) : (
                   <GoogleMap
                     mapContainerStyle={mapContainerStyle}
-                    center={
-                      courier?.current_lat
-                        ? { lat: courier.current_lat, lng: courier.current_lng }
-                        : {
-                            lat: order?.delivery_lat || -6.2,
-                            lng: order?.delivery_lng || 106.8,
-                          }
-                    }
+                    center={defaultCenter}
                     zoom={15}
                     options={{
                       disableDefaultUI: true,
                       gestureHandling: "greedy",
+                      mapId: "PASARQU_MAP",
                     }}
+                    onLoad={(map) => setMapInstance(map)}
                   >
-                    <MarkerF
-                      position={{
-                        lat: order?.delivery_lat || -6.2,
-                        lng: order?.delivery_lng || 106.8,
-                      }}
-                      label="TUJUAN"
-                    />
+                    {/* GARIS RUTE */}
+                    {directions && (
+                      <DirectionsRenderer
+                        directions={directions}
+                        options={{
+                          suppressMarkers: true,
+                          polylineOptions: {
+                            strokeColor: "#008080",
+                            strokeWeight: 5,
+                          },
+                        }}
+                      />
+                    )}
+
+                    {/* LOKASI TOKO */}
+                    {!courier?.current_lat && order?.merchant?.latitude && (
+                      <MarkerF
+                        position={{
+                          lat: order.merchant.latitude,
+                          lng: order.merchant.longitude,
+                        }}
+                        icon={{
+                          url: ICONS.store,
+                          scaledSize: new window.google.maps.Size(40, 40),
+                        }}
+                      />
+                    )}
+
+                    {/* LOKASI PEMBELI */}
+                    {order?.delivery_lat && (
+                      <MarkerF
+                        position={{
+                          lat: order.delivery_lat,
+                          lng: order.delivery_lng,
+                        }}
+                        icon={{
+                          url: ICONS.home,
+                          scaledSize: new window.google.maps.Size(40, 40),
+                        }}
+                      />
+                    )}
+
+                    {/* LOKASI KURIR BERGERAK */}
                     {courier?.current_lat && (
                       <MarkerF
                         position={{
@@ -340,21 +461,30 @@ export const OrderTrackingPage = () => {
                           lng: courier.current_lng,
                         }}
                         icon={{
-                          url: "https://cdn-icons-png.flaticon.com/512/713/713438.png",
-                          scaledSize: new google.maps.Size(40, 40),
+                          url: ICONS.courier,
+                          scaledSize: new window.google.maps.Size(50, 50),
                         }}
+                        zIndex={999}
                       />
                     )}
                   </GoogleMap>
-                ) : (
-                  <div className="w-full h-full bg-slate-100 flex items-center justify-center">
-                    MEMUAT RADAR...
-                  </div>
                 )}
+
+                {/* OVERLAY STATUS RADAR */}
+                <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-md px-3 py-2 rounded-md shadow-md flex items-center gap-2 border border-slate-200">
+                  <div
+                    className={`w-2.5 h-2.5 rounded-full animate-pulse ${courier?.current_lat ? "bg-green-500" : "bg-orange-500"}`}
+                  ></div>
+                  <span className="text-[10px] tracking-widest">
+                    {courier?.current_lat
+                      ? "KURIR TERDETEKSI"
+                      : "MENUNGGU KURIR"}
+                  </span>
+                </div>
               </div>
             )}
 
-            {/* STATUS DIBATALKAN DENGAN TOMBOL HAPUS */}
+            {/* STATUS DIBATALKAN */}
             {order?.status === "CANCELLED" && (
               <section className="bg-red-50 p-8 rounded-md border-2 border-red-500 shadow-sm flex flex-col items-center text-center">
                 <Ban size={48} className="text-red-500 mb-4" />
@@ -365,8 +495,6 @@ export const OrderTrackingPage = () => {
                   Pesanan ini telah dibatalkan. Dana (jika ada) telah
                   dikembalikan 100% ke dompet PasarQu Pay Anda.
                 </p>
-
-                {/* 🚀 TOMBOL AKSI HAPUS DI BANNER */}
                 <button
                   onClick={handleHideOrderFromDetail}
                   className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-md font-black text-[12px] uppercase shadow-lg active:scale-95 transition-all"
@@ -376,6 +504,7 @@ export const OrderTrackingPage = () => {
               </section>
             )}
 
+            {/* SEKSI AMBIL SENDIRI */}
             {isPickup &&
               order?.status !== "COMPLETED" &&
               order?.status !== "CANCELLED" && (
@@ -403,6 +532,7 @@ export const OrderTrackingPage = () => {
                 </section>
               )}
 
+            {/* TIMELINE PESANAN */}
             {order?.status !== "CANCELLED" && (
               <section className="bg-white p-6 rounded-md border border-slate-200 shadow-sm">
                 <div className="flex justify-between items-center relative">
@@ -415,12 +545,12 @@ export const OrderTrackingPage = () => {
                         className="relative z-10 flex flex-col items-center w-1/4"
                       >
                         <div
-                          className={`w-10 h-10 rounded-md flex items-center justify-center border-2 transition-all ${isActive ? "bg-[#008080] border-[#008080] text-white shadow-md" : "bg-white border-slate-100 text-slate-200"}`}
+                          className={`w-10 h-10 rounded-md flex items-center justify-center border-2 transition-all ${isActive ? "bg-[#008080] border-[#008080] text-white shadow-md scale-110" : "bg-white border-slate-100 text-slate-200"}`}
                         >
                           <step.icon size={18} />
                         </div>
                         <span
-                          className={`text-[9px] mt-2 font-black leading-none text-center ${isActive ? "text-[#008080]" : "text-slate-300"}`}
+                          className={`text-[9px] mt-2 font-black leading-none text-center transition-colors ${isActive ? "text-[#008080]" : "text-slate-300"}`}
                         >
                           {step.label}
                         </span>
@@ -432,7 +562,7 @@ export const OrderTrackingPage = () => {
             )}
           </div>
 
-          {/* BAGIAN KANAN */}
+          {/* BAGIAN KANAN (DETAIL, ALAMAT, TOTAL) */}
           <div className="md:col-span-5 space-y-5 text-left">
             <section className="bg-white p-5 rounded-md border border-slate-200 shadow-sm">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
@@ -451,8 +581,8 @@ export const OrderTrackingPage = () => {
                       <div className="w-10 h-10 bg-slate-100 rounded-md overflow-hidden shrink-0 border border-slate-200">
                         <img
                           src={item.product?.image_url}
-                          alt=""
                           className="w-full h-full object-cover"
+                          alt="Product"
                         />
                       </div>
                       <span className="truncate uppercase">
@@ -532,6 +662,7 @@ export const OrderTrackingPage = () => {
               </div>
             </section>
 
+            {/* TOMBOL ACTION BAWAH (Chat, Bantuan, PDF, Nilai) */}
             <div className="grid grid-cols-1 gap-3">
               {order?.shipping_status === "COMPLETED" && !hasReviewed && (
                 <button
@@ -589,7 +720,7 @@ export const OrderTrackingPage = () => {
           </div>
         </main>
 
-        {/* MODALS */}
+        {/* MODAL AREA */}
         {showReviewModal && (
           <div className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-md p-6 shadow-2xl relative animate-in zoom-in-95">
@@ -599,7 +730,7 @@ export const OrderTrackingPage = () => {
               >
                 <X size={20} />
               </button>
-              <h2 className="text-[14px] font-black text-slate-800 uppercase mb-6 text-center tracking-widest uppercase">
+              <h2 className="text-[14px] font-black text-slate-800 uppercase mb-6 text-center tracking-widest">
                 PENILAIAN PESANAN
               </h2>
               <div className="flex justify-center gap-2 mb-6">
@@ -652,7 +783,7 @@ export const OrderTrackingPage = () => {
             <div className="w-full max-w-md h-[85vh] bg-white rounded-md flex flex-col shadow-2xl overflow-hidden">
               <div className="p-4 flex justify-between items-center bg-[#008080] text-white">
                 <div className="text-left">
-                  <p className="text-[14px] font-black uppercase tracking-widest uppercase">
+                  <p className="text-[14px] font-black uppercase tracking-widest">
                     CHAT KURIR
                   </p>
                 </div>
@@ -679,7 +810,7 @@ export const OrderTrackingPage = () => {
             <div className="relative w-full max-w-lg bg-white rounded-md p-4 animate-in zoom-in">
               <button
                 onClick={() => setShowSupportModal(false)}
-                className="absolute -top-10 right-0 flex items-center gap-2 text-white font-black text-[11px] uppercase uppercase"
+                className="absolute -top-10 right-0 flex items-center gap-2 text-white font-black text-[11px] uppercase"
               >
                 <X size={18} /> TUTUP
               </button>
