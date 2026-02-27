@@ -51,7 +51,14 @@ export const CustomerDashboard = () => {
   const [latestCanceledOrder, setLatestCanceledOrder] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  // 🚀 STATE PERMANENT CLOSE: Menyimpan daftar ID pesanan yang sudah ditutup notifikasinya
+  // 🚀 STATE PINTAR: Menyimpan data order per kategori
+  const [categorizedOrders, setCategorizedOrders] = useState({
+    unpaid: [] as any[],
+    packing: [] as any[],
+    delivering: [] as any[],
+    reviewable: [] as any[],
+  });
+
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("dismissed_alerts") || "[]");
@@ -72,10 +79,11 @@ export const CustomerDashboard = () => {
   const fetchOrderStats = async () => {
     setLoading(true);
     try {
+      // 🚀 FIX LOGIKA ULASAN: Kita tambahkan "reviews(id)" untuk mengecek apakah order ini sudah diulas
       const { data: orders, error } = await supabase
         .from("orders")
         .select(
-          "id, status, shipping_status, total_price, created_at, used_balance",
+          "id, status, shipping_status, total_price, created_at, used_balance, reviews(id)",
         )
         .eq("customer_id", user?.id)
         .order("created_at", { ascending: false });
@@ -83,38 +91,49 @@ export const CustomerDashboard = () => {
       if (error) throw error;
 
       if (orders) {
+        // PENGELOMPOKAN PINTAR
+        const unpaid = orders.filter(
+          (o: any) =>
+            (o.status === "UNPAID" || o.status === "PROCESSING") &&
+            o.status !== "CANCELLED",
+        );
+        const packing = orders.filter(
+          (o: any) =>
+            (o.shipping_status === "PACKING" ||
+              o.shipping_status === "READY_TO_PICKUP" ||
+              o.status === "PACKING") &&
+            o.status !== "CANCELLED",
+        );
+        const delivering = orders.filter(
+          (o: any) =>
+            (o.shipping_status === "SHIPPING" ||
+              o.shipping_status === "DELIVERING") &&
+            o.status !== "CANCELLED",
+        );
+
+        // 🚀 FIX: HANYA MENGHITUNG PESANAN SELESAI YANG "BELUM DIULAS" (Array reviews kosong)
+        const reviewable = orders.filter(
+          (o: any) =>
+            (o.shipping_status === "COMPLETED" || o.status === "COMPLETED") &&
+            (!o.reviews || o.reviews.length === 0),
+        );
+
+        setCategorizedOrders({ unpaid, packing, delivering, reviewable });
         setStats({
-          unpaid: orders.filter(
-            (o: any) =>
-              (o.status === "UNPAID" || o.status === "PROCESSING") &&
-              o.status !== "CANCELLED",
-          ).length,
-          packing: orders.filter(
-            (o: any) =>
-              (o.shipping_status === "PACKING" ||
-                o.shipping_status === "READY_TO_PICKUP" ||
-                o.status === "PACKING") &&
-              o.status !== "CANCELLED",
-          ).length,
-          delivering: orders.filter(
-            (o: any) =>
-              (o.shipping_status === "SHIPPING" ||
-                o.shipping_status === "DELIVERING") &&
-              o.status !== "CANCELLED",
-          ).length,
-          reviewable: orders.filter(
-            (o: any) => o.shipping_status === "COMPLETED",
-          ).length,
+          unpaid: unpaid.length,
+          packing: packing.length,
+          delivering: delivering.length,
+          reviewable: reviewable.length,
         });
 
-        // FILTER PESANAN AKTIF (BUKAN BATAL & BUKAN SELESAI)
         const ongoing = orders.filter(
           (o: any) =>
-            o.shipping_status !== "COMPLETED" && o.status !== "CANCELLED",
+            o.shipping_status !== "COMPLETED" &&
+            o.status !== "COMPLETED" &&
+            o.status !== "CANCELLED",
         );
         setActiveOrders(ongoing);
 
-        // FILTER BANNER BATAL (HANYA YANG BELUM PERNAH DI-CLOSE)
         const canceled = orders.filter(
           (o: any) =>
             o.status === "CANCELLED" && !dismissedAlerts.includes(o.id),
@@ -150,11 +169,8 @@ export const CustomerDashboard = () => {
 
   const handleLogout = async () => {
     try {
-      if (logout) {
-        await logout();
-      } else {
-        await supabase.auth.signOut();
-      }
+      if (logout) await logout();
+      else await supabase.auth.signOut();
       showToast("BERHASIL KELUAR", "success");
       navigate("/login");
     } catch (error) {
@@ -175,7 +191,6 @@ export const CustomerDashboard = () => {
     setDismissedAlerts(newDismissed);
     localStorage.setItem("dismissed_alerts", JSON.stringify(newDismissed));
     setLatestCanceledOrder(null);
-    showToast("NOTIFIKASI DIBERSIHKAN", "info");
   };
 
   const getStepForOrder = (order: any) => {
@@ -191,6 +206,17 @@ export const CustomerDashboard = () => {
     )
       return 1;
     return 0;
+  };
+
+  const handleSmartNavigation = (
+    category: "unpaid" | "packing" | "delivering" | "reviewable",
+  ) => {
+    const targets = categorizedOrders[category];
+    if (targets && targets.length > 0) {
+      navigate(`/track-order/${targets[0].id}`);
+    } else {
+      navigate("/order-history");
+    }
   };
 
   return (
@@ -245,7 +271,7 @@ export const CustomerDashboard = () => {
           {latestCanceledOrder && (
             <div
               onClick={() => navigate(`/track-order/${latestCanceledOrder.id}`)}
-              className="w-full bg-red-50 border-2 border-red-500 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 cursor-pointer relative animate-in slide-in-from-top-4 shadow-lg shadow-red-500/10"
+              className="w-full bg-red-50 border-2 border-red-500 rounded-2xl p-4 flex items-center justify-between gap-4 cursor-pointer relative animate-in slide-in-from-top-4 shadow-lg shadow-red-500/10"
             >
               <button
                 onClick={(e) => handleDismissAlert(e, latestCanceledOrder.id)}
@@ -262,7 +288,7 @@ export const CustomerDashboard = () => {
                     <AlertTriangle size={14} /> PESANAN DIBATALKAN
                   </h3>
                   <p className="text-[10px] font-bold text-red-500/80 leading-snug uppercase">
-                    ID: #{latestCanceledOrder.id.slice(0, 8)} DITOLAK TOKO.{" "}
+                    ID: #{latestCanceledOrder.id.slice(0, 8)}.{" "}
                     {latestCanceledOrder.used_balance > 0
                       ? "DANA DIKEMBALIKAN."
                       : "CEK DETAIL."}
@@ -402,32 +428,37 @@ export const CustomerDashboard = () => {
                   </div>
                   <div className="p-8 flex justify-between items-center gap-2 relative">
                     <div className="absolute top-1/2 left-10 right-10 h-[2px] bg-slate-100 -translate-y-4 z-0 hidden md:block"></div>
+
                     <StatusNode
                       icon={<Wallet size={20} />}
-                      count={getStepForOrder(activeOrders[0]) >= 0 ? 1 : 0}
+                      count={stats.unpaid}
                       label="Bayar"
                       isActive={getStepForOrder(activeOrders[0]) === 0}
+                      onClick={() => handleSmartNavigation("unpaid")}
                     />
                     <StatusNode
                       icon={<Package size={20} />}
-                      count={getStepForOrder(activeOrders[0]) >= 1 ? 1 : 0}
+                      count={stats.packing}
                       label="Kemas"
                       isActive={getStepForOrder(activeOrders[0]) === 1}
+                      onClick={() => handleSmartNavigation("packing")}
                     />
                     <StatusNode
                       icon={<Truck size={20} />}
-                      count={getStepForOrder(activeOrders[0]) >= 2 ? 1 : 0}
+                      count={stats.delivering}
                       label="Kirim"
                       isActive={getStepForOrder(activeOrders[0]) === 2}
+                      onClick={() => handleSmartNavigation("delivering")}
                     />
                     <StatusNode
                       icon={<MessageSquare size={20} />}
-                      count={0}
+                      count={stats.reviewable}
                       label="Ulasan"
+                      onClick={() => handleSmartNavigation("reviewable")}
                     />
                   </div>
                   <div
-                    className="p-4 bg-orange-50 border-t border-orange-100 flex items-center justify-between cursor-pointer group"
+                    className="p-4 bg-orange-50 border-t border-orange-100 flex items-center justify-between cursor-pointer group hover:bg-orange-100 transition-colors"
                     onClick={() =>
                       navigate(`/track-order/${activeOrders[0].id}`)
                     }
@@ -516,7 +547,7 @@ export const CustomerDashboard = () => {
                 </section>
               )}
 
-              {/* MODE 3: SUMMARY IDLE (0 PESANAN) */}
+              {/* MODE 3: SUMMARY IDLE (0 PESANAN AKTIF) */}
               {activeOrders.length === 0 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                   <div className="bg-slate-50 p-4 border-b border-slate-100 flex justify-between items-center">
@@ -532,29 +563,30 @@ export const CustomerDashboard = () => {
                   </div>
                   <div className="p-6 flex justify-between items-center gap-2 relative">
                     <div className="absolute top-1/2 left-10 right-10 h-[2px] bg-slate-100 -translate-y-4 z-0 hidden md:block"></div>
+
                     <StatusNode
                       icon={<Wallet size={20} />}
                       count={stats.unpaid}
                       label="Bayar"
-                      onClick={() => navigate("/order-history")}
+                      onClick={() => handleSmartNavigation("unpaid")}
                     />
                     <StatusNode
                       icon={<Package size={20} />}
                       count={stats.packing}
                       label="Kemas"
-                      onClick={() => navigate("/order-history")}
+                      onClick={() => handleSmartNavigation("packing")}
                     />
                     <StatusNode
                       icon={<Truck size={20} />}
                       count={stats.delivering}
                       label="Kirim"
-                      onClick={() => navigate("/order-history")}
+                      onClick={() => handleSmartNavigation("delivering")}
                     />
                     <StatusNode
                       icon={<MessageSquare size={20} />}
                       count={stats.reviewable}
                       label="Ulasan"
-                      onClick={() => navigate("/order-history")}
+                      onClick={() => handleSmartNavigation("reviewable")}
                     />
                   </div>
                 </div>
@@ -666,15 +698,5 @@ const MenuRow = ({ icon, label, onClick }: any) => (
     />
   </button>
 );
-
-const statusMap: any = {
-  UNPAID: "BELUM BAYAR",
-  PROCESSING: "SEDANG DISIAPKAN",
-  READY_TO_PICKUP: "SIAP DIAMBIL",
-  SHIPPING: "DIKIRIM",
-  DELIVERING: "MENUJU LOKASI",
-  COMPLETED: "SELESAI",
-  CANCELLED: "BATAL",
-};
 
 export default CustomerDashboard;

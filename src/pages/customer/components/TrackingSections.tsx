@@ -29,11 +29,7 @@ export const TrackingMap = ({
       mapContainerStyle={{ width: "100%", height: "100%" }}
       center={center}
       zoom={15}
-      options={{
-        disableDefaultUI: true,
-        gestureHandling: "greedy",
-        mapId: "PASARQU_MAP",
-      }}
+      options={{ disableDefaultUI: true, gestureHandling: "greedy" }}
     >
       {directions && (
         <DirectionsRenderer
@@ -44,7 +40,9 @@ export const TrackingMap = ({
           }}
         />
       )}
-      {order?.merchant?.latitude && (
+
+      {/* 🚀 FIX: JIKA TOKO TIDAK PUNYA KOORDINAT, GUNAKAN KOORDINAT PASAR DARI SUPER ADMIN */}
+      {order?.merchant?.latitude ? (
         <MarkerF
           position={{
             lat: order.merchant.latitude,
@@ -55,7 +53,16 @@ export const TrackingMap = ({
             scaledSize: new window.google.maps.Size(40, 40),
           }}
         />
-      )}
+      ) : order?.market?.latitude ? (
+        <MarkerF
+          position={{ lat: order.market.latitude, lng: order.market.longitude }}
+          icon={{
+            url: ICONS.store,
+            scaledSize: new window.google.maps.Size(40, 40),
+          }}
+        />
+      ) : null}
+
       {order?.delivery_lat && (
         <MarkerF
           position={{ lat: order.delivery_lat, lng: order.delivery_lng }}
