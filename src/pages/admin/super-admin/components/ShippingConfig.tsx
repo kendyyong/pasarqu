@@ -11,6 +11,10 @@ import {
   RefreshCw,
   ShoppingBag,
   Store,
+  AlertTriangle,
+  ShieldAlert,
+  Landmark,
+  TicketPercent,
 } from "lucide-react";
 
 export const ShippingConfig: React.FC<any> = ({ theme }) => {
@@ -23,8 +27,6 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
   const [simStops, setSimStops] = useState(1);
   const [simSurge, setSimSurge] = useState(false);
   const [simBelanja, setSimBelanja] = useState(600000);
-
-  // 🚀 BARU: State untuk memilih Tipe Toko di Simulator (Reguler / Sembako)
   const [simTipeToko, setSimTipeToko] = useState<"REGULER" | "SEMBAKO">(
     "REGULER",
   );
@@ -62,6 +64,7 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
               price_per_km: 2000,
               app_fee_percent: 20,
               buyer_service_fee: 2000,
+              handling_fee: 1000, // Biaya Penanganan
               seller_admin_fee_percent: 5,
               sembako_admin_fee_percent: 2,
               qris_threshold: 500000,
@@ -69,6 +72,8 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
               multi_stop_fee: 2000,
               multi_stop_app_share: 1000,
               surge_fee: 0,
+              free_shipping_min_order: 150000, // Batas Gratis Ongkir
+              tax_percent: 0, // PPN
               is_new: true,
             }
           );
@@ -113,6 +118,7 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
         price_per_km: Number(rate.price_per_km),
         app_fee_percent: Number(rate.app_fee_percent),
         buyer_service_fee: Number(rate.buyer_service_fee),
+        handling_fee: Number(rate.handling_fee || 0),
         seller_admin_fee_percent: Number(rate.seller_admin_fee_percent),
         sembako_admin_fee_percent: Number(rate.sembako_admin_fee_percent || 0),
         qris_threshold: Number(rate.qris_threshold || 500000),
@@ -121,6 +127,8 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
         multi_stop_courier_share: Number(rate.multi_stop_courier_share || 0),
         multi_stop_app_share: Number(rate.multi_stop_app_share),
         surge_fee: Number(rate.surge_fee),
+        free_shipping_min_order: Number(rate.free_shipping_min_order || 0),
+        tax_percent: Number(rate.tax_percent || 0),
       };
 
       const { data: existing } = await supabase
@@ -165,12 +173,16 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
         admin_toko_net: 0,
         total_potongan_toko: 0,
         persen_toko_aktif: 0,
+        user_pay_shipping: 0,
+        app_subsidy: 0,
+        tax_amount: 0,
       };
 
     const r = selectedRate;
     const extraStops = simStops > 1 ? simStops - 1 : 0;
+    const belanja = Number(simBelanja);
 
-    // --- 1. ONGKIR & KURIR (SAMA SEKALI TIDAK TERPENGARUH QRIS) ---
+    // --- 1. ONGKIR ASLI & KURIR ---
     let distCost = 0;
     if (simDist <= r.base_distance_km) {
       distCost = Number(r.base_fare);
@@ -183,51 +195,69 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
     const totalExtraAppShare = extraStops * Number(r.multi_stop_app_share || 0);
     const surgeCost = simSurge ? Number(r.surge_fee || 0) : 0;
 
-    const totalOngkirKeUser = distCost + totalExtraFeeKurir;
+    const realShippingCost = distCost + totalExtraFeeKurir + surgeCost;
     const appCutFromBase = distCost * (Number(r.app_fee_percent) / 100);
 
-    // Kurir tetap dapat full haknya, tidak ada sangkut paut dengan QRIS
     const courierNet = distCost - appCutFromBase + totalExtraFeeKurir;
 
-    // --- 2. LOGIKA ADMIN TOKO VS QRIS ---
-    const belanja = Number(simBelanja);
+    // --- 2. LOGIKA SUBSIDI GRATIS ONGKIR ---
+    let userPayShipping = realShippingCost;
+    let appSubsidy = 0;
+
+    if (
+      Number(r.free_shipping_min_order) > 0 &&
+      belanja >= Number(r.free_shipping_min_order)
+    ) {
+      userPayShipping = 0;
+      appSubsidy = realShippingCost;
+    }
+
+    // --- 3. LOGIKA ADMIN TOKO VS QRIS ---
     const qrisThreshold = Number(r.qris_threshold || 500000);
     const qrisPercent = Number(r.qris_fee_percent || 0.7);
 
-    // Ambil persen admin berdasarkan Tipe Toko yang dipilih di Simulator
     const adminPercent =
       simTipeToko === "REGULER"
         ? Number(r.seller_admin_fee_percent || 5)
         : Number(r.sembako_admin_fee_percent || 2);
 
-    // Hitung total potongan toko normal
     const totalPotonganToko = belanja * (adminPercent / 100);
 
     let qrisFee = 0;
     let pasarquAdminTokoNet = totalPotonganToko;
 
-    // Jika melewati batas belanja, QRIS "memakan" sedikit margin PasarQu dari potongan toko
     if (belanja >= qrisThreshold) {
       qrisFee = belanja * (qrisPercent / 100);
       pasarquAdminTokoNet = totalPotonganToko - qrisFee;
     }
 
-    // --- TOTAL PROFIT APP KESELURUHAN ---
-    const totalAppProfit =
-      appCutFromBase + // Dari potongan ongkir
-      Number(r.buyer_service_fee) + // Dari biaya layanan user
-      totalExtraAppShare + // Dari ekstra titik (hak app)
-      surgeCost + // Dari surge fee
-      pasarquAdminTokoNet; // Dari potongan toko (SETELAH dikurangi QRIS)
+    // --- 4. REVENUE & PAJAK ENGINE ---
+    const handlingFee = Number(r.handling_fee || 0);
+    const serviceFee = Number(r.buyer_service_fee || 0);
+
+    const grossAppRevenue =
+      appCutFromBase +
+      serviceFee +
+      handlingFee +
+      totalExtraAppShare +
+      surgeCost +
+      pasarquAdminTokoNet;
+
+    const taxAmount = grossAppRevenue * (Number(r.tax_percent || 0) / 100);
+
+    const totalAppProfit = grossAppRevenue - taxAmount - appSubsidy;
 
     return {
-      total_ongkir: totalOngkirKeUser,
+      total_ongkir: realShippingCost,
+      user_pay_shipping: userPayShipping,
+      app_subsidy: appSubsidy,
       courier_net: courierNet,
       app_profit: totalAppProfit,
       total_potongan_toko: totalPotonganToko,
       qris_fee: qrisFee,
       admin_toko_net: pasarquAdminTokoNet,
       persen_toko_aktif: adminPercent,
+      tax_amount: taxAmount,
     };
   };
 
@@ -246,10 +276,10 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
       <div className="flex flex-col md:flex-row justify-between items-end mb-10 gap-4 border-b-4 border-slate-200 pb-6">
         <div>
           <h1 className="text-[28px] font-[1000] flex items-center gap-3 text-slate-800 tracking-wider">
-            <Truck className="text-[#008080]" size={36} /> LOGISTICS ENGINE
+            <Truck className="text-[#008080]" size={36} /> LOGISTICS ENGINE PRO
           </h1>
           <p className="text-[12px] tracking-[0.2em] mt-2 text-slate-500">
-            KONTROL TARIF DISTRIK & BAGI HASIL APLIKASI
+            KONTROL TARIF, SUBSIDI ONGKIR, & PAJAK PPN
           </p>
         </div>
         <button
@@ -300,17 +330,31 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                 </button>
               </div>
 
-              {/* INPUT PENGATURAN UMUM */}
+              {/* FORM PENGATURAN UMUM */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <InputGroup
-                  label="LAYANAN PEMBELI"
-                  value={rate.buyer_service_fee}
-                  onChange={(v: any) =>
-                    handleUpdate(rate.district_name, "buyer_service_fee", v)
-                  }
-                  icon="RP"
-                  isService
-                />
+                {/* 🚀 LAYER 1: PENDAPATAN DARI PEMBELI */}
+                <div className="col-span-2 md:col-span-4 bg-teal-50 p-4 rounded-md border border-teal-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <InputGroup
+                    label="LAYANAN PEMBELI"
+                    value={rate.buyer_service_fee}
+                    onChange={(v: any) =>
+                      handleUpdate(rate.district_name, "buyer_service_fee", v)
+                    }
+                    icon="RP"
+                    isService
+                  />
+                  <InputGroup
+                    label="HANDLING FEE (BIAYA PENANGANAN)"
+                    value={rate.handling_fee}
+                    onChange={(v: any) =>
+                      handleUpdate(rate.district_name, "handling_fee", v)
+                    }
+                    icon="RP"
+                    isService
+                  />
+                </div>
+
+                {/* LAYER 2: ONGKIR */}
                 <InputGroup
                   label="ONGKIR DASAR"
                   value={rate.base_fare}
@@ -320,34 +364,104 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                   icon="RP"
                 />
                 <InputGroup
-                  label="ADMIN TOKO (%)"
-                  value={rate.seller_admin_fee_percent}
+                  label="POTONG ONGKIR (%)"
+                  value={rate.app_fee_percent}
                   onChange={(v: any) =>
-                    handleUpdate(
-                      rate.district_name,
-                      "seller_admin_fee_percent",
-                      v,
-                    )
+                    handleUpdate(rate.district_name, "app_fee_percent", v)
                   }
                   unit="%"
-                  isAdmin
                 />
                 <InputGroup
-                  label="ADMIN SEMBAKO (%)"
-                  value={rate.sembako_admin_fee_percent}
+                  label="JARAK DASAR"
+                  value={rate.base_distance_km}
                   onChange={(v: any) =>
-                    handleUpdate(
-                      rate.district_name,
-                      "sembako_admin_fee_percent",
-                      v,
-                    )
+                    handleUpdate(rate.district_name, "base_distance_km", v)
                   }
-                  unit="%"
-                  isSurge
+                  unit="KM"
+                />
+                <InputGroup
+                  label="HARGA / KM"
+                  value={rate.price_per_km}
+                  onChange={(v: any) =>
+                    handleUpdate(rate.district_name, "price_per_km", v)
+                  }
+                  icon="RP"
                 />
 
-                {/* 🚀 INPUT PENGATURAN QRIS */}
-                <div className="col-span-2 md:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-5 bg-orange-50 p-5 rounded-md border border-orange-200 mt-2 shadow-inner">
+                {/* 🚀 LAYER 3: ADMIN TOKO DENGAN WARNING */}
+                <div className="col-span-2 md:col-span-4 bg-orange-50 p-4 rounded-md border border-orange-200 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                  <InputGroup
+                    label="ADMIN TOKO REGULER (%)"
+                    value={rate.seller_admin_fee_percent}
+                    onChange={(v: any) =>
+                      handleUpdate(
+                        rate.district_name,
+                        "seller_admin_fee_percent",
+                        v,
+                      )
+                    }
+                    unit="%"
+                    isAdmin
+                    warningCondition={rate.seller_admin_fee_percent > 10}
+                    warningText="Persentase tinggi! Seller berpotensi komplain."
+                  />
+                  <InputGroup
+                    label="ADMIN TOKO SEMBAKO (%)"
+                    value={rate.sembako_admin_fee_percent}
+                    onChange={(v: any) =>
+                      handleUpdate(
+                        rate.district_name,
+                        "sembako_admin_fee_percent",
+                        v,
+                      )
+                    }
+                    unit="%"
+                    isAdmin
+                  />
+                </div>
+
+                {/* 🚀 LAYER 4: PAJAK DAN GRATIS ONGKIR */}
+                <div className="col-span-2 md:col-span-4 bg-slate-900 p-4 rounded-md border border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                  <div className="bg-slate-800 p-3 rounded-md">
+                    <InputGroup
+                      label="BATAS GRATIS ONGKIR (SUBSIDI)"
+                      value={rate.free_shipping_min_order}
+                      onChange={(v: any) =>
+                        handleUpdate(
+                          rate.district_name,
+                          "free_shipping_min_order",
+                          v,
+                        )
+                      }
+                      icon="RP"
+                      theme="dark"
+                    />
+                    <p className="text-[9px] text-teal-400 mt-2 tracking-widest">
+                      <TicketPercent size={10} className="inline mr-1" /> Isi 0
+                      untuk mematikan fitur subsidi ongkir.
+                    </p>
+                  </div>
+                  <div className="bg-slate-800 p-3 rounded-md">
+                    <InputGroup
+                      label="PAJAK PPN JASA APP (%)"
+                      value={rate.tax_percent}
+                      onChange={(v: any) =>
+                        handleUpdate(rate.district_name, "tax_percent", v)
+                      }
+                      unit="%"
+                      theme="dark"
+                      warningCondition={rate.tax_percent > 12}
+                      warningText="Melebihi aturan PPN Nasional!"
+                    />
+                    <p className="text-[9px] text-red-400 mt-2 tracking-widest">
+                      <Landmark size={10} className="inline mr-1" /> Isi 11%
+                      jika omset App {">"} Rp 4,8 Miliar.
+                    </p>
+                  </div>
+                </div>
+
+                {/* INPUT PENGATURAN QRIS */}
+                <div className="col-span-2 md:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-5 bg-slate-100 p-5 rounded-md border border-slate-200 mt-2">
                   <InputGroup
                     label="BATAS TRANSAKSI QRIS"
                     value={rate.qris_threshold}
@@ -355,7 +469,6 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                       handleUpdate(rate.district_name, "qris_threshold", v)
                     }
                     icon="RP"
-                    isAdmin
                   />
                   <InputGroup
                     label="BIAYA QRIS DITANGGUNG APP (%)"
@@ -364,10 +477,10 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                       handleUpdate(rate.district_name, "qris_fee_percent", v)
                     }
                     unit="%"
-                    isAdmin
                   />
                 </div>
 
+                {/* EXTRA & SURGE FEE DENGAN WARNING */}
                 <div className="col-span-2 md:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-5 bg-white p-5 rounded-md border border-slate-200 mt-2 shadow-inner">
                   <InputGroup
                     label="EXTRA TOKO (HAK KURIR)"
@@ -390,40 +503,15 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                     icon="RP"
                   />
                   <InputGroup
-                    label="SURGE FEE (HAK APP)"
+                    label="SURGE FEE / LONJAKAN"
                     value={rate.surge_fee}
                     onChange={(v: any) =>
                       handleUpdate(rate.district_name, "surge_fee", v)
                     }
                     icon="RP"
                     isSurge
-                  />
-                </div>
-
-                <div className="col-span-2 md:col-span-4 grid grid-cols-2 md:grid-cols-3 gap-5 mt-2 bg-slate-100 p-5 rounded-md border border-slate-200">
-                  <InputGroup
-                    label="JARAK DASAR"
-                    value={rate.base_distance_km}
-                    onChange={(v: any) =>
-                      handleUpdate(rate.district_name, "base_distance_km", v)
-                    }
-                    unit="KM"
-                  />
-                  <InputGroup
-                    label="HARGA / KM"
-                    value={rate.price_per_km}
-                    onChange={(v: any) =>
-                      handleUpdate(rate.district_name, "price_per_km", v)
-                    }
-                    icon="RP"
-                  />
-                  <InputGroup
-                    label="POTONG ONGKIR (%)"
-                    value={rate.app_fee_percent}
-                    onChange={(v: any) =>
-                      handleUpdate(rate.district_name, "app_fee_percent", v)
-                    }
-                    unit="%"
+                    warningCondition={rate.surge_fee >= 10000}
+                    warningText="Biaya lonjakan sangat tinggi!"
                   />
                 </div>
               </div>
@@ -443,7 +531,7 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
 
             {selectedRate ? (
               <div className="space-y-6">
-                {/* 🚀 SIMULATOR TOTAL BELANJA & TIPE TOKO */}
+                {/* SIMULATOR TOTAL BELANJA & TIPE TOKO */}
                 <div className="bg-white/5 p-4 rounded-md border border-white/10">
                   <div className="flex justify-between items-center mb-4">
                     <label className="text-[11px] text-orange-400 tracking-widest flex items-center gap-2">
@@ -503,48 +591,112 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[11px] text-teal-400 mb-3 block tracking-widest flex items-center gap-2">
-                    <MapPin size={14} /> JUMLAH TITIK TOKO: {simStops}
-                  </label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="5"
-                    value={simStops}
-                    onChange={(e) => setSimStops(Number(e.target.value))}
-                    className="w-full accent-[#008080] h-2 bg-slate-700 rounded-md appearance-none cursor-pointer"
-                  />
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-teal-400 mb-2 block tracking-widest flex items-center gap-2">
+                      <MapPin size={12} /> JARAK: {simDist} KM
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="20"
+                      value={simDist}
+                      onChange={(e) => setSimDist(Number(e.target.value))}
+                      className="w-full accent-[#008080] h-2 bg-slate-700 rounded-md appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] text-teal-400 mb-2 block tracking-widest flex items-center gap-2">
+                      <Store size={12} /> TITIK: {simStops} TOKO
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={simStops}
+                      onChange={(e) => setSimStops(Number(e.target.value))}
+                      className="w-full accent-[#008080] h-2 bg-slate-700 rounded-md appearance-none cursor-pointer"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-4 pt-4 border-t border-white/10">
-                  {/* PENDAPATAN KURIR */}
-                  <div className="flex justify-between items-center bg-[#008080]/20 p-4 rounded-md border border-[#008080]/50">
-                    <div>
-                      <p className="text-[10px] text-teal-200 tracking-widest mb-1">
-                        PENDAPATAN KURIR{" "}
-                        <span className="text-white/40 text-[8px]">
-                          (TDK DIPOTONG)
-                        </span>
+                <button
+                  onClick={() => setSimSurge(!simSurge)}
+                  className={`w-full py-2 rounded-md text-[10px] font-black tracking-widest border transition-all ${simSurge ? "bg-red-500/20 border-red-500 text-red-400" : "bg-slate-800 border-slate-700 text-slate-500"}`}
+                >
+                  {simSurge
+                    ? "🔥 MODE SIBUK/HUJAN AKTIF"
+                    : "AKTIFKAN MODE SIBUK"}
+                </button>
+
+                {/* 🚀 HASIL AKHIR SIMULATOR PRO */}
+                <div className="space-y-3 pt-4 border-t border-white/10">
+                  {/* ONGKIR PEMBELI & SUBSIDI */}
+                  <div className="bg-slate-800 p-3 rounded-md border border-slate-700">
+                    <p className="text-[9px] text-slate-400 tracking-widest mb-1 flex justify-between">
+                      <span>TOTAL ONGKIR (ASLI)</span>{" "}
+                      <span>Rp {sim.total_ongkir.toLocaleString()}</span>
+                    </p>
+                    {sim.app_subsidy > 0 && (
+                      <p className="text-[9px] text-teal-400 tracking-widest mb-1 flex justify-between font-black">
+                        <span>PROMO GRATIS ONGKIR</span>{" "}
+                        <span>- Rp {sim.app_subsidy.toLocaleString()}</span>
                       </p>
-                      <p className="text-[18px] font-[1000] font-sans">
+                    )}
+                    <p className="text-[12px] text-white tracking-widest mt-2 border-t border-slate-700 pt-2 flex justify-between font-[1000]">
+                      <span>ONGKIR DIBAYAR USER</span>{" "}
+                      <span
+                        className={
+                          sim.app_subsidy > 0 ? "text-teal-400" : "text-white"
+                        }
+                      >
+                        Rp {sim.user_pay_shipping.toLocaleString()}
+                      </span>
+                    </p>
+                  </div>
+
+                  {/* PENDAPATAN KURIR */}
+                  <div className="flex justify-between items-center bg-[#008080]/20 p-3 rounded-md border border-[#008080]/50">
+                    <div>
+                      <p className="text-[9px] text-teal-200 tracking-widest mb-1">
+                        HAK KURIR (TDK DIPOTONG)
+                      </p>
+                      <p className="text-[16px] font-[1000] font-sans text-white">
                         RP {sim.courier_net.toLocaleString()}
                       </p>
                     </div>
-                    <Truck className="text-[#008080]" size={32} />
+                    <Truck className="text-[#008080]" size={24} />
                   </div>
 
-                  <div className="bg-white p-5 rounded-md mt-4 text-slate-900 shadow-xl border-b-4 border-[#FF6600]">
-                    <p className="text-[10px] text-slate-500 font-black tracking-widest mb-1">
-                      TOTAL PENDAPATAN PASARQU
+                  {/* PAJAK */}
+                  {sim.tax_amount > 0 && (
+                    <div className="flex justify-between items-center bg-red-900/30 p-3 rounded-md border border-red-500/50 text-red-400">
+                      <span className="text-[9px] font-bold tracking-widest">
+                        TITIPAN PAJAK PPN ({selectedRate.tax_percent}%)
+                      </span>
+                      <span className="text-[12px] font-[1000] font-sans">
+                        - RP {sim.tax_amount.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* NET REVENUE APP */}
+                  <div
+                    className={`bg-white p-4 rounded-md mt-4 shadow-xl border-b-4 ${sim.app_profit < 0 ? "border-red-500" : "border-[#FF6600]"}`}
+                  >
+                    <p className="text-[10px] text-slate-500 font-black tracking-widest mb-1 flex justify-between">
+                      <span>NET PROFIT PASARQU</span>
+                      {sim.app_profit < 0 && (
+                        <span className="text-red-500 animate-pulse flex items-center gap-1">
+                          <AlertTriangle size={12} /> RUGI (SUBSIDI KEBESARAN)
+                        </span>
+                      )}
                     </p>
-                    <h2 className="text-[32px] font-[1000] text-[#FF6600] leading-none font-sans tracking-tighter">
+                    <h2
+                      className={`text-[28px] font-[1000] leading-none font-sans tracking-tighter ${sim.app_profit < 0 ? "text-red-600" : "text-[#FF6600]"}`}
+                    >
                       RP {sim.app_profit.toLocaleString()}
                     </h2>
-                    <div className="flex items-center gap-2 mt-3 text-[9px] text-slate-400 font-bold bg-slate-50 p-2 rounded-md border border-slate-100">
-                      <CheckCircle2 size={12} className="text-[#008080]" />{" "}
-                      AKUMULASI LAYANAN + POTONGAN + EXTRA
-                    </div>
                   </div>
                 </div>
               </div>
@@ -560,7 +712,7 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
   );
 };
 
-// --- KOMPONEN INPUT KECIL ---
+// --- KOMPONEN INPUT KECIL (DENGAN WARNING) ---
 const InputGroup = ({
   label,
   value,
@@ -570,30 +722,48 @@ const InputGroup = ({
   isSurge,
   isService,
   isAdmin,
-}: any) => (
-  <div className="text-left">
-    <label
-      className={`text-[10px] font-black mb-2 block tracking-widest ${isSurge ? "text-red-500" : isService ? "text-[#008080]" : isAdmin ? "text-[#FF6600]" : "text-slate-500"}`}
-    >
-      {label}
-    </label>
-    <div className="relative group">
-      {icon && (
-        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[12px] font-black text-slate-400">
-          {icon}
-        </span>
-      )}
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`w-full py-4 ${icon ? "pl-10" : "pl-4"} pr-10 rounded-md border-2 outline-none font-[1000] text-[14px] font-sans transition-all bg-white focus:border-[#008080] border-slate-200 shadow-sm`}
-      />
-      {unit && (
-        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[12px] font-black text-slate-400">
-          {unit}
-        </span>
+  theme,
+  warningCondition,
+  warningText,
+}: any) => {
+  const isDark = theme === "dark";
+  return (
+    <div className="text-left">
+      <label
+        className={`text-[10px] font-black mb-1.5 flex items-center gap-1 tracking-widest ${isDark ? "text-white" : isSurge ? "text-red-500" : isService ? "text-[#008080]" : isAdmin ? "text-[#FF6600]" : "text-slate-500"}`}
+      >
+        {warningCondition && (
+          <AlertTriangle size={12} className="text-red-500 animate-pulse" />
+        )}{" "}
+        {label}
+      </label>
+      <div className="relative group">
+        {icon && (
+          <span
+            className={`absolute left-3 top-1/2 -translate-y-1/2 text-[12px] font-black ${isDark ? "text-slate-400" : "text-slate-400"}`}
+          >
+            {icon}
+          </span>
+        )}
+        <input
+          type="number"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`w-full py-3 ${icon ? "pl-9" : "pl-3"} pr-8 rounded-md border-2 outline-none font-[1000] text-[14px] font-sans transition-all ${isDark ? "bg-slate-900 border-slate-700 text-white focus:border-teal-500" : "bg-white focus:border-[#008080] border-slate-200 text-slate-900 shadow-sm"} ${warningCondition ? "border-red-400 focus:border-red-500 bg-red-50 text-red-700" : ""}`}
+        />
+        {unit && (
+          <span
+            className={`absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-black ${isDark ? "text-slate-400" : "text-slate-400"}`}
+          >
+            {unit}
+          </span>
+        )}
+      </div>
+      {warningCondition && (
+        <p className="text-red-500 text-[9px] font-bold mt-1 tracking-widest flex items-start gap-1">
+          <ShieldAlert size={10} className="shrink-0 mt-0.5" /> {warningText}
+        </p>
       )}
     </div>
-  </div>
-);
+  );
+};
