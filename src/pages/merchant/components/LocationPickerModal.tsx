@@ -21,12 +21,9 @@ import {
 import { supabase } from "../../../lib/supabaseClient";
 import { useToast } from "../../../contexts/ToastContext";
 
-// --- GLOBAL CONFIG ---
-// 🚀 PERUBAHAN: Menambahkan library 'places' untuk fitur pencarian
-const LIBRARIES: ("geometry" | "drawing" | "places" | "visualization")[] = [
-  "geometry",
-  "places",
-];
+// 🚀 FIX: SERAGAMKAN LIBRARIES GOOGLE MAPS AGAR TIDAK CRASH (BLANK PUTIH)
+const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
+  ["places", "routes", "geometry", "drawing"];
 
 const MAP_OPTIONS: google.maps.MapOptions = {
   disableDefaultUI: true,
@@ -62,10 +59,10 @@ export const LocationPickerModal: React.FC<Props> = ({
 
   const [maxDistanceKm, setMaxDistanceKm] = useState<number>(1);
 
-  const { isLoaded } = useJsApiLoader({
+  const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries: LIBRARIES,
+    libraries: GOOGLE_MAPS_LIBRARIES, // 👈 FIX: Gunakan variabel seragam
   });
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
@@ -82,7 +79,6 @@ export const LocationPickerModal: React.FC<Props> = ({
     lng: parseFloat(merchantProfile?.longitude || "116.852"),
   });
 
-  // 🚀 REF UNTUK SEARCH BOX GOOGLE
   const searchBoxRef = useRef<google.maps.places.SearchBox | null>(null);
 
   useEffect(() => {
@@ -131,7 +127,7 @@ export const LocationPickerModal: React.FC<Props> = ({
     };
 
     if (isLoaded) fetchData();
-  }, [merchantProfile, isLoaded]);
+  }, [merchantProfile, isLoaded, position.lat, position.lng]);
 
   const checkDistance = useCallback(
     (
@@ -159,7 +155,6 @@ export const LocationPickerModal: React.FC<Props> = ({
     [marketCenter, checkDistance],
   );
 
-  // 🚀 FUNGSI KETIKA ALAMAT DIKETIK & DIPILIH
   const onPlacesChanged = () => {
     const places = searchBoxRef.current?.getPlaces();
     if (places && places.length > 0) {
@@ -226,7 +221,7 @@ export const LocationPickerModal: React.FC<Props> = ({
           setPosition(newPos);
           if (marketCenter) checkDistance(newPos, marketCenter);
           map?.panTo(newPos);
-          map?.setZoom(18); // Zoom lebih dekat
+          map?.setZoom(18);
         },
         () =>
           showToast("Gagal akses GPS, mohon izinkan browser Anda.", "error"),
@@ -236,7 +231,6 @@ export const LocationPickerModal: React.FC<Props> = ({
 
   return (
     <div className="w-full bg-slate-50 min-h-screen animate-in fade-in duration-500 font-sans font-black uppercase tracking-tighter text-left pb-20">
-      {/* 🟢 HEADER GAHAR */}
       <div className="bg-slate-900 border-b-4 border-[#008080] p-4 md:p-6 sticky top-0 z-50 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-4">
           <button
@@ -258,7 +252,6 @@ export const LocationPickerModal: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* 🚀 INDIKATOR STATUS (Dipindah ke Header agar selalu terlihat) */}
         <div className="flex items-center gap-4">
           <div
             className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-md border-2 ${
@@ -300,9 +293,7 @@ export const LocationPickerModal: React.FC<Props> = ({
       </div>
 
       <div className="max-w-6xl mx-auto md:p-6 space-y-4 mt-4">
-        {/* 🚀 PANEL INFO & SEARCH (DIATAS PETA) */}
         <div className="flex flex-col lg:flex-row gap-4 px-4 md:px-0">
-          {/* Tracker Koordinat */}
           <div className="bg-slate-900 p-4 rounded-xl shadow-sm flex items-center gap-4 shrink-0 border-l-4 border-[#FF6600]">
             <div className="w-10 h-10 bg-white/10 rounded-md flex items-center justify-center text-[#FF6600]">
               <MapPin size={20} />
@@ -317,7 +308,6 @@ export const LocationPickerModal: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Bar Pencarian Google Places */}
           {isLoaded && (
             <div className="flex-1 bg-white p-2 rounded-xl border-2 border-slate-200 shadow-sm flex items-center">
               <div className="pl-3 pr-2 text-slate-400">
@@ -338,7 +328,6 @@ export const LocationPickerModal: React.FC<Props> = ({
           )}
         </div>
 
-        {/* 🗺️ AREA PETA */}
         <div className="bg-white border-2 border-slate-200 rounded-xl overflow-hidden shadow-xl relative mx-4 md:mx-0">
           {isLoaded ? (
             <GoogleMap
@@ -349,7 +338,6 @@ export const LocationPickerModal: React.FC<Props> = ({
               onLoad={(m) => setMap(m)}
               options={MAP_OPTIONS}
             >
-              {/* MARKER MERCHANT */}
               <MarkerF
                 position={position}
                 draggable={true}
@@ -362,7 +350,6 @@ export const LocationPickerModal: React.FC<Props> = ({
                 }}
               />
 
-              {/* RADIUS & PUSAT PASAR */}
               {marketCenter && (
                 <>
                   <CircleF
@@ -396,32 +383,22 @@ export const LocationPickerModal: React.FC<Props> = ({
             </div>
           )}
 
-          {/* FLOATING ACTION BUTTONS */}
           <div className="absolute bottom-6 right-6 flex flex-col gap-3">
             <button
               onClick={goToMarketCenter}
-              title="Arahkan ke Pusat Pasar"
-              className="p-4 bg-slate-900 text-[#FF6600] rounded-xl shadow-lg border-2 border-slate-700 hover:bg-black transition-all active:scale-90 flex items-center justify-center group"
+              className="p-4 bg-slate-900 text-[#FF6600] rounded-xl shadow-lg border-2 border-slate-700 hover:bg-black transition-all active:scale-90 flex items-center justify-center"
             >
-              <Store
-                size={20}
-                className="group-hover:scale-110 transition-transform"
-              />
+              <Store size={20} />
             </button>
             <button
               onClick={getMyLocation}
-              title="Gunakan GPS HP Saat Ini"
-              className="p-4 bg-white text-[#008080] rounded-xl shadow-lg border-2 border-slate-200 hover:border-[#008080] transition-all active:scale-90 flex items-center justify-center group"
+              className="p-4 bg-white text-[#008080] rounded-xl shadow-lg border-2 border-slate-200 hover:border-[#008080] transition-all active:scale-90 flex items-center justify-center"
             >
-              <Navigation
-                size={20}
-                className="group-hover:scale-110 transition-transform"
-              />
+              <Navigation size={20} />
             </button>
           </div>
         </div>
 
-        {/* ℹ️ KOTAK INSTRUKSI BAWAH */}
         <div className="mx-4 md:mx-0 p-6 bg-slate-900 border-l-4 border-[#008080] rounded-xl flex items-start gap-4 shadow-md">
           <div className="w-10 h-10 bg-white/10 text-white rounded-md flex items-center justify-center shrink-0">
             <Info size={20} />

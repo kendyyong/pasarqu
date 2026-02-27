@@ -30,7 +30,7 @@ import { MobileLayout } from "../../components/layout/MobileLayout";
 import { OrderChatRoom } from "../../features/chat/OrderChatRoom";
 import { ComplaintForm } from "../../components/shared/ComplaintForm";
 
-// 🚀 IMPORT HOOK & KOMPONEN
+// IMPORT HOOK & KOMPONEN
 import { useOrderTracking } from "../../hooks/useOrderTracking";
 import { TrackingMap, ProgressSteps } from "./components/TrackingSections";
 
@@ -39,6 +39,10 @@ const ICONS = {
   home: "https://cdn-icons-png.flaticon.com/512/1946/1946488.png",
   store: "https://cdn-icons-png.flaticon.com/512/1055/1055672.png",
 };
+
+// 🚀 FIX FATAL ERROR BLANK PUTIH: Deklarasi statis untuk semua halaman
+const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
+  ["places", "routes", "geometry", "drawing"];
 
 export const OrderTrackingPage = () => {
   const { user, profile } = useAuth() as any;
@@ -67,13 +71,14 @@ export const OrderTrackingPage = () => {
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
+  // 🚀 FIX: Memasukkan variabel GOOGLE_MAPS_LIBRARIES agar konsisten
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries: ["places", "routes"],
+    libraries: GOOGLE_MAPS_LIBRARIES, // 👈 SUDAH DIPASANG!
   });
 
-  // 🧭 KOMPAS PINTAR: Kunci ke Super Admin jika tidak ada koordinat lain
+  // 🧭 KOMPAS PINTAR
   const getMapCenter = () => {
     if (courier?.current_lat && courier?.current_lng)
       return { lat: courier.current_lat, lng: courier.current_lng };
@@ -139,7 +144,6 @@ export const OrderTrackingPage = () => {
   const handleSubmitReview = async () => {
     if (rating === 0) return showToast("PILIH JUMLAH BINTANG!", "error");
 
-    // 🛡️ ANTI ERROR FOREIGN KEY: Mengambil ID Toko dari data item
     const validMerchantId =
       orderItems?.[0]?.merchant_id || orderItems?.[0]?.merchant?.id;
     if (!validMerchantId)
@@ -240,9 +244,9 @@ export const OrderTrackingPage = () => {
       cartCount={0}
     >
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans text-left uppercase tracking-tighter">
-        {/* 🟢 HEADER GAHAR */}
+        {/* HEADER */}
         <header
-          className={`sticky top-0 z-50 h-[70px] flex items-center px-4 shadow-sm text-white transition-all ${order?.status === "CANCELLED" ? "bg-red-600" : "bg-[#008080]"}`}
+          className={`sticky top-0 z-50 h-[70px] flex items-center px-4 shadow-md text-white transition-all ${order?.status === "CANCELLED" ? "bg-red-600" : "bg-[#008080]"}`}
         >
           <div className="w-full max-w-[1200px] mx-auto flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -284,12 +288,12 @@ export const OrderTrackingPage = () => {
           </div>
         </header>
 
-        {/* 🔵 MAIN LAYOUT (2 COLUMN GRID PADA DESKTOP) */}
+        {/* MAIN LAYOUT */}
         <main className="flex-1 w-full max-w-[1200px] mx-auto p-4 md:p-6 pb-32">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* ⬅️ KOLOM KIRI: MAP & PROGRESS */}
+            {/* KIRI */}
             <div className="lg:col-span-7 space-y-6">
-              {/* MAP SECTION / KARTU SUKSES OVERLAY */}
+              {/* MAP SECTION */}
               {!isPickup && (
                 <div className="h-[400px] md:h-[450px] bg-slate-200 rounded-2xl border-4 border-white shadow-xl overflow-hidden relative">
                   <TrackingMap
@@ -302,7 +306,6 @@ export const OrderTrackingPage = () => {
                     ICONS={ICONS}
                   />
 
-                  {/* Status Pill on Map */}
                   <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md px-4 py-2.5 rounded-xl shadow-lg border border-slate-200 flex items-center gap-3">
                     <div
                       className={`w-3 h-3 rounded-full ${isFinished ? "bg-green-500" : courier?.current_lat ? "bg-orange-500 animate-pulse" : "bg-blue-500 animate-pulse"}`}
@@ -316,7 +319,6 @@ export const OrderTrackingPage = () => {
                     </span>
                   </div>
 
-                  {/* OVERLAY SUKSES SAAT SELESAI */}
                   {order?.status === "COMPLETED" ? (
                     <div className="absolute bottom-4 left-4 right-4 bg-gradient-to-r from-teal-600 to-[#008080] p-5 rounded-2xl shadow-2xl border border-teal-400 flex items-center gap-4 text-white animate-in slide-in-from-bottom-6">
                       <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
@@ -376,7 +378,7 @@ export const OrderTrackingPage = () => {
               )}
             </div>
 
-            {/* ➡️ KOLOM KANAN: RINCIAN & TOTAL */}
+            {/* KANAN */}
             <div className="lg:col-span-5 space-y-6">
               {/* RINCIAN PRODUK */}
               <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -436,7 +438,7 @@ export const OrderTrackingPage = () => {
                 </div>
               </section>
 
-              {/* PAYMENT SUMMARY (DARK MODE) */}
+              {/* PAYMENT SUMMARY */}
               <section className="bg-slate-900 p-8 rounded-2xl shadow-xl text-white relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-bl-full pointer-events-none"></div>
                 <h4 className="text-[12px] font-black tracking-widest text-teal-400 mb-6 flex items-center gap-2">
@@ -478,7 +480,7 @@ export const OrderTrackingPage = () => {
 
               {/* ACTION BUTTONS */}
               <div className="space-y-4">
-                {/* 🚀 SMART RATING BUTTON (TIDAK HILANG LAGI JIKA SUDAH DI-REVIEW!) */}
+                {/* TOMBOL RATING */}
                 {(order?.status === "COMPLETED" ||
                   order?.shipping_status === "COMPLETED") &&
                   (hasReviewed ? (
@@ -545,10 +547,10 @@ export const OrderTrackingPage = () => {
           </div>
         </main>
 
-        {/* 🌟 MODAL REVIEW PRO */}
+        {/* MODAL REVIEW */}
         {showReviewModal && (
           <div className="fixed inset-0 z-[1000] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-md rounded-[2rem] p-8 relative shadow-2xl animate-in zoom-in-95 border-4 border-[#008080]">
+            <div className="bg-white w-full max-w-sm rounded-[2rem] p-8 relative shadow-2xl animate-in zoom-in-95 border-4 border-[#008080]">
               <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#FF6600] w-12 h-12 rounded-full flex items-center justify-center border-4 border-white shadow-md">
                 <Star fill="white" size={24} className="text-white" />
               </div>
@@ -597,7 +599,7 @@ export const OrderTrackingPage = () => {
                 value={reviewComment}
                 onChange={(e) => setReviewComment(e.target.value.toUpperCase())}
                 placeholder="CERITAKAN PENGALAMANMU..."
-                className="w-full h-32 bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-[12px] font-bold outline-none focus:border-[#008080] mb-6 no-scrollbar placeholder:text-slate-300"
+                className="w-full h-28 bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-[12px] font-bold outline-none focus:border-[#008080] mb-6 no-scrollbar placeholder:text-slate-300"
               />
 
               <button

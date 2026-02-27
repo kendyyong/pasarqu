@@ -4,7 +4,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useJsApiLoader } from "@react-google-maps/api";
 
-const LIBRARIES: "places"[] = ["places"];
+// 🚀 FIX: SERAGAMKAN LIBRARIES GOOGLE MAPS AGAR TIDAK CRASH (BLANK PUTIH)
+const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] = ["places", "routes", "geometry", "drawing"];
 
 export const useLocalAdminDashboard = () => {
   const { profile, logout } = useAuth();
@@ -13,7 +14,7 @@ export const useLocalAdminDashboard = () => {
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries: LIBRARIES,
+    libraries: GOOGLE_MAPS_LIBRARIES, // 👈 FIX: Memanggil variabel global yang sudah diseragamkan
   });
 
   const [isLoading, setIsLoading] = useState(true);

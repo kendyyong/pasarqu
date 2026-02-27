@@ -27,6 +27,10 @@ const mapContainerStyle = {
 
 const defaultCenter = { lat: -6.2, lng: 106.816666 };
 
+// 🚀 FIX: SERAGAMKAN LIBRARIES GOOGLE MAPS SEPERTI FILE LAINNYA
+const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
+  ["places", "routes", "geometry", "drawing"];
+
 export const RegisterMerchantPage = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -50,6 +54,7 @@ export const RegisterMerchantPage = () => {
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+    libraries: GOOGLE_MAPS_LIBRARIES, // 👈 FIX: Gunakan variabel seragam di sini
   });
 
   // 1. Load Data Pasar saat halaman dibuka
@@ -128,8 +133,7 @@ export const RegisterMerchantPage = () => {
 
         if (profileError) throw profileError;
 
-        // 3. ✅ INSERT KE TABEL MERCHANTS (FIX NO 1)
-        // Ini langkah yang sebelumnya hilang, makanya toko tidak bisa upload produk.
+        // 3. ✅ INSERT KE TABEL MERCHANTS
         const { error: merchantError } = await supabase
           .from("merchants")
           .insert({

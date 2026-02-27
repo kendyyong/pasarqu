@@ -27,7 +27,9 @@ import {
   Crosshair,
 } from "lucide-react";
 
-const libraries: "places"[] = ["places"];
+// 🚀 FIX: SERAGAMKAN LIBRARIES GOOGLE MAPS AGAR TIDAK CRASH (BLANK PUTIH)
+const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
+  ["places", "routes", "geometry", "drawing"];
 
 export const MerchantPromoPage: React.FC = () => {
   const { showToast } = useToast();
@@ -36,10 +38,11 @@ export const MerchantPromoPage: React.FC = () => {
 
   const { selectedMarket } = useMarket() as any;
 
+  // 🚀 FIX: Gunakan variabel seragam GOOGLE_MAPS_LIBRARIES
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries,
+    libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
   const [formData, setFormData] = useState({
@@ -206,7 +209,6 @@ export const MerchantPromoPage: React.FC = () => {
           console.error("Gagal simpan ke merchants:", merchantError);
         }
 
-        // 🚀 FIX TAHAP 1: Pesan sukses diganti dan diarahkan ke Beranda Pembeli
         showToast(
           "Toko terdaftar! Sambil menunggu verifikasi, Anda bisa berbelanja.",
           "success",
@@ -328,8 +330,8 @@ export const MerchantPromoPage: React.FC = () => {
                   placeholder="No. WhatsApp"
                   icon={<Smartphone size={16} />}
                   value={formData.phone}
-                  type="tel"
                   onChange={(v) => setFormData({ ...formData, phone: v })}
+                  type="tel"
                 />
               </div>
 
@@ -340,7 +342,6 @@ export const MerchantPromoPage: React.FC = () => {
                 onChange={(v) => setFormData({ ...formData, shopName: v })}
               />
 
-              {/* AREA MAPS & AUTOCOMPLETE */}
               <div className="space-y-2 pt-2 text-left">
                 <div className="flex justify-between items-center px-1">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
@@ -377,12 +378,7 @@ export const MerchantPromoPage: React.FC = () => {
                     </div>
                   </Autocomplete>
                 ) : (
-                  <InputGroup
-                    placeholder="Alamat Detail (No. Lapak / Jalan)"
-                    icon={<MapPin size={16} />}
-                    value={formData.address}
-                    onChange={(v) => setFormData({ ...formData, address: v })}
-                  />
+                  <div className="w-full bg-slate-100 h-14 rounded-xl animate-pulse" />
                 )}
 
                 <div className="w-full h-[200px] md:h-[280px] rounded-xl overflow-hidden border border-slate-200 relative shadow-inner bg-slate-100 mt-2">

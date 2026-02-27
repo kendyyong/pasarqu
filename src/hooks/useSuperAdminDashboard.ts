@@ -3,7 +3,8 @@ import { useJsApiLoader } from "@react-google-maps/api";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 
-const libraries: "places"[] = ["places"];
+// 🚀 FIX: SERAGAMKAN LIBRARIES GOOGLE MAPS SEPERTI FILE LAINNYA
+const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] = ["places", "routes", "geometry", "drawing"];
 
 export const useSuperAdminDashboard = () => {
   const { user } = useAuth();
@@ -39,7 +40,7 @@ export const useSuperAdminDashboard = () => {
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries,
+    libraries: GOOGLE_MAPS_LIBRARIES, // 👈 FIX: Gunakan variabel seragam di sini
   });
 
   // ✅ KEMBALI NORMAL: Default selalu ke dashboard saat pertama dimuat

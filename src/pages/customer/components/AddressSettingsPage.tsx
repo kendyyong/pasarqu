@@ -22,7 +22,10 @@ import {
 } from "lucide-react";
 
 const mapContainerStyle = { width: "100%", height: "100%" };
-const libraries: "places"[] = ["places"];
+
+// 🚀 FIX: SERAGAMKAN LIBRARIES GOOGLE MAPS AGAR TIDAK CRASH (BLANK PUTIH)
+const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
+  ["places", "routes", "geometry", "drawing"];
 
 export const AddressSettingsPage = () => {
   const { user, profile } = useAuth() as any;
@@ -47,12 +50,13 @@ export const AddressSettingsPage = () => {
   const districtRef = useRef<google.maps.places.Autocomplete | null>(null);
   const cityRef = useRef<google.maps.places.Autocomplete | null>(null);
 
+  // 🚀 FIX: Memanggil variabel global yang sudah diseragamkan
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries,
-    language: "id", // ✅ Bahasa Indonesia
-    region: "ID", // ✅ Wilayah Indonesia
+    libraries: GOOGLE_MAPS_LIBRARIES,
+    language: "id",
+    region: "ID",
   });
 
   useEffect(() => {
@@ -125,7 +129,6 @@ export const AddressSettingsPage = () => {
 
     setLoading(true);
     try {
-      // Menyiapkan data untuk update
       const updateData: any = {
         name: formData.name,
         phone: formData.phone,
@@ -137,10 +140,8 @@ export const AddressSettingsPage = () => {
         address_extra: formData.extra,
         latitude: coords.lat,
         longitude: coords.lng,
+        updated_at: new Date().toISOString(),
       };
-
-      // ✅ Pastikan updated_at dikirim hanya jika kolomnya ada di database
-      updateData.updated_at = new Date().toISOString();
 
       const { error } = await supabase
         .from("profiles")

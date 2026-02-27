@@ -8,7 +8,10 @@ interface Props {
   defaultValue?: string;
 }
 
-const libraries: "places"[] = ["places"];
+// 🚀 FIX 1: Ganti variabel 'libraries' lama dengan variabel super komplit ini
+// Variabel ini HARUS SAMA PERSIS dengan yang ada di OrderTrackingPage
+const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
+  ["places", "routes", "geometry", "drawing"];
 
 export const AddressAutocomplete: React.FC<Props> = ({
   onAddressSelect,
@@ -18,7 +21,8 @@ export const AddressAutocomplete: React.FC<Props> = ({
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries,
+    // 🚀 FIX 2: Typo sudah diperbaiki jadi titik dua (:)
+    libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
   const [inputValue, setInputValue] = useState(defaultValue);

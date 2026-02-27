@@ -14,6 +14,10 @@ import { CheckoutSummary } from "./components/CheckoutSummary";
 import { CashbackModal } from "./components/CashbackModal";
 import { CheckoutAddress } from "./components/CheckoutAddress";
 
+// 🚀 FIX: SERAGAMKAN LIBRARIES GOOGLE MAPS AGAR TIDAK CRASH (BLANK PUTIH)
+const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
+  ["places", "routes", "geometry", "drawing"];
+
 export const CheckoutPaymentPage = () => {
   const { user, profile } = useAuth() as any;
   const { cart, clearCart, selectedMarket } = useMarket();
@@ -40,9 +44,11 @@ export const CheckoutPaymentPage = () => {
   const [cashbackAmount, setCashbackAmount] = useState(0);
   const [createdOrderId, setCreatedOrderId] = useState("");
 
+  // 🚀 FIX: Masukkan variabel GOOGLE_MAPS_LIBRARIES ke sini!
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+    libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
   const calculateMysteryCashback = (subtotal: number) => {
