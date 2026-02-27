@@ -13,7 +13,7 @@ export const useMerchantDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [incomingOrder, setIncomingOrder] = useState<any>(null);
   
-  // 🚀 STATE BARU: Notifikasi Chat Belum Terbaca
+  // 🚀 STATE NOTIFIKASI
   const [unreadChat, setUnreadChat] = useState<boolean>(false);
 
   const fetchBaseData = useCallback(async () => {
@@ -23,6 +23,7 @@ export const useMerchantDashboard = () => {
     }
 
     try {
+      // 1. AMBIL DATA PROFIL & MERCHANT SECARA PARALEL
       const [resProfile, resMerchant] = await Promise.all([
         supabase.from("profiles").select("*, markets:managed_market_id(name)").eq("id", user.id).maybeSingle(),
         supabase.from("merchants").select("*, markets(name)").or(`user_id.eq.${user.id},id.eq.${user.id}`).maybeSingle()
@@ -31,8 +32,8 @@ export const useMerchantDashboard = () => {
       let profile = resProfile.data;
       let merchantData = resMerchant.data;
 
+      // 2. LOGIKA SINKRONISASI PASAR (MARKET)
       const savedMarketId = localStorage.getItem("selected_market_id");
-      
       if (merchantData && !merchantData.market_id && savedMarketId) {
         await supabase.from("merchants").update({ market_id: savedMarketId }).eq("id", merchantData.id);
         merchantData.market_id = savedMarketId;
@@ -44,16 +45,19 @@ export const useMerchantDashboard = () => {
         const effectiveMerchant = {
           ...(merchantData || {}),
           id: merchantData?.id || user.id,
+          owner_id: merchantData?.user_id || user.id, // 🚀 ID PEMILIK UNTUK CHAT
           shop_name: merchantData?.shop_name || merchantData?.name || profile?.shop_name || profile?.name || "Toko Saya",
           market_id: merchantData?.market_id || profile?.managed_market_id,
           market_name: merchantData?.markets?.name || profile?.markets?.name || "Muara Jawa",
           is_shop_open: merchantData?.is_shop_open ?? true,
           latitude: merchantData?.latitude || profile?.latitude,
           longitude: merchantData?.longitude || profile?.longitude,
+          balance: profile?.balance || 0
         };
 
         setMerchantProfile(effectiveMerchant);
 
+        // 3. AMBIL PRODUK & PESANAN (HANYA YANG MILIK TOKO INI)
         const [resProds, resOrds] = await Promise.all([
           supabase.from("products").select("*").eq("merchant_id", effectiveMerchant.id),
           supabase.from("orders")
@@ -64,6 +68,7 @@ export const useMerchantDashboard = () => {
 
         setProducts(resProds.data || []);
         
+        // Filter agar badge Sidebar hanya menghitung pesanan yang perlu diproses
         const activeOrders = (resOrds.data || []).filter((o: any) => 
             o.status !== "COMPLETED" && o.status !== "CANCELLED"
         );
@@ -77,6 +82,7 @@ export const useMerchantDashboard = () => {
     }
   }, [user?.id]);
 
+  // FUNGSI TOGGLE TUTUP/BUKA TOKO
   const toggleShopStatus = async () => {
     if (!merchantProfile?.id) return;
     const newStatus = !merchantProfile.is_shop_open;
@@ -84,9 +90,9 @@ export const useMerchantDashboard = () => {
       const { error } = await supabase.from("merchants").update({ is_shop_open: newStatus }).eq("id", merchantProfile.id);
       if (error) throw error;
       setMerchantProfile((prev: any) => ({ ...prev, is_shop_open: newStatus }));
-      showToast(newStatus ? "Toko BUKA" : "Toko TUTUP", "info");
+      showToast(newStatus ? "TOKO SEKARANG BUKA" : "TOKO SEKARANG TUTUP", "info");
     } catch {
-      showToast("Gagal update status", "error");
+      showToast("GAGAL MENGUBAH STATUS TOKO", "error");
     }
   };
 
@@ -96,44 +102,49 @@ export const useMerchantDashboard = () => {
     fetchBaseData();
   }, [fetchBaseData]);
 
-  // 🚀 SENSOR REALTIME: PESANAN & CHAT
+  // 🚀 ENGINE RADAR REALTIME (PESANAN & CHAT)
   useEffect(() => {
-    if (!merchantProfile?.id) return;
+    if (!merchantProfile?.id || !user?.id) return;
 
     const channel = supabase
-      .channel(`merchant_global_sync_${merchantProfile.id}`)
-      // 1. Dengar Pesanan Baru
+      .channel(`merchant_realtime_hub_${merchantProfile.id}`)
+      // A. MENDENGAR PESANAN BARU
       .on(
         "postgres_changes", 
         { event: "INSERT", schema: "public", table: "order_items", filter: `merchant_id=eq.${merchantProfile.id}` }, 
         async (payload: any) => {
            fetchBaseData(); 
            const { data: fullOrder } = await supabase.from("orders").select("*").eq("id", payload.new.order_id).single();
-           if (fullOrder) setIncomingOrder(fullOrder);
+           if (fullOrder) {
+               // Bunyikan suara pesanan masuk
+               const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/1042/1042-preview.mp3");
+               audio.play().catch(() => {});
+               setIncomingOrder(fullOrder); // Triger modal alarm
+           }
         }
       )
-      // 2. Dengar Update Status Pesanan
+      // B. MENDENGAR PERUBAHAN STATUS PESANAN
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "orders" },
         () => { fetchBaseData(); }
       )
-      // 3. 🔔 DENGAR CHAT BARU DARI KURIR/CUSTOMER
+      // C. 🔔 MENDENGAR CHAT BARU (DARI KURIR ATAU PEMBELI)
       .on(
         "postgres_changes",
         { 
           event: "INSERT", 
           schema: "public", 
           table: "order_chats", 
-          filter: `receiver_id=eq.${merchantProfile.id}` 
+          filter: `receiver_id=eq.${user.id}` // 🚀 Dengar berdasarkan ID User login
         },
         (payload) => {
-           // Bunyikan suara notifikasi "Ting!"
+           // Jika tab chat sedang tidak dibuka, nyalakan notif
            const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2357/2357-preview.mp3");
            audio.play().catch(() => {});
            
-           setUnreadChat(true); // Nyalakan tanda merah di UI
-           showToast("ADA PESAN BARU DARI KURIR!", "info");
+           setUnreadChat(true); 
+           showToast(`PESAN BARU DARI ${payload.new.sender_id === user.id ? 'SISTEM' : 'KURIR/PEMBELI'}`, "info");
         }
       )
       .subscribe();
@@ -141,10 +152,18 @@ export const useMerchantDashboard = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [merchantProfile?.id, fetchBaseData]); 
+  }, [merchantProfile?.id, user?.id, fetchBaseData, showToast]); 
 
   return {
-    merchantProfile, products, orders, loading, incomingOrder, unreadChat,
-    setUnreadChat, fetchBaseData, toggleShopStatus, stopAlarm
+    merchantProfile, 
+    products, 
+    orders, 
+    loading, 
+    incomingOrder, 
+    unreadChat,
+    setUnreadChat, 
+    fetchBaseData, 
+    toggleShopStatus, 
+    stopAlarm
   };
 };
