@@ -19,14 +19,18 @@ import {
   Truck,
   Search,
   MessageCircle,
-  Ban, // 🚀 Ikon Tolak
+  Ban,
 } from "lucide-react";
 
 interface Props {
   merchantProfile: any;
+  stopAlarm?: () => void; // 🚀 TAMBAHAN: Kabel untuk mematikan alaram dari dashboard
 }
 
-export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
+export const MerchantOrders: React.FC<Props> = ({
+  merchantProfile,
+  stopAlarm,
+}) => {
   const { user } = useAuth();
   const { showToast } = useToast();
 
@@ -141,13 +145,14 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
     [user?.id],
   );
 
+  // 🚀 SENSOR LIVE AUTO-SYNC
   useEffect(() => {
     fetchOrders();
 
     if (!user?.id) return;
 
     const channel = supabase
-      .channel(`live_orders_${user.id}`)
+      .channel(`live_orders_merchant_hub_${user.id}`)
       .on(
         "postgres_changes",
         {
@@ -157,6 +162,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
           filter: `merchant_id=eq.${user.id}`,
         },
         () => {
+          console.log("🔥 PESANAN BARU MASUK!");
           fetchOrders(true);
         },
       )
@@ -168,6 +174,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
           table: "orders",
         },
         () => {
+          console.log("🔄 STATUS BERUBAH!");
           fetchOrders(true);
         },
       )
@@ -193,6 +200,10 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
         .eq("id", order.id);
 
       if (error) throw error;
+
+      // 🔥 MATIKAN ALARAM SETELAH TOMBOL DIKLIK
+      if (stopAlarm) stopAlarm();
+
       showToast(
         isPickup ? "PESANAN DISIAPKAN!" : "PESANAN DITERIMA. MENCARI KURIR...",
         "success",
@@ -209,21 +220,24 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
   const handleRejectOrder = async (order: any) => {
     if (
       !window.confirm(
-        "Yakin ingin menolak pesanan ini? Saldo pembeli akan dikembalikan.",
+        "Yakin ingin menolak pesanan ini? Saldo pembeli akan dikembalikan otomatis.",
       )
     )
       return;
 
     setIsUpdating(order.id);
     try {
-      // Panggil fungsi RPC untuk membatalkan dan mengembalikan saldo (jika ada)
       const { error } = await supabase.rpc("cancel_order_and_refund", {
         p_order_id: order.id,
         p_user_id: order.customer_id,
       });
 
       if (error) throw error;
-      showToast("Pesanan DITOLAK.", "info");
+
+      // 🔥 MATIKAN ALARAM SETELAH TOMBOL DIKLIK
+      if (stopAlarm) stopAlarm();
+
+      showToast("PESANAN BERHASIL DITOLAK.", "info");
       fetchOrders(true);
     } catch (err: any) {
       showToast(err.message, "error");
@@ -283,7 +297,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
         ["PACKING", "ON_DELIVERY", "SHIPPING"].includes(o.status) ||
         ["SEARCHING_COURIER", "READY_TO_PICKUP"].includes(o.shipping_status);
     else if (statusFilter === "completed")
-      matchTab = o.status === "COMPLETED" || o.status === "CANCELLED"; // Batal masuk tab selesai
+      matchTab = o.status === "COMPLETED" || o.status === "CANCELLED";
 
     const matchSearch =
       o.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -351,7 +365,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
         )}
 
       <div className="w-full space-y-6 animate-in fade-in duration-500 text-left font-sans pb-20 font-black uppercase tracking-tighter">
-        {/* HEADER & SEARCH BAR GAHAR */}
+        {/* HEADER & SEARCH BAR */}
         <div className="bg-white border-2 border-slate-100 p-6 rounded-xl shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b-8 border-[#008080]">
           <div>
             <h2 className="text-2xl text-slate-900 leading-none flex items-center gap-2">
@@ -378,7 +392,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
           </div>
         </div>
 
-        {/* FILTER TABS DENGAN BADGE */}
+        {/* FILTER TABS */}
         <div className="flex bg-slate-50 p-1.5 rounded-xl border-2 border-slate-100 overflow-x-auto no-scrollbar">
           <TabButton
             active={statusFilter === "pending"}
@@ -448,7 +462,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                   key={order.id}
                   className={`bg-white border-2 rounded-xl shadow-sm overflow-hidden transition-all relative ${
                     isCancelled
-                      ? "border-red-200 opacity-60" // Kalau batal, dibikin buram
+                      ? "border-red-200 opacity-60"
                       : isNew && isLate
                         ? "border-red-500"
                         : isPickup
@@ -456,7 +470,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                           : "border-slate-100 hover:border-[#008080]"
                   }`}
                 >
-                  {/* ORDER TOP BAR */}
+                  {/* TOP BAR */}
                   <div
                     className={`px-5 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b-2 ${isCancelled ? "bg-red-50 border-red-100" : isPickup ? "bg-orange-50/50 border-orange-100" : "bg-slate-50 border-slate-100"}`}
                   >
@@ -542,7 +556,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                     ))}
                   </div>
 
-                  {/* BOTTOM INFO & ACTION */}
+                  {/* BOTTOM ACTION */}
                   <div className="px-5 py-5 bg-white border-t-2 border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="flex items-start gap-3 w-full md:w-auto">
                       <div
@@ -600,14 +614,12 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                           <Printer size={18} />
                         </button>
 
-                        {/* 🚀 TOMBOL AKSI GANDA (TERIMA ATAU TOLAK) */}
                         {isNew && !isCancelled ? (
                           <>
                             <button
                               disabled={isUpdating === order.id}
                               onClick={() => handleRejectOrder(order)}
                               className="px-4 py-3 bg-white border-2 border-red-200 text-red-500 hover:bg-red-50 font-black text-[11px] uppercase tracking-widest rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 shadow-sm"
-                              title="Tolak Pesanan"
                             >
                               {isUpdating === order.id ? (
                                 <Loader2 size={16} className="animate-spin" />
