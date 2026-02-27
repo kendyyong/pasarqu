@@ -27,6 +27,17 @@ export const CustomerRoutes = () => [
   <Route key="shop-detail" path="/shop/:merchantId" element={<ShopDetail />} />,
   <Route key="terms-cash" path="/terms-cashback" element={<TermsCashback />} />,
 
+  // 🚀 INI DIA KABEL YANG HILANG! JALAN TOL MENUJU DETAIL PESANAN
+  <Route
+    key="track-order"
+    path="/track-order/:orderId"
+    element={
+      <ProtectedRoute allowedRoles={ALL_SHOPPERS}>
+        <OrderTrackingPage />
+      </ProtectedRoute>
+    }
+  />,
+
   <Route
     key="chat-room"
     path="/chat/:roomId"
