@@ -12,7 +12,6 @@ import {
   Navigation,
   CheckCircle,
   Info,
-  AlertTriangle,
   ArrowLeft,
   Store,
   Search,
@@ -21,7 +20,6 @@ import {
 import { supabase } from "../../../lib/supabaseClient";
 import { useToast } from "../../../contexts/ToastContext";
 
-// 🚀 FIX: SERAGAMKAN LIBRARIES GOOGLE MAPS AGAR TIDAK CRASH (BLANK PUTIH)
 const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
   ["places", "routes", "geometry", "drawing"];
 
@@ -62,7 +60,7 @@ export const LocationPickerModal: React.FC<Props> = ({
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries: GOOGLE_MAPS_LIBRARIES, // 👈 FIX: Gunakan variabel seragam
+    libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
@@ -74,9 +72,10 @@ export const LocationPickerModal: React.FC<Props> = ({
   const [marketName, setMarketName] = useState("");
   const [isWithinRange, setIsWithinRange] = useState(true);
 
+  // 🚀 Titik awal: Gunakan koordinat merchant jika ada, jika tidak, biarkan 0 dulu.
   const [position, setPosition] = useState({
-    lat: parseFloat(merchantProfile?.latitude || "-1.242"),
-    lng: parseFloat(merchantProfile?.longitude || "116.852"),
+    lat: parseFloat(merchantProfile?.latitude || "0"),
+    lng: parseFloat(merchantProfile?.longitude || "0"),
   });
 
   const searchBoxRef = useRef<google.maps.places.SearchBox | null>(null);
@@ -106,15 +105,26 @@ export const LocationPickerModal: React.FC<Props> = ({
       if (error) return;
 
       if (data) {
-        const lat = parseFloat(data.lat || data.latitude || "0");
-        const lng = parseFloat(data.lng || data.longitude || "0");
+        const centerLat = parseFloat(data.lat || data.latitude || "0");
+        const centerLng = parseFloat(data.lng || data.longitude || "0");
 
-        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-          const center = { lat, lng };
+        if (
+          !isNaN(centerLat) &&
+          !isNaN(centerLng) &&
+          centerLat !== 0 &&
+          centerLng !== 0
+        ) {
+          const center = { lat: centerLat, lng: centerLng };
           setMarketCenter(center);
           setMarketName(data.name ? data.name.toUpperCase() : "PASAR");
 
-          if (window.google) {
+          // 🚀 LOGIKA AUTO-CENTER PINTAR:
+          // Jika toko belum pernah set lokasi (koordinat = 0), lempar kamera dan pin ke PUSAT PASAR.
+          if (position.lat === 0 || position.lng === 0) {
+            setPosition(center);
+            setIsWithinRange(true);
+          } else if (window.google) {
+            // Jika toko sudah punya lokasi, hitung jaraknya dari pusat pasar
             const distance =
               google.maps.geometry.spherical.computeDistanceBetween(
                 new google.maps.LatLng(position.lat, position.lng),
@@ -127,7 +137,14 @@ export const LocationPickerModal: React.FC<Props> = ({
     };
 
     if (isLoaded) fetchData();
-  }, [merchantProfile, isLoaded, position.lat, position.lng]);
+  }, [merchantProfile, isLoaded]); // ❌ Hapus position dari dependensi agar tidak infinite loop
+
+  // Efek samping: Pan kamera ke posisi saat ini setelah map diload
+  useEffect(() => {
+    if (map && position.lat !== 0) {
+      map.panTo(position);
+    }
+  }, [map, position]);
 
   const checkDistance = useCallback(
     (
@@ -177,6 +194,13 @@ export const LocationPickerModal: React.FC<Props> = ({
       );
       return;
     }
+
+    // Validasi agar tidak nge-save koordinat laut 0,0
+    if (position.lat === 0 && position.lng === 0) {
+      showToast("Titik lokasi belum valid, mohon geser peta!", "error");
+      return;
+    }
+
     setLoading(true);
     try {
       await Promise.all([
@@ -203,8 +227,10 @@ export const LocationPickerModal: React.FC<Props> = ({
   const goToMarketCenter = () => {
     if (marketCenter && marketCenter.lat !== 0) {
       map?.panTo(marketCenter);
-      map?.setZoom(15);
-      showToast(`MENUJU KOORDINAT ${marketName}`, "success");
+      map?.setZoom(16); // Zoom in lebih dekat ke pasar
+      setPosition(marketCenter); // Otomatis pindahkan pin ke pasar
+      setIsWithinRange(true);
+      showToast(`MENUJU PUSAT ${marketName}`, "success");
     } else {
       showToast("Titik Koordinat Pasar Belum Diatur Admin!", "error");
     }
@@ -212,6 +238,7 @@ export const LocationPickerModal: React.FC<Props> = ({
 
   const getMyLocation = () => {
     if (navigator.geolocation) {
+      showToast("Mencari sinyal GPS...", "info");
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const newPos = {
@@ -225,6 +252,7 @@ export const LocationPickerModal: React.FC<Props> = ({
         },
         () =>
           showToast("Gagal akses GPS, mohon izinkan browser Anda.", "error"),
+        { enableHighAccuracy: true, timeout: 5000 },
       );
     }
   };
@@ -274,10 +302,10 @@ export const LocationPickerModal: React.FC<Props> = ({
           </div>
 
           <button
-            disabled={loading || !isWithinRange}
+            disabled={loading || !isWithinRange || position.lat === 0}
             onClick={handleSaveLocation}
             className={`px-8 py-3.5 rounded-md text-[12px] transition-all flex items-center justify-center gap-2 shadow-lg ${
-              isWithinRange
+              isWithinRange && position.lat !== 0
                 ? "bg-[#008080] text-white hover:bg-teal-700 active:scale-95"
                 : "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
             }`}
@@ -300,7 +328,7 @@ export const LocationPickerModal: React.FC<Props> = ({
             </div>
             <div>
               <p className="text-[9px] text-slate-400 mb-1">
-                TITIK SAAT INI (LAT, LNG)
+                TITIK TOKO ANDA (LAT, LNG)
               </p>
               <p className="text-[14px] text-white font-mono leading-none tracking-widest">
                 {position.lat.toFixed(5)}, {position.lng.toFixed(5)}
@@ -332,23 +360,35 @@ export const LocationPickerModal: React.FC<Props> = ({
           {isLoaded ? (
             <GoogleMap
               mapContainerStyle={CONTAINER_STYLE}
-              center={position}
+              center={
+                position.lat === 0 ? { lat: -1.242, lng: 116.852 } : position
+              }
               zoom={15}
               onClick={onMapClick}
               onLoad={(m) => setMap(m)}
               options={MAP_OPTIONS}
             >
-              <MarkerF
-                position={position}
-                draggable={true}
-                onDragEnd={(e) => {
-                  if (e.latLng) {
-                    const newPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-                    setPosition(newPos);
-                    if (marketCenter) checkDistance(newPos, marketCenter);
-                  }
-                }}
-              />
+              {position.lat !== 0 && (
+                <MarkerF
+                  position={position}
+                  draggable={true}
+                  onDragEnd={(e) => {
+                    if (e.latLng) {
+                      const newPos = {
+                        lat: e.latLng.lat(),
+                        lng: e.latLng.lng(),
+                      };
+                      setPosition(newPos);
+                      if (marketCenter) checkDistance(newPos, marketCenter);
+                    }
+                  }}
+                  icon={{
+                    url: "https://cdn-icons-png.flaticon.com/512/1055/1055672.png", // Ikon Toko Oranye
+                    scaledSize: new window.google.maps.Size(40, 40),
+                    anchor: new window.google.maps.Point(20, 40),
+                  }}
+                />
+              )}
 
               {marketCenter && (
                 <>
@@ -362,13 +402,17 @@ export const LocationPickerModal: React.FC<Props> = ({
                       strokeWeight: 2,
                     }}
                   />
+                  {/* 🚀 FIX: LABEL KOTAK HITAM DIUBAH JADI PUTIH BERSIH */}
                   <MarkerF
                     position={marketCenter}
-                    icon="http://maps.google.com/mapfiles/ms/icons/orange-dot.png"
+                    icon={{
+                      path: window.google.maps.SymbolPath.CIRCLE,
+                      scale: 0, // Sembunyikan titik aslinya, karena kita cuma mau nampilin tulisan
+                    }}
                     label={{
-                      text: "PUSAT PASAR",
+                      text: "📍 PUSAT PASAR",
                       className:
-                        "text-[10px] font-black text-white mt-10 bg-slate-900 px-2 py-1 rounded-md border-2 border-[#FF6600] shadow-xl",
+                        "text-[11px] font-[1000] text-[#008080] mt-8 bg-white px-3 py-1.5 rounded-lg border-2 border-[#008080] shadow-xl tracking-widest",
                     }}
                   />
                 </>
@@ -386,12 +430,14 @@ export const LocationPickerModal: React.FC<Props> = ({
           <div className="absolute bottom-6 right-6 flex flex-col gap-3">
             <button
               onClick={goToMarketCenter}
-              className="p-4 bg-slate-900 text-[#FF6600] rounded-xl shadow-lg border-2 border-slate-700 hover:bg-black transition-all active:scale-90 flex items-center justify-center"
+              title="Kembali ke Pusat Pasar"
+              className="p-4 bg-[#FF6600] text-white rounded-xl shadow-lg border-2 border-white hover:bg-orange-600 transition-all active:scale-90 flex items-center justify-center"
             >
               <Store size={20} />
             </button>
             <button
               onClick={getMyLocation}
+              title="Lacak GPS HP Saya"
               className="p-4 bg-white text-[#008080] rounded-xl shadow-lg border-2 border-slate-200 hover:border-[#008080] transition-all active:scale-90 flex items-center justify-center"
             >
               <Navigation size={20} />
@@ -405,13 +451,13 @@ export const LocationPickerModal: React.FC<Props> = ({
           </div>
           <div>
             <h4 className="text-[12px] text-white">
-              INSTRUKSI PENEMPATAN RADAR
+              INSTRUKSI PENEMPATAN RADAR TOKO
             </h4>
             <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed tracking-wider normal-case font-semibold">
-              Gunakan kolom pencarian di atas untuk mencari alamat secara cepat.
-              Atau, klik ikon <b>Navigasi (Panah)</b> di pojok kanan bawah peta
-              untuk mendeteksi GPS HP Anda secara otomatis. Pastikan indikator
-              di atas berwarna <b>Hijau</b> sebelum menyimpan.
+              Geser ikon toko (Atau cari di kolom pencarian) dan letakkan tepat
+              di atas lokasi lapak Anda. Gunakan tombol{" "}
+              <b className="text-[#FF6600]">Toko Oranye</b> di kanan bawah untuk
+              mengembalikan peta ke tengah pasar jika Anda tersesat.
             </p>
           </div>
         </div>
