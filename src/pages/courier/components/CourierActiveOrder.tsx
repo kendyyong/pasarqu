@@ -27,8 +27,9 @@ import { OrderChatRoom } from "../../../features/chat/OrderChatRoom";
 const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
   ["places", "routes", "geometry", "drawing"];
 
+// 🚀 IKON CUSTOM SUPER PRO (Helm + Motor + Keranjang)
 const ICONS = {
-  courier: "https://cdn-icons-png.flaticon.com/512/3198/3198336.png",
+  courier: "https://cdn-icons-png.flaticon.com/512/4819/4819129.png", // 🛵🪖🧺 Ikon Motor + Keranjang
   store: "https://cdn-icons-png.flaticon.com/512/1055/1055672.png",
   home: "https://cdn-icons-png.flaticon.com/512/1946/1946488.png",
 };
@@ -67,7 +68,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
   const isPickingUp =
     order?.status === "READY_TO_PICKUP" || order?.status === "PICKING_UP";
 
-  // 🚀 LOGIKA SAPU JAGAT: AMBIL KOORDINAT DARI BERBAGAI KEMUNGKINAN OBJEK
+  // 🚀 LOGIKA SAPU JAGAT: CARI KOORDINAT SAMPAI DAPAT
   const storeLat = order?.merchants?.latitude || order?.merchant?.latitude;
   const storeLng = order?.merchants?.longitude || order?.merchant?.longitude;
 
@@ -130,7 +131,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
     );
   }, [isLoaded, currentPos, destLat, destLng]);
 
-  // 🚀 3. TOMBOL AJAIB: LEMPAR KE APLIKASI GOOGLE MAPS HP (URL SUDAH DIPERBAIKI)
+  // 3. TOMBOL ARAHKAN KE GOOGLE MAPS HP
   const handleOpenGoogleMaps = () => {
     if (!destLat || !destLng) {
       showToast(
@@ -142,11 +143,9 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
       return;
     }
 
-    // 📍 FORMAT URL DEEP-LINK GOOGLE MAPS YANG BENAR (Tanpa typo kurung kurawal)
     let url = `https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}&travelmode=driving`;
 
-    // Jika posisi kurir diketahui, tambahkan rute dari posisi saat ini
-    if (currentPos) {
+    if (currentPos?.lat && currentPos?.lng) {
       url = `https://www.google.com/maps/dir/?api=1&origin=${currentPos.lat},${currentPos.lng}&destination=${destLat},${destLng}&travelmode=driving`;
     }
 
@@ -156,6 +155,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
   const handleStatusUpdate = async () => {
     if (!order?.id) return;
     setLoading(true);
+
     try {
       let nextStatus = "";
       let toastMsg = "";
@@ -167,7 +167,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
       }
       if (order.status === "READY_TO_PICKUP" || order.status === "PICKING_UP") {
         nextStatus = "SHIPPING";
-        toastMsg = "MENUJU LOKASI PEMBELI 🛵💨";
+        toastMsg = "STATUS: MENUJU LOKASI PEMBELI 🛵💨";
       } else if (order.status === "SHIPPING" || order.status === "DELIVERING") {
         nextStatus = "COMPLETED";
       }
@@ -275,17 +275,21 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                   }}
                 />
               )}
+
+              {/* 🛵 POSISI KURIR (DIPERBESAR AGAR HELM & KERANJANG KELIHATAN) */}
               {currentPos && (
                 <MarkerF
                   position={currentPos}
                   icon={{
                     url: ICONS.courier,
-                    scaledSize: new window.google.maps.Size(40, 40),
-                    anchor: new window.google.maps.Point(20, 20),
+                    scaledSize: new window.google.maps.Size(55, 55), // Diperbesar ke 55px
+                    anchor: new window.google.maps.Point(27.5, 27.5),
                   }}
                   zIndex={999}
                 />
               )}
+
+              {/* 🏠/🏢 POSISI TUJUAN */}
               {destLat && (
                 <MarkerF
                   position={{ lat: destLat, lng: destLng }}
