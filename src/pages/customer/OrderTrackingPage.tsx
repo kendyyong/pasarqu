@@ -37,7 +37,6 @@ import { MobileLayout } from "../../components/layout/MobileLayout";
 
 const mapContainerStyle = { width: "100%", height: "100%" };
 
-// 🚀 IKON CUSTOM LEVEL PRO
 const ICONS = {
   courier: "https://cdn-icons-png.flaticon.com/512/713/713438.png",
   home: "https://cdn-icons-png.flaticon.com/512/1946/1946488.png",
@@ -61,11 +60,9 @@ export const OrderTrackingPage = () => {
   >("merchant_customer");
   const [orderItems, setOrderItems] = useState<any[]>([]);
 
-  // RADAR ROUTING STATE
   const [directions, setDirections] = useState<any>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
 
-  // REVIEW STATE
   const [hasReviewed, setHasReviewed] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [rating, setRating] = useState(0);
@@ -73,7 +70,6 @@ export const OrderTrackingPage = () => {
   const [reviewComment, setReviewComment] = useState("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
-  // 🚀 LOAD GOOGLE MAPS API DENGAN LIBRARIES DIRECTIONS
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
@@ -121,12 +117,12 @@ export const OrderTrackingPage = () => {
     if (!orderId) return;
     try {
       setLoading(true);
-      // 🚀 TARIK DATA KOORDINAT PASAR SUPER ADMIN SEBAGAI ANCHOR!
+
+      // 🚀 FIX 400 BAD REQUEST:
+      // Kita panggil markets(*) saja, dan TIDAK memanggil merchants dari orders
       const { data: orderData, error: orderErr } = await supabase
         .from("orders")
-        .select(
-          "*, market:markets(name, latitude, longitude), merchant:merchants(latitude, longitude)",
-        )
+        .select("*, market:markets(*)")
         .eq("id", orderId)
         .maybeSingle();
 
@@ -135,13 +131,24 @@ export const OrderTrackingPage = () => {
         setOrder(null);
         return;
       }
-      setOrder(orderData);
 
+      // 🚀 SOLUSI AMAN: Kita tarik data Toko (Merchant) dari order_items
       const { data: rawItems } = await supabase
         .from("order_items")
-        .select("*, product:products(name, image_url)")
+        .select(
+          "*, product:products(name, image_url), merchant:merchants(latitude, longitude)",
+        )
         .eq("order_id", orderId);
-      if (rawItems) setOrderItems(rawItems);
+
+      if (rawItems) {
+        setOrderItems(rawItems);
+        // Selipkan koordinat merchant ke dalam orderData untuk dipakai oleh Radar
+        if (rawItems[0]?.merchant) {
+          orderData.merchant = rawItems[0].merchant;
+        }
+      }
+
+      setOrder(orderData);
 
       if (orderData.courier_id) {
         const { data: cData } = await supabase
@@ -159,6 +166,7 @@ export const OrderTrackingPage = () => {
         .maybeSingle();
       if (reviewData) setHasReviewed(true);
     } catch (err: any) {
+      console.error("Fetch Tracking Error:", err);
       showToast("GAGAL MEMUAT DATA PESANAN", "error");
     } finally {
       setLoading(false);
@@ -169,7 +177,6 @@ export const OrderTrackingPage = () => {
     fetchFullData();
   }, [fetchFullData]);
 
-  // 🚀 SENSOR LIVE TRACKING ORDER & KURIR
   useEffect(() => {
     if (!orderId) return;
     const orderChannel = supabase
@@ -182,7 +189,7 @@ export const OrderTrackingPage = () => {
           table: "orders",
           filter: `id=eq.${orderId}`,
         },
-        (payload) => setOrder(payload.new),
+        (payload) => setOrder((prev: any) => ({ ...prev, ...payload.new })),
       )
       .subscribe();
 
@@ -209,7 +216,6 @@ export const OrderTrackingPage = () => {
     };
   }, [orderId, order?.courier_id]);
 
-  // 🚀 ENGINE POLYLINE MAPS (GARIS RUTE CERDAS)
   useEffect(() => {
     if (!isLoaded || !order?.delivery_lat) return;
 
@@ -302,8 +308,10 @@ export const OrderTrackingPage = () => {
     const currentHidden = JSON.parse(
       localStorage.getItem("hidden_orders") || "[]",
     );
-    const updatedHidden = [...currentHidden, orderId];
-    localStorage.setItem("hidden_orders", JSON.stringify(updatedHidden));
+    localStorage.setItem(
+      "hidden_orders",
+      JSON.stringify([...currentHidden, orderId]),
+    );
     showToast("Pesanan telah dihapus dari riwayat.", "success");
     navigate("/order-history");
   };
@@ -326,22 +334,16 @@ export const OrderTrackingPage = () => {
   const isFinished =
     order?.status === "COMPLETED" || order?.status === "CANCELLED";
 
-  // 🚀 HIERARKI SMART ANCHOR (FOKUS PETA)
   const getMapCenter = () => {
-    if (courier?.current_lat && courier?.current_lng) {
+    if (courier?.current_lat && courier?.current_lng)
       return { lat: courier.current_lat, lng: courier.current_lng };
-    }
-    if (order?.delivery_lat && order?.delivery_lng) {
+    if (order?.delivery_lat && order?.delivery_lng)
       return { lat: order.delivery_lat, lng: order.delivery_lng };
-    }
-    if (order?.merchant?.latitude && order?.merchant?.longitude) {
+    if (order?.merchant?.latitude && order?.merchant?.longitude)
       return { lat: order.merchant.latitude, lng: order.merchant.longitude };
-    }
-    // THE ULTIMATE ANCHOR: KORDINAT PASAR DARI SUPER ADMIN
-    if (order?.market?.latitude && order?.market?.longitude) {
+    if (order?.market?.latitude && order?.market?.longitude)
       return { lat: order.market.latitude, lng: order.market.longitude };
-    }
-    return { lat: -0.8327, lng: 117.2476 }; // Safe fallback system
+    return { lat: -0.8327, lng: 117.2476 };
   };
 
   const currentCenter = getMapCenter();
@@ -359,7 +361,6 @@ export const OrderTrackingPage = () => {
       cartCount={0}
     >
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-black text-left uppercase tracking-tighter not-italic text-[12px]">
-        {/* HEADER */}
         <header
           className={`sticky top-0 z-50 h-16 flex items-center px-4 shadow-md w-full transition-colors ${order?.status === "CANCELLED" ? "bg-red-600" : "bg-[#008080]"}`}
         >
@@ -400,7 +401,6 @@ export const OrderTrackingPage = () => {
         </header>
 
         <main className="flex-1 w-full max-w-[1200px] mx-auto p-4 pb-32 grid grid-cols-1 md:grid-cols-12 gap-5">
-          {/* BAGIAN KIRI (PETA RADAR PRO) */}
           <div className="md:col-span-7 space-y-5">
             {order?.status !== "CANCELLED" && !isPickup && (
               <div className="h-[350px] md:h-[450px] bg-slate-200 rounded-md border border-slate-200 shadow-sm overflow-hidden relative">
@@ -425,7 +425,6 @@ export const OrderTrackingPage = () => {
                     }}
                     onLoad={(map) => setMapInstance(map)}
                   >
-                    {/* GARIS RUTE */}
                     {directions && (
                       <DirectionsRenderer
                         directions={directions}
@@ -439,7 +438,6 @@ export const OrderTrackingPage = () => {
                       />
                     )}
 
-                    {/* LOKASI PASAR / TOKO */}
                     {!courier?.current_lat &&
                       (order?.merchant?.latitude ? (
                         <MarkerF
@@ -465,7 +463,6 @@ export const OrderTrackingPage = () => {
                         />
                       ) : null)}
 
-                    {/* LOKASI PEMBELI */}
                     {order?.delivery_lat && (
                       <MarkerF
                         position={{
@@ -479,7 +476,6 @@ export const OrderTrackingPage = () => {
                       />
                     )}
 
-                    {/* LOKASI KURIR BERGERAK */}
                     {courier?.current_lat && (
                       <MarkerF
                         position={{
@@ -495,8 +491,6 @@ export const OrderTrackingPage = () => {
                     )}
                   </GoogleMap>
                 )}
-
-                {/* OVERLAY STATUS RADAR */}
                 <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-md px-3 py-2 rounded-md shadow-md flex items-center gap-2 border border-slate-200">
                   <div
                     className={`w-2.5 h-2.5 rounded-full animate-pulse ${courier?.current_lat ? "bg-green-500" : "bg-orange-500"}`}
@@ -510,7 +504,6 @@ export const OrderTrackingPage = () => {
               </div>
             )}
 
-            {/* STATUS DIBATALKAN */}
             {order?.status === "CANCELLED" && (
               <section className="bg-red-50 p-8 rounded-md border-2 border-red-500 shadow-sm flex flex-col items-center text-center">
                 <Ban size={48} className="text-red-500 mb-4" />
@@ -530,7 +523,6 @@ export const OrderTrackingPage = () => {
               </section>
             )}
 
-            {/* SEKSI AMBIL SENDIRI */}
             {isPickup &&
               order?.status !== "COMPLETED" &&
               order?.status !== "CANCELLED" && (
@@ -558,7 +550,6 @@ export const OrderTrackingPage = () => {
                 </section>
               )}
 
-            {/* TIMELINE PESANAN */}
             {order?.status !== "CANCELLED" && (
               <section className="bg-white p-6 rounded-md border border-slate-200 shadow-sm">
                 <div className="flex justify-between items-center relative">
@@ -588,7 +579,6 @@ export const OrderTrackingPage = () => {
             )}
           </div>
 
-          {/* BAGIAN KANAN (DETAIL, ALAMAT, TOTAL) */}
           <div className="md:col-span-5 space-y-5 text-left">
             <section className="bg-white p-5 rounded-md border border-slate-200 shadow-sm">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
@@ -688,7 +678,6 @@ export const OrderTrackingPage = () => {
               </div>
             </section>
 
-            {/* TOMBOL ACTION BAWAH */}
             <div className="grid grid-cols-1 gap-3">
               {order?.shipping_status === "COMPLETED" && !hasReviewed && (
                 <button
@@ -746,7 +735,6 @@ export const OrderTrackingPage = () => {
           </div>
         </main>
 
-        {/* MODAL AREA */}
         {showReviewModal && (
           <div className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-md p-6 shadow-2xl relative animate-in zoom-in-95">
