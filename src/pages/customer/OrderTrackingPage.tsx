@@ -24,6 +24,7 @@ import {
   Store,
   ReceiptText,
   Gift,
+  Ban, // 🚀 Ikon Batal
 } from "lucide-react";
 import QRCode from "react-qr-code";
 import { OrderChatRoom } from "../../features/chat/OrderChatRoom";
@@ -41,6 +42,7 @@ export const OrderTrackingPage = () => {
   const [order, setOrder] = useState<any>(null);
   const [courier, setCourier] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isCancelling, setIsCancelling] = useState(false); // 🚀 State Batal
   const [showChat, setShowChat] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [chatType, setChatType] = useState<
@@ -81,6 +83,7 @@ export const OrderTrackingPage = () => {
 
   const getCurrentStep = () => {
     if (!order) return -1;
+    if (order.status === "CANCELLED") return -1; // Kalau batal, progress bar hilang/mati
     if (order.shipping_status === "COMPLETED") return 3;
     if (
       order.shipping_status === "SHIPPING" ||
@@ -90,7 +93,7 @@ export const OrderTrackingPage = () => {
     if (
       order.shipping_status === "PACKING" ||
       order.shipping_status === "READY_TO_PICKUP" ||
-      order.status === "PROCESSING"
+      order.status === "PACKING"
     )
       return 1;
     if (order.status === "PAID" || order.status === "PROCESSING") return 0;
@@ -102,8 +105,6 @@ export const OrderTrackingPage = () => {
       if (!orderId) return;
       try {
         setLoading(true);
-        // 🚀 FIX: Hapus request 'latitude' dan 'longitude' dari tabel markets.
-        // Cukup ambil 'name' saja agar tidak memicu error 400.
         const { data: orderData, error: orderErr } = await supabase
           .from("orders")
           .select("*, market:markets(name)")
@@ -194,6 +195,32 @@ export const OrderTrackingPage = () => {
     }
   };
 
+  // 🚀 FUNGSI PEMBATALAN OLEH PEMBELI (DENGAN REFUND SALDO)
+  const handleCancelOrder = async () => {
+    if (!window.confirm("Apakah Anda yakin ingin membatalkan pesanan ini?"))
+      return;
+
+    setIsCancelling(true);
+    try {
+      // Panggil fungsi RPC untuk membatalkan dan mengembalikan saldo (jika ada)
+      const { error } = await supabase.rpc("cancel_order_and_refund", {
+        p_order_id: order.id,
+        p_user_id: user.id,
+      });
+
+      if (error) throw error;
+
+      showToast("Pesanan berhasil dibatalkan!", "success");
+
+      // Update state lokal agar tombol menghilang
+      setOrder((prev: any) => ({ ...prev, status: "CANCELLED" }));
+    } catch (err: any) {
+      showToast(err.message || "Gagal membatalkan pesanan.", "error");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   if (loading)
     return (
       <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-[100] gap-4 font-black">
@@ -205,6 +232,12 @@ export const OrderTrackingPage = () => {
     );
 
   const isPickup = order?.shipping_method === "pickup";
+
+  // 🚀 LOGIKA FAIR CANCELLATION (TOMBOL MUNCUL JIKA BELUM DIPROSES TOKO)
+  const canCancel =
+    order?.status === "PAID" ||
+    order?.status === "PROCESSING" ||
+    order?.status === "PENDING";
 
   return (
     <MobileLayout
@@ -220,7 +253,9 @@ export const OrderTrackingPage = () => {
     >
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-black text-left uppercase tracking-tighter not-italic text-[12px]">
         {/* TOP BAR */}
-        <header className="bg-[#008080] sticky top-0 z-50 h-16 flex items-center px-4 shadow-md w-full">
+        <header
+          className={`sticky top-0 z-50 h-16 flex items-center px-4 shadow-md w-full transition-colors ${order?.status === "CANCELLED" ? "bg-red-600" : "bg-[#008080]"}`}
+        >
           <div className="w-full max-w-[1200px] mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
@@ -230,7 +265,7 @@ export const OrderTrackingPage = () => {
                 <ArrowLeft size={24} strokeWidth={3} />
               </button>
               <div className="flex flex-col text-left">
-                <span className="text-[10px] text-teal-200 leading-none mb-1 tracking-wider">
+                <span className="text-[10px] text-white/70 leading-none mb-1 tracking-wider">
                   STATUS PESANAN
                 </span>
                 <span className="text-[14px] font-[1000] text-white leading-none">
@@ -239,7 +274,7 @@ export const OrderTrackingPage = () => {
               </div>
             </div>
             <div
-              className={`px-3 py-1.5 rounded-md text-[10px] font-black shadow-sm ${order?.status === "COMPLETED" ? "bg-green-500 text-white" : "bg-[#FF6600] text-white animate-pulse"}`}
+              className={`px-3 py-1.5 rounded-md text-[10px] font-black shadow-sm ${order?.status === "COMPLETED" ? "bg-green-500 text-white" : order?.status === "CANCELLED" ? "bg-white text-red-600" : "bg-[#FF6600] text-white animate-pulse"}`}
             >
               {statusMap[order?.shipping_status || order?.status] ||
                 "MEMPROSES"}
@@ -251,103 +286,123 @@ export const OrderTrackingPage = () => {
           {/* BAGIAN KIRI (RADAR & QR) */}
           <div className="md:col-span-7 space-y-5">
             {/* MAP RADAR */}
-            <div className="h-[300px] md:h-[450px] bg-white rounded-md border border-slate-200 shadow-sm overflow-hidden relative">
-              {isLoaded ? (
-                <GoogleMap
-                  mapContainerStyle={mapContainerStyle}
-                  center={
-                    courier?.current_lat
-                      ? { lat: courier.current_lat, lng: courier.current_lng }
-                      : {
-                          lat: order?.delivery_lat || -6.2,
-                          lng: order?.delivery_lng || 106.8,
-                        }
-                  }
-                  zoom={15}
-                  options={{
-                    disableDefaultUI: true,
-                    gestureHandling: "greedy",
-                  }}
-                >
-                  <MarkerF
-                    position={{
-                      lat: order?.delivery_lat || -6.2,
-                      lng: order?.delivery_lng || 106.8,
+            {order?.status !== "CANCELLED" && (
+              <div className="h-[300px] md:h-[450px] bg-white rounded-md border border-slate-200 shadow-sm overflow-hidden relative">
+                {isLoaded ? (
+                  <GoogleMap
+                    mapContainerStyle={mapContainerStyle}
+                    center={
+                      courier?.current_lat
+                        ? { lat: courier.current_lat, lng: courier.current_lng }
+                        : {
+                            lat: order?.delivery_lat || -6.2,
+                            lng: order?.delivery_lng || 106.8,
+                          }
+                    }
+                    zoom={15}
+                    options={{
+                      disableDefaultUI: true,
+                      gestureHandling: "greedy",
                     }}
-                    label="TUJUAN"
-                  />
-                  {courier?.current_lat && (
+                  >
                     <MarkerF
                       position={{
-                        lat: courier.current_lat,
-                        lng: courier.current_lng,
+                        lat: order?.delivery_lat || -6.2,
+                        lng: order?.delivery_lng || 106.8,
                       }}
-                      icon={{
-                        url: "https://cdn-icons-png.flaticon.com/512/713/713438.png",
-                        scaledSize: new google.maps.Size(40, 40),
-                      }}
+                      label="TUJUAN"
                     />
-                  )}
-                </GoogleMap>
-              ) : (
-                <div className="w-full h-full bg-slate-100 flex items-center justify-center">
-                  MEMUAT RADAR...
-                </div>
-              )}
-            </div>
+                    {courier?.current_lat && (
+                      <MarkerF
+                        position={{
+                          lat: courier.current_lat,
+                          lng: courier.current_lng,
+                        }}
+                        icon={{
+                          url: "https://cdn-icons-png.flaticon.com/512/713/713438.png",
+                          scaledSize: new google.maps.Size(40, 40),
+                        }}
+                      />
+                    )}
+                  </GoogleMap>
+                ) : (
+                  <div className="w-full h-full bg-slate-100 flex items-center justify-center">
+                    MEMUAT RADAR...
+                  </div>
+                )}
+              </div>
+            )}
 
-            {/* QR CODE BUKTI (HANYA PICKUP) */}
-            {isPickup && order?.status !== "COMPLETED" && (
-              <section className="bg-white p-8 rounded-md border-2 border-[#FF6600] shadow-lg flex flex-col items-center text-center">
-                <div className="flex items-center gap-2 text-[#FF6600] mb-5">
-                  <QrCode size={22} />
-                  <h2 className="text-[14px] font-[1000] tracking-widest uppercase">
-                    KLAIM PENGAMBILAN
-                  </h2>
-                </div>
-                <div className="bg-white p-4 rounded-md border-4 border-slate-900 mb-5 shadow-inner">
-                  <QRCode value={order?.id || "PNDG"} size={180} />
-                </div>
-                <p className="text-[12px] font-black text-slate-800 mb-4 leading-tight uppercase px-4">
-                  TUNJUKKAN KODE INI KE PEDAGANG UNTUK VERIFIKASI PENGAMBILAN
-                  BARANG.
+            {/* STATUS DIBATALKAN PEMBERITAHUAN */}
+            {order?.status === "CANCELLED" && (
+              <section className="bg-red-50 p-8 rounded-md border-2 border-red-500 shadow-sm flex flex-col items-center text-center">
+                <Ban size={48} className="text-red-500 mb-4" />
+                <h2 className="text-[16px] font-[1000] text-red-600 tracking-widest uppercase mb-2">
+                  PESANAN TELAH DIBATALKAN
+                </h2>
+                <p className="text-[11px] font-bold text-red-500/80 max-w-sm leading-tight">
+                  Pesanan ini telah dibatalkan. Jika Anda menggunakan saldo
+                  PasarQu Pay, dana Anda telah dikembalikan 100% ke dompet.
                 </p>
-                <div className="flex items-center gap-2 bg-orange-50 text-[#FF6600] px-4 py-2 rounded-md border border-orange-100">
-                  <Gift size={18} />
-                  <span className="text-[11px] font-black uppercase">
-                    BONUS RP {order?.cashback_amount?.toLocaleString()} CAIR
-                    SETELAH SCAN
-                  </span>
-                </div>
               </section>
             )}
 
+            {/* QR CODE BUKTI (HANYA PICKUP) */}
+            {isPickup &&
+              order?.status !== "COMPLETED" &&
+              order?.status !== "CANCELLED" && (
+                <section className="bg-white p-8 rounded-md border-2 border-[#FF6600] shadow-lg flex flex-col items-center text-center">
+                  <div className="flex items-center gap-2 text-[#FF6600] mb-5">
+                    <QrCode size={22} />
+                    <h2 className="text-[14px] font-[1000] tracking-widest uppercase">
+                      KLAIM PENGAMBILAN
+                    </h2>
+                  </div>
+                  <div className="bg-white p-4 rounded-md border-4 border-slate-900 mb-5 shadow-inner">
+                    <QRCode value={order?.id || "PNDG"} size={180} />
+                  </div>
+                  <p className="text-[12px] font-black text-slate-800 mb-4 leading-tight uppercase px-4">
+                    TUNJUKKAN KODE INI KE PEDAGANG UNTUK VERIFIKASI PENGAMBILAN
+                    BARANG.
+                  </p>
+                  <div className="flex items-center gap-2 bg-orange-50 text-[#FF6600] px-4 py-2 rounded-md border border-orange-100">
+                    <Gift size={18} />
+                    <span className="text-[11px] font-black uppercase">
+                      BONUS RP {order?.cashback_amount?.toLocaleString()} CAIR
+                      SETELAH SCAN
+                    </span>
+                  </div>
+                </section>
+              )}
+
             {/* STATUS TIMELINE */}
-            <section className="bg-white p-6 rounded-md border border-slate-200 shadow-sm">
-              <div className="flex justify-between items-center relative">
-                <div className="absolute top-[18px] left-8 right-8 h-[2px] bg-slate-100 -z-0" />
-                {steps.map((step, idx) => {
-                  const isActive = idx <= getCurrentStep();
-                  return (
-                    <div
-                      key={idx}
-                      className="relative z-10 flex flex-col items-center w-1/4"
-                    >
+            {order?.status !== "CANCELLED" && (
+              <section className="bg-white p-6 rounded-md border border-slate-200 shadow-sm">
+                <div className="flex justify-between items-center relative">
+                  <div className="absolute top-[18px] left-8 right-8 h-[2px] bg-slate-100 -z-0" />
+                  {steps.map((step, idx) => {
+                    const isActive = idx <= getCurrentStep();
+                    return (
                       <div
-                        className={`w-10 h-10 rounded-md flex items-center justify-center border-2 transition-all ${isActive ? "bg-[#008080] border-[#008080] text-white shadow-md" : "bg-white border-slate-100 text-slate-200"}`}
+                        key={idx}
+                        className="relative z-10 flex flex-col items-center w-1/4"
                       >
-                        <step.icon size={18} />
+                        <div
+                          className={`w-10 h-10 rounded-md flex items-center justify-center border-2 transition-all ${isActive ? "bg-[#008080] border-[#008080] text-white shadow-md" : "bg-white border-slate-100 text-slate-200"}`}
+                        >
+                          <step.icon size={18} />
+                        </div>
+                        <span
+                          className={`text-[9px] mt-2 font-black leading-none text-center ${isActive ? "text-[#008080]" : "text-slate-300"}`}
+                        >
+                          {step.label}
+                        </span>
                       </div>
-                      <span
-                        className={`text-[9px] mt-2 font-black leading-none text-center ${isActive ? "text-[#008080]" : "text-slate-300"}`}
-                      >
-                        {step.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
           </div>
 
           {/* BAGIAN KANAN: RINCIAN & HARGA */}
@@ -445,37 +500,40 @@ export const OrderTrackingPage = () => {
                   <span className="text-[11px] text-slate-400 font-[1000] mb-1 uppercase">
                     TOTAL DIBAYAR
                   </span>
-                  <span className="text-[28px] text-[#FF6600] font-[1000] font-sans tracking-tighter leading-none">
+                  <span
+                    className={`text-[28px] ${order?.status === "CANCELLED" ? "text-slate-300 line-through decoration-red-500" : "text-[#FF6600]"} font-[1000] font-sans tracking-tighter leading-none`}
+                  >
                     RP {order?.total_price?.toLocaleString()}
                   </span>
                 </div>
 
-                {order?.cashback_amount > 0 && (
-                  <div className="mt-5 p-4 bg-teal-50 border border-teal-100 rounded-md flex items-center justify-between">
-                    <div className="flex items-center gap-3 text-[#008080]">
-                      <Gift size={24} />
-                      <div className="flex flex-col text-left">
-                        <span className="text-[10px] font-black leading-none mb-1 uppercase">
-                          HADIAH SALDO
-                        </span>
-                        <span className="text-[14px] font-[1000] leading-none font-sans uppercase">
-                          RP {order?.cashback_amount?.toLocaleString()}
-                        </span>
+                {order?.cashback_amount > 0 &&
+                  order?.status !== "CANCELLED" && (
+                    <div className="mt-5 p-4 bg-teal-50 border border-teal-100 rounded-md flex items-center justify-between">
+                      <div className="flex items-center gap-3 text-[#008080]">
+                        <Gift size={24} />
+                        <div className="flex flex-col text-left">
+                          <span className="text-[10px] font-black leading-none mb-1 uppercase">
+                            HADIAH SALDO
+                          </span>
+                          <span className="text-[14px] font-[1000] leading-none font-sans uppercase">
+                            RP {order?.cashback_amount?.toLocaleString()}
+                          </span>
+                        </div>
                       </div>
+                      <span
+                        className={`px-2 py-1 rounded text-[8px] font-black uppercase ${order?.status === "COMPLETED" ? "bg-green-500 text-white" : "bg-orange-200 text-[#FF6600]"}`}
+                      >
+                        {order?.status === "COMPLETED"
+                          ? "SUDAH CAIR"
+                          : "MENUNGGU SCAN"}
+                      </span>
                     </div>
-                    <span
-                      className={`px-2 py-1 rounded text-[8px] font-black uppercase ${order?.status === "COMPLETED" ? "bg-green-500 text-white" : "bg-orange-200 text-[#FF6600]"}`}
-                    >
-                      {order?.status === "COMPLETED"
-                        ? "SUDAH CAIR"
-                        : "MENUNGGU SCAN"}
-                    </span>
-                  </div>
-                )}
+                  )}
               </div>
             </section>
 
-            {/* AKSI */}
+            {/* AKSI BAWAH */}
             <div className="grid grid-cols-1 gap-3">
               {order?.shipping_status === "COMPLETED" && !hasReviewed && (
                 <button
@@ -500,7 +558,8 @@ export const OrderTrackingPage = () => {
                     <Download size={16} /> NOTA PDF
                   </button>
                 ) : (
-                  order?.courier_id && (
+                  order?.courier_id &&
+                  order?.status !== "CANCELLED" && (
                     <button
                       onClick={() => {
                         setChatType("courier_customer");
@@ -514,27 +573,27 @@ export const OrderTrackingPage = () => {
                   )
                 )}
               </div>
-            </div>
 
-            {/* KOMPLAIN */}
-            <section className="bg-red-50 p-4 rounded-md border border-red-100 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-red-600">
-                <ShieldAlert size={18} />
-                <span className="text-[11px] font-black uppercase">
-                  MASALAH PESANAN?
-                </span>
-              </div>
-              <button
-                onClick={() => setShowSupportModal(true)}
-                className="text-[10px] font-black text-red-600 underline uppercase"
-              >
-                AJUKAN KOMPLAIN
-              </button>
-            </section>
+              {/* 🚀 TOMBOL BATALKAN PESANAN (HANYA MUNCUL JIKA TOKO BELUM TERIMA) */}
+              {canCancel && (
+                <button
+                  onClick={handleCancelOrder}
+                  disabled={isCancelling}
+                  className="w-full mt-2 bg-white border-2 border-red-200 text-red-500 hover:bg-red-50 py-3.5 rounded-md flex items-center justify-center gap-2 font-black text-[11px] uppercase active:scale-95 transition-all shadow-sm"
+                >
+                  {isCancelling ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Ban size={16} />
+                  )}
+                  BATALKAN PESANAN
+                </button>
+              )}
+            </div>
           </div>
         </main>
 
-        {/* MODALS */}
+        {/* MODALS SAMA SEPERTI SEBELUMNYA... */}
         {showReviewModal && (
           <div className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-md p-6 shadow-2xl relative animate-in zoom-in-95">

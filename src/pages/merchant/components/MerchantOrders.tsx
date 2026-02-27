@@ -19,6 +19,7 @@ import {
   Truck,
   Search,
   MessageCircle,
+  Ban, // 🚀 Ikon Tolak
 } from "lucide-react";
 
 interface Props {
@@ -140,13 +141,11 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
     [user?.id],
   );
 
-  // 🚀 SENSOR LIVE AUTO-SYNC (DIPERBAIKI UNTUK TINGKAT RESPONSIVITAS 100%)
   useEffect(() => {
     fetchOrders();
 
     if (!user?.id) return;
 
-    // Pasang 2 Kabel Sensor: Satu untuk perubahan status order, satu lagi untuk pesanan baru di order_items
     const channel = supabase
       .channel(`live_orders_${user.id}`)
       .on(
@@ -158,8 +157,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
           filter: `merchant_id=eq.${user.id}`,
         },
         () => {
-          console.log("🔥 PESANAN BARU MASUK! Menarik data...");
-          fetchOrders(true); // Tarik data diam-diam tanpa loading screen
+          fetchOrders(true);
         },
       )
       .on(
@@ -170,7 +168,6 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
           table: "orders",
         },
         () => {
-          console.log("🔄 STATUS PESANAN BERUBAH! Sinkronisasi...");
           fetchOrders(true);
         },
       )
@@ -181,7 +178,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
     };
   }, [fetchOrders, user?.id]);
 
-  // PROSES PESANAN MASUK
+  // PROSES PESANAN MASUK (TERIMA)
   const handleProcessOrder = async (order: any) => {
     setIsUpdating(order.id);
     const isPickup = order.shipping_method === "pickup";
@@ -200,6 +197,33 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
         isPickup ? "PESANAN DISIAPKAN!" : "PESANAN DITERIMA. MENCARI KURIR...",
         "success",
       );
+      fetchOrders(true);
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setIsUpdating(null);
+    }
+  };
+
+  // 🚀 FUNGSI TOLAK PESANAN OLEH TOKO
+  const handleRejectOrder = async (order: any) => {
+    if (
+      !window.confirm(
+        "Yakin ingin menolak pesanan ini? Saldo pembeli akan dikembalikan.",
+      )
+    )
+      return;
+
+    setIsUpdating(order.id);
+    try {
+      // Panggil fungsi RPC untuk membatalkan dan mengembalikan saldo (jika ada)
+      const { error } = await supabase.rpc("cancel_order_and_refund", {
+        p_order_id: order.id,
+        p_user_id: order.customer_id,
+      });
+
+      if (error) throw error;
+      showToast("Pesanan DITOLAK.", "info");
       fetchOrders(true);
     } catch (err: any) {
       showToast(err.message, "error");
@@ -252,14 +276,14 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
   // FILTERING GABUNGAN
   const filteredOrders = orders.filter((o) => {
     let matchTab = false;
-    // SUDAH FIXED: Masukkan "PROCESSING" (COD)
     if (statusFilter === "pending")
       matchTab = ["PAID", "PENDING", "PROCESSING"].includes(o.status);
     else if (statusFilter === "shipping")
       matchTab =
         ["PACKING", "ON_DELIVERY", "SHIPPING"].includes(o.status) ||
         ["SEARCHING_COURIER", "READY_TO_PICKUP"].includes(o.shipping_status);
-    else if (statusFilter === "completed") matchTab = o.status === "COMPLETED";
+    else if (statusFilter === "completed")
+      matchTab = o.status === "COMPLETED" || o.status === "CANCELLED"; // Batal masuk tab selesai
 
     const matchSearch =
       o.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -409,6 +433,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
               const isNew = ["PAID", "PENDING", "PROCESSING"].includes(
                 order.status,
               );
+              const isCancelled = order.status === "CANCELLED";
 
               // HITUNG SLA TIMER
               const orderTime = new Date(order.created_at).getTime();
@@ -422,28 +447,36 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                 <div
                   key={order.id}
                   className={`bg-white border-2 rounded-xl shadow-sm overflow-hidden transition-all relative ${
-                    isNew && isLate
-                      ? "border-red-500"
-                      : isPickup
-                        ? "border-[#FF6600]/30 hover:border-[#FF6600]"
-                        : "border-slate-100 hover:border-[#008080]"
+                    isCancelled
+                      ? "border-red-200 opacity-60" // Kalau batal, dibikin buram
+                      : isNew && isLate
+                        ? "border-red-500"
+                        : isPickup
+                          ? "border-[#FF6600]/30 hover:border-[#FF6600]"
+                          : "border-slate-100 hover:border-[#008080]"
                   }`}
                 >
                   {/* ORDER TOP BAR */}
                   <div
-                    className={`px-5 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b-2 ${isPickup ? "bg-orange-50/50 border-orange-100" : "bg-slate-50 border-slate-100"}`}
+                    className={`px-5 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b-2 ${isCancelled ? "bg-red-50 border-red-100" : isPickup ? "bg-orange-50/50 border-orange-100" : "bg-slate-50 border-slate-100"}`}
                   >
                     <div className="flex items-center gap-4">
                       <div
-                        className={`px-3 py-1.5 rounded-md border-2 flex items-center gap-2 shadow-sm ${isPickup ? "bg-white border-orange-200 text-[#FF6600]" : "bg-white border-slate-200 text-[#008080]"}`}
+                        className={`px-3 py-1.5 rounded-md border-2 flex items-center gap-2 shadow-sm ${isCancelled ? "bg-white border-red-200 text-red-500" : isPickup ? "bg-white border-orange-200 text-[#FF6600]" : "bg-white border-slate-200 text-[#008080]"}`}
                       >
-                        {isPickup ? (
+                        {isCancelled ? (
+                          <Ban size={14} />
+                        ) : isPickup ? (
                           <ShoppingBag size={14} />
                         ) : (
                           <Truck size={14} />
                         )}
                         <span className="text-[11px] font-black uppercase tracking-widest">
-                          {isPickup ? "AMBIL SENDIRI" : "KURIR PASAR"}
+                          {isCancelled
+                            ? "DIBATALKAN"
+                            : isPickup
+                              ? "AMBIL SENDIRI"
+                              : "KURIR PASAR"}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5 text-slate-400">
@@ -458,7 +491,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                     </div>
 
                     <div className="flex items-center gap-3 w-full md:w-auto justify-between">
-                      {isNew && (
+                      {isNew && !isCancelled && (
                         <div
                           className={`text-[9px] px-3 py-1.5 rounded-md flex items-center gap-1 shadow-sm ${isLate ? "bg-red-600 text-white animate-pulse" : "bg-orange-100 text-orange-700"}`}
                         >
@@ -469,7 +502,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                         </div>
                       )}
                       <span
-                        className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest shadow-sm ${isNew ? "bg-[#008080] text-white" : "bg-slate-200 text-slate-500"}`}
+                        className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest shadow-sm ${isCancelled ? "bg-red-500 text-white" : isNew ? "bg-[#008080] text-white" : "bg-slate-200 text-slate-500"}`}
                       >
                         {order.status === "PROCESSING"
                           ? "COD - BARU"
@@ -513,7 +546,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                   <div className="px-5 py-5 bg-white border-t-2 border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="flex items-start gap-3 w-full md:w-auto">
                       <div
-                        className={`w-10 h-10 rounded-md flex items-center justify-center shrink-0 border ${isPickup ? "bg-orange-50 border-orange-200 text-[#FF6600]" : "bg-teal-50 border-teal-200 text-[#008080]"}`}
+                        className={`w-10 h-10 rounded-md flex items-center justify-center shrink-0 border ${isCancelled ? "bg-red-50 border-red-200 text-red-500" : isPickup ? "bg-orange-50 border-orange-200 text-[#FF6600]" : "bg-teal-50 border-teal-200 text-[#008080]"}`}
                       >
                         <MapPin size={18} />
                       </div>
@@ -539,7 +572,9 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
                           TOTAL BAYAR
                         </p>
-                        <p className="text-2xl font-black text-[#FF6600] tracking-tighter leading-none">
+                        <p
+                          className={`text-2xl font-black ${isCancelled ? "text-slate-400 line-through" : "text-[#FF6600]"} tracking-tighter leading-none`}
+                        >
                           RP {order.total_price?.toLocaleString()}
                         </p>
                       </div>
@@ -565,25 +600,41 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                           <Printer size={18} />
                         </button>
 
-                        {isNew ? (
-                          <button
-                            disabled={isUpdating === order.id}
-                            onClick={() => handleProcessOrder(order)}
-                            className={`flex-1 md:flex-none px-6 py-3 text-white font-black text-[11px] uppercase tracking-widest rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg ${
-                              isPickup
-                                ? "bg-[#FF6600] hover:bg-orange-700"
-                                : "bg-[#008080] hover:bg-teal-800"
-                            }`}
-                          >
-                            {isUpdating === order.id ? (
-                              <Loader2 size={16} className="animate-spin" />
-                            ) : isPickup ? (
-                              <Package size={16} />
-                            ) : (
-                              <Send size={16} />
-                            )}
-                            {isPickup ? "SIAPKAN" : "TERIMA"}
-                          </button>
+                        {/* 🚀 TOMBOL AKSI GANDA (TERIMA ATAU TOLAK) */}
+                        {isNew && !isCancelled ? (
+                          <>
+                            <button
+                              disabled={isUpdating === order.id}
+                              onClick={() => handleRejectOrder(order)}
+                              className="px-4 py-3 bg-white border-2 border-red-200 text-red-500 hover:bg-red-50 font-black text-[11px] uppercase tracking-widest rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 shadow-sm"
+                              title="Tolak Pesanan"
+                            >
+                              {isUpdating === order.id ? (
+                                <Loader2 size={16} className="animate-spin" />
+                              ) : (
+                                <Ban size={16} />
+                              )}
+                              <span className="hidden md:inline">TOLAK</span>
+                            </button>
+                            <button
+                              disabled={isUpdating === order.id}
+                              onClick={() => handleProcessOrder(order)}
+                              className={`flex-1 md:flex-none px-6 py-3 text-white font-black text-[11px] uppercase tracking-widest rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg ${
+                                isPickup
+                                  ? "bg-[#FF6600] hover:bg-orange-700"
+                                  : "bg-[#008080] hover:bg-teal-800"
+                              }`}
+                            >
+                              {isUpdating === order.id ? (
+                                <Loader2 size={16} className="animate-spin" />
+                              ) : isPickup ? (
+                                <Package size={16} />
+                              ) : (
+                                <Send size={16} />
+                              )}
+                              {isPickup ? "SIAPKAN" : "TERIMA"}
+                            </button>
+                          </>
                         ) : order.status === "PACKING" && isPickup ? (
                           <button
                             onClick={() => setPinModalOrder(order)}
@@ -593,9 +644,17 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                             INPUT PIN
                           </button>
                         ) : (
-                          <div className="flex-1 md:flex-none px-6 py-3 bg-slate-100 text-slate-500 font-black text-[11px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2">
-                            <Loader2 size={14} className="animate-spin" />
-                            {isPickup ? "TUNGGU DIAMBIL" : "TUNGGU KURIR"}
+                          <div
+                            className={`flex-1 md:flex-none px-6 py-3 font-black text-[11px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 ${isCancelled ? "bg-red-100 text-red-500" : "bg-slate-100 text-slate-500"}`}
+                          >
+                            {!isCancelled && (
+                              <Loader2 size={14} className="animate-spin" />
+                            )}
+                            {isCancelled
+                              ? "BATAL"
+                              : isPickup
+                                ? "TUNGGU DIAMBIL"
+                                : "TUNGGU KURIR"}
                           </div>
                         )}
                       </div>
