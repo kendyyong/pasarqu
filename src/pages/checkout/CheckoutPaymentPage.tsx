@@ -14,7 +14,6 @@ import { CheckoutSummary } from "./components/CheckoutSummary";
 import { CashbackModal } from "./components/CashbackModal";
 import { CheckoutAddress } from "./components/CheckoutAddress";
 
-// 🚀 FIX: SERAGAMKAN LIBRARIES GOOGLE MAPS AGAR TIDAK CRASH (BLANK PUTIH)
 const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
   ["places", "routes", "geometry", "drawing"];
 
@@ -44,12 +43,13 @@ export const CheckoutPaymentPage = () => {
   const [cashbackAmount, setCashbackAmount] = useState(0);
   const [createdOrderId, setCreatedOrderId] = useState("");
 
-  // 🚀 FIX: Masukkan variabel GOOGLE_MAPS_LIBRARIES ke sini!
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
     libraries: GOOGLE_MAPS_LIBRARIES,
   });
+
+  const subtotalCart = cart.reduce((s, i) => s + i.price * i.quantity, 0);
 
   const calculateMysteryCashback = (subtotal: number) => {
     const percentages = [0.03, 0.04, 0.05];
@@ -58,23 +58,29 @@ export const CheckoutPaymentPage = () => {
     );
   };
 
+  // 🚀 ENGINE LOGISTIK PRO (UPDATE DENGAN ATURAN SUPER ADMIN)
   const updateLogistics = useCallback(
     async (lat: number, lng: number) => {
       if (!selectedMarket || cart.length === 0) return;
       try {
+        // 1. Ambil jarak menggunakan rumus Haversine
         const distance = calculateDistance(
           lat,
           lng,
           Number(selectedMarket.latitude),
           Number(selectedMarket.longitude),
         );
+
+        // 2. Tarik aturan dari Super Admin berdasarkan Distrik
         const { data: r } = await supabase
           .from("shipping_rates")
           .select("*")
           .eq("district_name", selectedMarket.district)
           .single();
+
         if (!r) return;
 
+        // 3. Cek berapa banyak toko yang berbeda di dalam keranjang
         const uniqueMerchants = [
           ...new Set(cart.map((item) => item.merchant_id)),
         ];
@@ -82,48 +88,77 @@ export const CheckoutPaymentPage = () => {
           uniqueMerchants.length > 1 ? uniqueMerchants.length - 1 : 0;
         const isPickup = shippingMethod === "pickup";
 
+        // 🚀 4. PERHITUNGAN ONGKIR (DASAR + EXTRA KM)
         let baseFare = isPickup ? 0 : Number(r.base_fare);
+
+        // JIKA JARAK LEBIH DARI JARAK DASAR (Misal: > 3 KM)
         if (!isPickup && distance > Number(r.base_distance_km)) {
-          baseFare +=
-            (distance - Number(r.base_distance_km)) * Number(r.price_per_km);
+          const extraKm = Math.ceil(distance - Number(r.base_distance_km)); // Dibulatkan ke atas
+          baseFare += extraKm * Number(r.price_per_km);
         }
 
-        const totalLayanan = Math.round(
-          Number(r.buyer_service_fee || 0) +
-            (isPickup ? 0 : extraCount * Number(r.surge_fee || 0)),
-        );
-        const appCutFromBase =
-          baseFare * (Number(r.app_fee_percent || 0) / 100);
+        // Tambahan biaya jika lebih dari 1 toko
         const totalExtraFeeKurir = isPickup
           ? 0
           : extraCount * Number(r.multi_stop_fee || 0);
+        const surgeCost = isPickup ? 0 : extraCount * Number(r.surge_fee || 0); // Asumsi surge dipakai per extra toko
+
+        // TOTAL ONGKIR ASLI (Belum Dipotong Promo)
+        const realShippingCost = baseFare + totalExtraFeeKurir + surgeCost;
+
+        // 🚀 5. LOGIKA GRATIS ONGKIR DARI SUPER ADMIN
+        let userPayShipping = realShippingCost;
+        let appSubsidy = 0;
+
+        const minOrderForFreeShipping = Number(r.free_shipping_min_order || 0);
+        if (
+          !isPickup &&
+          minOrderForFreeShipping > 0 &&
+          subtotalCart >= minOrderForFreeShipping
+        ) {
+          userPayShipping = 0; // Pembeli bayar ongkir Rp 0
+          appSubsidy = realShippingCost; // Aplikasi yang menanggung
+        }
+
+        // 🚀 6. BIAYA LAYANAN (Service Fee + Handling Fee)
+        const totalLayanan = Math.round(
+          Number(r.buyer_service_fee || 0) +
+            Number(r.handling_fee || 0) + // Fitur baru
+            (isPickup ? 0 : extraCount * Number(r.surge_fee || 0)),
+        );
+
+        // 7. PERHITUNGAN HAK KURIR (Kurir tetap dapat penuh meskipun ada gratis ongkir)
+        const appCutFromBase =
+          baseFare * (Number(r.app_fee_percent || 0) / 100);
+        const courierNet = baseFare - appCutFromBase + totalExtraFeeKurir;
+
+        // 8. BIAYA SISTEM (TOTAL PENDAPATAN APP DARI TRANSAKSI INI)
         const totalExtraAppShare = isPickup
           ? 0
           : extraCount * Number(r.multi_stop_app_share || 0);
-        const surgeCost = isPickup ? 0 : extraCount * Number(r.surge_fee || 0);
-
         const systemFee =
           appCutFromBase +
           Number(r.buyer_service_fee || 0) +
+          Number(r.handling_fee || 0) +
           totalExtraAppShare +
           surgeCost;
-        const courierNet = baseFare - appCutFromBase + totalExtraFeeKurir;
 
         setShippingDetails({
-          base_fare: Math.round(baseFare),
+          base_fare: Math.round(userPayShipping), // Ini yang akan muncul di layar pembeli
+          real_shipping_cost: Math.round(realShippingCost), // Simpan ongkir aslinya untuk record
+          app_subsidy: Math.round(appSubsidy), // Simpan berapa besar subsidinya
+          distance_km: distance.toFixed(1), // Munculkan KM di layar jika diperlukan
           combined_service_fee: totalLayanan,
-          grand_total: Math.round(
-            baseFare +
-              (isPickup ? 0 : extraCount * Number(r.multi_stop_fee || 0)) +
-              totalLayanan,
-          ),
+          grand_total: Math.round(userPayShipping + totalLayanan),
           seller_admin_percent: Number(r.seller_admin_fee_percent),
           system_fee: Math.round(systemFee),
           courier_earning_total: Math.round(courierNet),
         });
-      } catch (err) {}
+      } catch (err) {
+        console.error("Gagal update ongkir", err);
+      }
     },
-    [selectedMarket, cart, shippingMethod],
+    [selectedMarket, cart, shippingMethod, subtotalCart],
   );
 
   useEffect(() => {
@@ -139,7 +174,7 @@ export const CheckoutPaymentPage = () => {
     }
   }, [selectedMarket, profile, updateLogistics]);
 
-  const subtotalCart = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  // HITUNG TOTAL AKHIR
   const totalSebelumSaldo = Math.max(
     0,
     subtotalCart + (shippingDetails?.grand_total || 0),
@@ -174,7 +209,7 @@ export const CheckoutPaymentPage = () => {
           customer_id: user.id,
           market_id: selectedMarket.id,
           total_price: grandTotalAkhir,
-          shipping_cost: Math.round(shippingDetails.base_fare),
+          shipping_cost: Math.round(shippingDetails.base_fare), // Masukkan Ongkir yang dibayar user (bisa 0 jika gratis)
           service_fee: Math.round(shippingDetails.combined_service_fee),
           status: paymentMethod === "cod" ? "PROCESSING" : "UNPAID",
           address:
@@ -224,7 +259,6 @@ export const CheckoutPaymentPage = () => {
         clearCart();
         showToast("PESANAN COD BERHASIL DIBUAT!", "success");
         setLoading(false);
-        // 🚀 KEMBALIKAN FITUR TRACK ORDER BOS!
         navigate(`/track-order/${newOrder.id}`);
       } else {
         const { data: payData } = await supabase.functions.invoke(
@@ -248,7 +282,6 @@ export const CheckoutPaymentPage = () => {
                 setCreatedOrderId(newOrder.id);
                 setShowSurprise(true);
               } else {
-                // 🚀 KEMBALIKAN FITUR TRACK ORDER
                 navigate(`/track-order/${newOrder.id}`);
               }
             },
@@ -294,6 +327,7 @@ export const CheckoutPaymentPage = () => {
             {selectedMarket?.name}
           </div>
         </header>
+
         <main className="max-w-[1200px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-5 p-4 mt-2">
           <div className="md:col-span-2 space-y-5">
             <CheckoutMethods
@@ -328,7 +362,7 @@ export const CheckoutPaymentPage = () => {
             />
           </div>
         </main>
-        {/* 🚀 KEMBALIKAN FITUR TRACK ORDER PADA MODAL CASHBACK */}
+
         <CashbackModal
           show={showSurprise}
           amount={cashbackAmount}
