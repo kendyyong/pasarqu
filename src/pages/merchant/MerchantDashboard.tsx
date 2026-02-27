@@ -160,12 +160,13 @@ export const MerchantDashboard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* 🚀 TOMBOL BELANJA: SEKARANG LANGSUNG KE BERANDA (/) */}
+            {/* 🚀 TOMBOL BELANJA: DENGAN KUNCI PASS "?mode=belanja" */}
             <button
               onClick={() => {
-                navigate("/");
+                // Membawa "Kunci Pass" agar tidak ditendang Satpam RoleBasedRedirect
+                navigate("/?mode=belanja");
               }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] md:text-[11px] uppercase tracking-tighter transition-all active:scale-90 border shadow-md bg-[#FF6600] text-white border-orange-400"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] md:text-[11px] uppercase tracking-tighter transition-all active:scale-90 border shadow-md bg-[#FF6600] text-white border-orange-400 hover:bg-orange-600"
             >
               <ShoppingBag size={15} strokeWidth={3} />
               <span className="inline-block">BELANJA</span>

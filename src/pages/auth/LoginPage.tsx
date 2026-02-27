@@ -168,8 +168,8 @@ export const LoginPage = () => {
             </p>
           </div>
 
-          {/* FORM CONTAINER */}
-          <div className="w-full bg-white/80 backdrop-blur-xl border border-white/40 rounded-[2rem] p-6 md:p-8 shadow-2xl shadow-teal-900/5 mb-6">
+          {/* FORM CONTAINER (AKTOR UTAMA) */}
+          <div className="w-full bg-white/80 backdrop-blur-xl border border-white/40 rounded-[2rem] p-6 shadow-2xl shadow-teal-900/5 mb-6">
             <form onSubmit={handleLogin} className="space-y-4">
               {/* INPUT IDENTIFIER (EMAIL / NO HP) */}
               <div className="relative group">
@@ -232,7 +232,7 @@ export const LoginPage = () => {
               {/* TOMBOL SUBMIT */}
               <button
                 disabled={loading}
-                className="w-full mt-2 py-4 bg-[#008080] hover:bg-teal-700 text-white rounded-2xl font-[1000] uppercase tracking-[0.2em] text-[12px] shadow-xl shadow-teal-900/20 active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-50"
+                className="w-full mt-2 py-4 bg-[#008080] hover:bg-teal-700 text-white rounded-xl font-[1000] uppercase tracking-[0.2em] text-[12px] shadow-lg shadow-teal-900/20 active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-50"
               >
                 {loading ? (
                   <Loader2 className="animate-spin" size={18} />
@@ -243,54 +243,56 @@ export const LoginPage = () => {
             </form>
           </div>
 
-          {/* REGISTER SECTION */}
-          <div className="w-full flex flex-col items-center">
-            <div className="flex items-center gap-3 w-full mb-4 opacity-70">
-              <div className="h-[1px] bg-slate-300 flex-1"></div>
-              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+          {/* 🚀 REGISTER SECTION (DIPERAMPING & GHOST MODE) */}
+          <div className="w-full flex flex-col items-center px-2">
+            <div className="flex items-center gap-3 w-full mb-5 opacity-50">
+              <div className="h-[1px] bg-slate-400 flex-1"></div>
+              <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">
                 BELUM PUNYA AKUN?
               </span>
-              <div className="h-[1px] bg-slate-300 flex-1"></div>
+              <div className="h-[1px] bg-slate-400 flex-1"></div>
             </div>
 
-            <div className="w-full flex flex-col gap-3">
+            <div className="w-full flex flex-col gap-2">
+              {/* TOMBOL DAFTAR MEMBER (Lebih Tipis) */}
               <button
                 onClick={() => navigate("/register")}
-                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-teal-50 to-orange-50 rounded-2xl border border-teal-100 group active:scale-95 transition-all"
+                className="w-full flex items-center justify-between px-4 py-3 bg-white rounded-xl border border-slate-200 group active:scale-95 transition-all hover:border-[#008080] shadow-sm"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#008080] shadow-sm group-hover:bg-[#008080] group-hover:text-white transition-colors">
-                    <User size={18} />
+                  <div className="w-8 h-8 rounded-full bg-teal-50 flex items-center justify-center text-[#008080] group-hover:bg-[#008080] group-hover:text-white transition-colors">
+                    <User size={14} />
                   </div>
                   <div className="text-left">
-                    <span className="block text-[12px] font-black uppercase text-slate-700 tracking-widest">
+                    <span className="block text-[11px] font-[1000] uppercase text-slate-800 tracking-widest leading-none mb-1">
                       Daftar Member
                     </span>
-                    <span className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                    <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider">
                       Mulai Belanja Kebutuhanmu
                     </span>
                   </div>
                 </div>
                 <ArrowLeft
-                  size={16}
-                  className="text-slate-400 rotate-180 transition-transform group-hover:translate-x-1"
+                  size={14}
+                  className="text-slate-300 rotate-180 transition-transform group-hover:translate-x-1 group-hover:text-[#008080]"
                 />
               </button>
 
-              <div className="grid grid-cols-2 gap-3 w-full">
+              {/* TOMBOL MITRA (Ghost Mode / Outline) */}
+              <div className="grid grid-cols-2 gap-2 w-full mt-1">
                 <button
                   onClick={() => navigate("/merchant-promo")}
-                  className="flex flex-col items-center justify-center gap-1.5 p-4 bg-[#008080] rounded-2xl text-white font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all"
+                  className="flex items-center justify-center gap-2 p-2.5 bg-transparent border-2 border-slate-200 rounded-xl text-slate-600 font-black uppercase text-[9px] tracking-widest active:scale-95 transition-all hover:border-[#008080] hover:text-[#008080] hover:bg-teal-50/30"
                 >
-                  <Store size={22} />
-                  BUKA TOKO
+                  <Store size={14} />
+                  Buka Toko
                 </button>
                 <button
                   onClick={() => navigate("/promo/kurir")}
-                  className="flex flex-col items-center justify-center gap-1.5 p-4 bg-[#FF6600] rounded-2xl text-white font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all"
+                  className="flex items-center justify-center gap-2 p-2.5 bg-transparent border-2 border-slate-200 rounded-xl text-slate-600 font-black uppercase text-[9px] tracking-widest active:scale-95 transition-all hover:border-[#FF6600] hover:text-[#FF6600] hover:bg-orange-50/30"
                 >
-                  <Bike size={22} />
-                  DAFTAR KURIR
+                  <Bike size={14} />
+                  Daftar Kurir
                 </button>
               </div>
             </div>
