@@ -77,7 +77,7 @@ export const OrderTrackingPage = () => {
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries: ["places", "routes"], // Penting untuk DirectionsService
+    libraries: ["places", "routes"],
   });
 
   const steps = [
@@ -121,10 +121,11 @@ export const OrderTrackingPage = () => {
     if (!orderId) return;
     try {
       setLoading(true);
+      // 🚀 TARIK DATA KOORDINAT PASAR SUPER ADMIN SEBAGAI ANCHOR!
       const { data: orderData, error: orderErr } = await supabase
         .from("orders")
         .select(
-          "*, market:markets(name), merchant:merchants(latitude, longitude)",
+          "*, market:markets(name, latitude, longitude), merchant:merchants(latitude, longitude)",
         )
         .eq("id", orderId)
         .maybeSingle();
@@ -208,7 +209,7 @@ export const OrderTrackingPage = () => {
     };
   }, [orderId, order?.courier_id]);
 
-  // 🚀 ENGINE POLYLINE MAPS (GARIS RUTE CERDAS) - FIXED TYPESCRIPT ERROR
+  // 🚀 ENGINE POLYLINE MAPS (GARIS RUTE CERDAS)
   useEffect(() => {
     if (!isLoaded || !order?.delivery_lat) return;
 
@@ -220,7 +221,6 @@ export const OrderTrackingPage = () => {
         order.delivery_lng,
       );
 
-      // Jika kurir sudah ada, origin adalah posisi kurir. Jika belum, origin adalah toko.
       if (courier?.current_lat && courier?.current_lng) {
         origin = new window.google.maps.LatLng(
           courier.current_lat,
@@ -238,7 +238,6 @@ export const OrderTrackingPage = () => {
           {
             origin,
             destination,
-            // Menggunakan DRIVING yang 100% didukung TS Google Maps
             travelMode: window.google.maps.TravelMode.DRIVING,
           },
           (result, status) => {
@@ -327,10 +326,25 @@ export const OrderTrackingPage = () => {
   const isFinished =
     order?.status === "COMPLETED" || order?.status === "CANCELLED";
 
-  // DEFAULT PUSAT PETA JIKA DATA BELUM LENGKAP
-  const defaultCenter = order?.delivery_lat
-    ? { lat: order.delivery_lat, lng: order.delivery_lng }
-    : { lat: -6.2, lng: 106.8 };
+  // 🚀 HIERARKI SMART ANCHOR (FOKUS PETA)
+  const getMapCenter = () => {
+    if (courier?.current_lat && courier?.current_lng) {
+      return { lat: courier.current_lat, lng: courier.current_lng };
+    }
+    if (order?.delivery_lat && order?.delivery_lng) {
+      return { lat: order.delivery_lat, lng: order.delivery_lng };
+    }
+    if (order?.merchant?.latitude && order?.merchant?.longitude) {
+      return { lat: order.merchant.latitude, lng: order.merchant.longitude };
+    }
+    // THE ULTIMATE ANCHOR: KORDINAT PASAR DARI SUPER ADMIN
+    if (order?.market?.latitude && order?.market?.longitude) {
+      return { lat: order.market.latitude, lng: order.market.longitude };
+    }
+    return { lat: -0.8327, lng: 117.2476 }; // Safe fallback system
+  };
+
+  const currentCenter = getMapCenter();
 
   return (
     <MobileLayout
@@ -402,7 +416,7 @@ export const OrderTrackingPage = () => {
                 ) : (
                   <GoogleMap
                     mapContainerStyle={mapContainerStyle}
-                    center={defaultCenter}
+                    center={currentCenter}
                     zoom={15}
                     options={{
                       disableDefaultUI: true,
@@ -425,19 +439,31 @@ export const OrderTrackingPage = () => {
                       />
                     )}
 
-                    {/* LOKASI TOKO */}
-                    {!courier?.current_lat && order?.merchant?.latitude && (
-                      <MarkerF
-                        position={{
-                          lat: order.merchant.latitude,
-                          lng: order.merchant.longitude,
-                        }}
-                        icon={{
-                          url: ICONS.store,
-                          scaledSize: new window.google.maps.Size(40, 40),
-                        }}
-                      />
-                    )}
+                    {/* LOKASI PASAR / TOKO */}
+                    {!courier?.current_lat &&
+                      (order?.merchant?.latitude ? (
+                        <MarkerF
+                          position={{
+                            lat: order.merchant.latitude,
+                            lng: order.merchant.longitude,
+                          }}
+                          icon={{
+                            url: ICONS.store,
+                            scaledSize: new window.google.maps.Size(40, 40),
+                          }}
+                        />
+                      ) : order?.market?.latitude ? (
+                        <MarkerF
+                          position={{
+                            lat: order.market.latitude,
+                            lng: order.market.longitude,
+                          }}
+                          icon={{
+                            url: ICONS.store,
+                            scaledSize: new window.google.maps.Size(40, 40),
+                          }}
+                        />
+                      ) : null)}
 
                     {/* LOKASI PEMBELI */}
                     {order?.delivery_lat && (
@@ -662,7 +688,7 @@ export const OrderTrackingPage = () => {
               </div>
             </section>
 
-            {/* TOMBOL ACTION BAWAH (Chat, Bantuan, PDF, Nilai) */}
+            {/* TOMBOL ACTION BAWAH */}
             <div className="grid grid-cols-1 gap-3">
               {order?.shipping_status === "COMPLETED" && !hasReviewed && (
                 <button
