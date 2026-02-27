@@ -67,7 +67,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
   const isPickingUp =
     order?.status === "READY_TO_PICKUP" || order?.status === "PICKING_UP";
 
-  // 🚀 LOGIKA SAPU JAGAT: CARI KOORDINAT SAMPAI DAPAT
+  // 🚀 LOGIKA SAPU JAGAT: AMBIL KOORDINAT DARI BERBAGAI KEMUNGKINAN OBJEK
   const storeLat = order?.merchants?.latitude || order?.merchant?.latitude;
   const storeLng = order?.merchants?.longitude || order?.merchant?.longitude;
 
@@ -130,24 +130,23 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
     );
   }, [isLoaded, currentPos, destLat, destLng]);
 
-  // 🚀 3. TOMBOL AJAIB: LEMPAR KE APLIKASI GOOGLE MAPS HP
+  // 🚀 3. TOMBOL AJAIB: LEMPAR KE APLIKASI GOOGLE MAPS HP (URL SUDAH DIPERBAIKI)
   const handleOpenGoogleMaps = () => {
     if (!destLat || !destLng) {
-      console.warn("⚠️ Data Order Lengkap:", order); // Log buat Bos kalau penasaran
       showToast(
         isPickingUp
-          ? "Toko belum mengatur PIN Peta!"
-          : "Pembeli belum mengatur PIN Peta!",
+          ? "Lokasi Toko Belum Disetting!"
+          : "Lokasi Pembeli Belum Disetting!",
         "error",
       );
       return;
     }
 
-    // 🚀 LINK RESMI DEEP-LINK GOOGLE MAPS
+    // 📍 FORMAT URL DEEP-LINK GOOGLE MAPS YANG BENAR (Tanpa typo kurung kurawal)
     let url = `https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}&travelmode=driving`;
 
-    // Jika GPS HP kurir nyala, tambahkan titik awal agar lebih akurat
-    if (currentPos?.lat && currentPos?.lng) {
+    // Jika posisi kurir diketahui, tambahkan rute dari posisi saat ini
+    if (currentPos) {
       url = `https://www.google.com/maps/dir/?api=1&origin=${currentPos.lat},${currentPos.lng}&destination=${destLat},${destLng}&travelmode=driving`;
     }
 
@@ -157,19 +156,18 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
   const handleStatusUpdate = async () => {
     if (!order?.id) return;
     setLoading(true);
-
     try {
       let nextStatus = "";
       let toastMsg = "";
 
       if (order.status === "PACKING") {
-        showToast("TUNGGU TOKO SELESAI BUNGKUS DULU, BOS!", "error");
+        showToast("TUNGGU TOKO SELESAI BUNGKUS!", "error");
         setLoading(false);
         return;
       }
       if (order.status === "READY_TO_PICKUP" || order.status === "PICKING_UP") {
         nextStatus = "SHIPPING";
-        toastMsg = "STATUS: MENUJU LOKASI PEMBELI 🛵💨";
+        toastMsg = "MENUJU LOKASI PEMBELI 🛵💨";
       } else if (order.status === "SHIPPING" || order.status === "DELIVERING") {
         nextStatus = "COMPLETED";
       }
@@ -250,7 +248,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
         )}
 
       <div className="space-y-4 animate-in slide-in-from-bottom-4 text-left font-black uppercase tracking-tighter pb-4">
-        {/* 🗺️ VISUAL PETA GOOGLE MAPS PRO */}
+        {/* 🗺️ VISUAL PETA PRO */}
         <div className="h-[250px] w-full bg-slate-200 rounded-xl overflow-hidden relative shadow-md border-2 border-white">
           {isLoaded ? (
             <GoogleMap
@@ -277,8 +275,6 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                   }}
                 />
               )}
-
-              {/* Posisi Kurir */}
               {currentPos && (
                 <MarkerF
                   position={currentPos}
@@ -290,51 +286,39 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                   zIndex={999}
                 />
               )}
-
-              {/* Posisi Tujuan (Toko atau Pembeli) */}
-              {isPickingUp && destLat ? (
+              {destLat && (
                 <MarkerF
                   position={{ lat: destLat, lng: destLng }}
                   icon={{
-                    url: ICONS.store,
+                    url: isPickingUp ? ICONS.store : ICONS.home,
                     scaledSize: new window.google.maps.Size(35, 35),
                   }}
                 />
-              ) : destLat ? (
-                <MarkerF
-                  position={{ lat: destLat, lng: destLng }}
-                  icon={{
-                    url: ICONS.home,
-                    scaledSize: new window.google.maps.Size(35, 35),
-                  }}
-                />
-              ) : null}
+              )}
             </GoogleMap>
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-100">
-              <Loader2 className="animate-spin mb-2" size={24} />
-              <span className="text-[10px] tracking-widest">
-                MEMUAT SATELIT...
+            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100">
+              <Loader2 className="animate-spin text-slate-400 mb-2" size={24} />
+              <span className="text-[10px] text-slate-400">
+                MEMUAT RADAR...
               </span>
             </div>
           )}
 
-          {/* 🚀 TOMBOL BUKA GOOGLE MAPS APLIKASI */}
           <button
             onClick={handleOpenGoogleMaps}
-            className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-5 py-2.5 rounded-full text-[10px] font-[1000] tracking-widest shadow-xl flex items-center gap-2 active:scale-95 transition-all border-2 border-slate-700 hover:bg-slate-800"
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-5 py-2.5 rounded-full text-[10px] font-[1000] tracking-widest shadow-xl flex items-center gap-2 active:scale-95 transition-all border-2 border-slate-700"
           >
-            <Navigation size={14} className="text-[#008080]" />
-            ARAHKAN RUTE
+            <Navigation size={14} className="text-[#008080]" /> ARAHKAN RUTE
           </button>
         </div>
 
-        {/* STATUS BAR HEADER */}
+        {/* STATUS BAR */}
         <div
-          className={`p-4 rounded-xl flex justify-between items-center shadow-sm transition-all border-l-4 ${isCompleted ? "bg-slate-200 border-slate-400" : isCanceled ? "bg-red-50 border-red-500" : "bg-white border-[#008080]"}`}
+          className={`p-4 rounded-xl flex justify-between items-center shadow-sm border-l-4 ${isCompleted ? "bg-slate-200 border-slate-400" : isCanceled ? "bg-red-50 border-red-500" : "bg-white border-[#008080]"}`}
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md flex items-center justify-center shadow-inner bg-teal-50 text-[#008080]">
+            <div className="w-10 h-10 rounded-md flex items-center justify-center bg-teal-50 text-[#008080]">
               {loading ? (
                 <Loader2 className="animate-spin" size={20} />
               ) : (
@@ -342,7 +326,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
               )}
             </div>
             <div>
-              <h2 className="text-[14px] leading-none text-slate-800">
+              <h2 className="text-[14px] leading-none">
                 {isCompleted
                   ? "SELESAI"
                   : isCanceled
@@ -368,12 +352,12 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           </button>
         </div>
 
-        {/* INFO LOKASI TOKO & PEMBELI */}
+        {/* INFO LOKASI */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
           <div
             className={`flex gap-3 p-3 rounded-lg border ${isPickingUp ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-100"}`}
           >
-            <div className="w-8 h-8 bg-white text-[#FF6600] rounded-md flex items-center justify-center shrink-0 border border-slate-200 shadow-sm">
+            <div className="w-8 h-8 bg-white text-[#FF6600] rounded-md flex items-center justify-center shrink-0 border border-slate-200">
               <Store size={16} />
             </div>
             <div className="flex-1 min-w-0">
@@ -395,7 +379,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                       order.merchant_id,
                   )
                 }
-                className="mt-2 flex items-center justify-center w-full gap-2 py-2 bg-white border border-orange-200 text-[#FF6600] rounded-md text-[9px] font-black hover:bg-orange-100 transition-all"
+                className="mt-2 flex items-center justify-center w-full gap-2 py-2 bg-white border border-orange-200 text-[#FF6600] rounded-md text-[9px] font-black active:scale-95"
               >
                 <MessageSquare size={12} /> CHAT MERCHANT
               </button>
@@ -405,7 +389,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           <div
             className={`flex gap-3 p-3 rounded-lg border ${!isPickingUp && !isCompleted ? "bg-teal-50 border-teal-200" : "bg-slate-50 border-slate-100"}`}
           >
-            <div className="w-8 h-8 bg-white text-[#008080] rounded-md flex items-center justify-center shrink-0 border border-slate-200 shadow-sm">
+            <div className="w-8 h-8 bg-white text-[#008080] rounded-md flex items-center justify-center shrink-0 border border-slate-200">
               <MapPin size={16} />
             </div>
             <div className="flex-1 min-w-0">
@@ -437,23 +421,18 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           </div>
         </div>
 
-        {/* AREA TOMBOL EKSEKUSI BAWAH */}
+        {/* TOMBOL AKSI */}
         {!isCompleted && !isCanceled && (
           <>
             {order.status === "PACKING" ? (
-              <div className="w-full py-4 bg-slate-200 text-slate-500 rounded-xl font-[1000] uppercase text-[11px] shadow-inner flex items-center justify-center gap-2">
-                <Loader2 className="animate-spin" size={16} /> MENUNGGU TOKO
-                SELESAI BUNGKUS...
+              <div className="w-full py-4 bg-slate-200 text-slate-500 rounded-xl font-[1000] uppercase text-[11px] flex items-center justify-center gap-2">
+                <Loader2 className="animate-spin" size={16} /> MENUNGGU TOKO...
               </div>
             ) : (
               <button
                 onClick={handleStatusUpdate}
                 disabled={loading}
-                className={`w-full py-4 text-white rounded-xl font-[1000] uppercase text-[13px] shadow-xl active:scale-95 flex items-center justify-center gap-2 transition-all ${
-                  order.status === "SHIPPING" || order.status === "DELIVERING"
-                    ? "bg-[#008080] hover:bg-teal-700 shadow-teal-900/30"
-                    : "bg-[#FF6600] hover:bg-orange-600 shadow-orange-900/30"
-                }`}
+                className={`w-full py-4 text-white rounded-xl font-[1000] uppercase text-[13px] shadow-xl active:scale-95 flex items-center justify-center gap-2 transition-all ${order.status === "SHIPPING" || order.status === "DELIVERING" ? "bg-[#008080]" : "bg-[#FF6600]"}`}
               >
                 {loading ? (
                   <Loader2 className="animate-spin" size={18} />
@@ -461,8 +440,8 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                   <CheckCircle size={18} strokeWidth={3} />
                 )}
                 {order.status === "SHIPPING" || order.status === "DELIVERING"
-                  ? "KONFIRMASI BARANG TIBA!"
-                  : "SAYA SUDAH AMBIL BARANG"}
+                  ? "KONFIRMASI TIBA!"
+                  : "AMBIL BARANG"}
               </button>
             )}
           </>

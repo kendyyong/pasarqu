@@ -27,7 +27,6 @@ export const useCourierDashboard = () => {
     audio.preload = "auto";
     alarmRef.current = audio;
 
-    // Trik Unlock: Paksa browser izinkan suara saat kurir klik apa saja
     const unlockAudio = () => {
       if (!isAudioReady.current && alarmRef.current) {
         alarmRef.current.play().then(() => {
@@ -54,6 +53,7 @@ export const useCourierDashboard = () => {
   const fetchInitialData = useCallback(async () => {
     if (!user?.id) return;
     try {
+      // 1. AMBIL PROFILE KURIR
       const { data: profileData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
 
       if (profileData) {
@@ -67,40 +67,63 @@ export const useCourierDashboard = () => {
         setIsOnline(profileData.is_active || false);
         if (profileData.latitude) setCurrentCoords({ lat: profileData.latitude, lng: profileData.longitude });
 
-        // AMBIL TUGAS DI RADAR
+        // 2. AMBIL TUGAS DI RADAR (SEARCHING FOR NEW JOBS)
         if (profileData.market_id) {
           const { data: radarOrders } = await supabase
             .from("orders")
-            .select("*, profiles:customer_id(name)")
+            .select(`
+                *, 
+                profiles:customer_id(name, full_name),
+                order_items(
+                    merchants:merchant_id(id, shop_name, address, latitude, longitude)
+                )
+            `)
             .eq("market_id", profileData.market_id)
             .eq("status", "READY_TO_PICKUP")
             .is("courier_id", null)
             .order("created_at", { ascending: false });
-          setAvailableOrders(radarOrders || []);
+          
+          // Memastikan data merchant muncul di radar
+          const mappedRadar = (radarOrders || []).map(o => ({
+              ...o,
+              merchants: o.order_items?.[0]?.merchants
+          }));
+          setAvailableOrders(mappedRadar);
         }
       }
 
+      // 3. AMBIL TRANSAKSI WALLET
       const { data: logs } = await supabase.from("wallet_logs").select("*").eq("profile_id", user.id).order("created_at", { ascending: false }).limit(20);
       if (logs) setTransactions(logs);
 
-      const { data: orderData } = await supabase.from("orders").select("*").eq("courier_id", user.id).order("created_at", { ascending: false }).limit(1);
+      // 4. AMBIL PESANAN AKTIF (LOGIKA SAPU JAGAT UNTUK KOORDINAT)
+      const { data: orderData } = await supabase
+        .from("orders")
+        .select(`
+          *,
+          profiles:customer_id(*),
+          order_items (
+            merchant_id,
+            merchants:merchant_id (id, shop_name, address, latitude, longitude)
+          )
+        `)
+        .eq("courier_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
 
       if (orderData && orderData.length > 0) {
         const ord = orderData[0];
         const isFinished = ["COMPLETED", "CANCELLED", "SELESAI"].includes(String(ord.status).toUpperCase());
         
         if (!isFinished) {
-          let customerData = null;
-          let merchantData = null;
-          if (ord.customer_id) {
-            const { data: c } = await supabase.from('profiles').select('*').eq('id', ord.customer_id).maybeSingle();
-            customerData = c;
-          }
-          if (ord.merchant_id) {
-            let { data: m } = await supabase.from('merchants').select('*').eq('id', ord.merchant_id).maybeSingle();
-            merchantData = m;
-          }
-          setActiveOrder({ ...ord, profiles: customerData, merchants: merchantData });
+          // 🚀 FIX: Ambil data Toko dari order_items karena merchant_id di tabel order bisa null
+          const merchantInfo = ord.order_items?.[0]?.merchants;
+
+          setActiveOrder({ 
+            ...ord, 
+            profiles: ord.profiles, 
+            merchants: merchantInfo 
+          });
         } else {
           setActiveOrder(null);
         }
@@ -136,7 +159,6 @@ export const useCourierDashboard = () => {
 
       if (error) throw error;
       
-      // Matikan alarm setelah ambil tugas
       if (alarmRef.current) alarmRef.current.pause();
 
       showToast("TUGAS BERHASIL DIAMBIL!", "success");
@@ -147,28 +169,26 @@ export const useCourierDashboard = () => {
     }
   };
 
-  // 🚀 ENGINE REALTIME DENGAN ALARM
+  // 🚀 ENGINE REALTIME DENGAN ALARM & AUTO-SYNC
   useEffect(() => {
     fetchInitialData();
     if (!user?.id) return;
 
     const channel = supabase
       .channel(`courier_hub_${user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
-        console.log("🔔 Perubahan Pesanan Terdeteksi:", payload.new?.status);
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload: any) => {
+        console.log("🔔 Perubahan Pesanan:", payload.new?.status);
         
-        // 🚀 BUNYIKAN ALARM JIKA ADA TUGAS BARU
         if (payload.new?.status === "READY_TO_PICKUP") {
           if (alarmRef.current) {
             alarmRef.current.currentTime = 0;
-            alarmRef.current.play().catch((e) => console.warn("Browser blokir suara", e));
+            alarmRef.current.play().catch((e) => console.warn("Audio blocked", e));
           }
           showToast("🚨 TUGAS BARU TERSEDIA!", "info");
         }
-        
         fetchInitialData();
       })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.id}` }, (payload) => {
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.id}` }, (payload: any) => {
         setCourierData((prev: any) => ({ ...prev, ...payload.new }));
         setIsOnline(payload.new.is_active);
       })
