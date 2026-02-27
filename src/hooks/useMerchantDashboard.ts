@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
@@ -13,14 +13,14 @@ export const useMerchantDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [incomingOrder, setIncomingOrder] = useState<any>(null);
 
-  const fetchBaseData = async () => {
+  const fetchBaseData = useCallback(async () => {
     if (!user?.id) {
       setLoading(false);
       return;
     }
 
-    setLoading(true);
     try {
+      // 1. AMBIL DATA PROFIL & MERCHANT
       const [resProfile, resMerchant] = await Promise.all([
         supabase.from("profiles").select("*, markets:managed_market_id(name)").eq("id", user.id).maybeSingle(),
         supabase.from("merchants").select("*, markets(name)").or(`user_id.eq.${user.id},id.eq.${user.id}`).maybeSingle()
@@ -52,27 +52,25 @@ export const useMerchantDashboard = () => {
 
         setMerchantProfile(effectiveMerchant);
 
-        try {
-            const { data: prods } = await supabase.from("products").select("*").eq("merchant_id", effectiveMerchant.id);
-            setProducts(prods || []);
-            
-            const { data: ords, error: ordErr } = await supabase
-                .from("orders")
-                .select(`*, order_items!inner(*)`)
-                .eq("order_items.merchant_id", effectiveMerchant.id)
-                .order("created_at", { ascending: false });
-            
-            if (!ordErr) setOrders(ords || []);
-        } catch (subErr) {
-            console.warn("Gagal memuat rincian produk/order:", subErr);
-        }
+        // 2. FETCH PRODUCTS & ORDERS
+        // 🚀 Kita tarik data order yang belum selesai/batal agar badge tetap akurat
+        const [resProds, resOrds] = await Promise.all([
+          supabase.from("products").select("*").eq("merchant_id", effectiveMerchant.id),
+          supabase.from("orders")
+            .select(`*, order_items!inner(*)`)
+            .eq("order_items.merchant_id", effectiveMerchant.id)
+            .order("created_at", { ascending: false })
+        ]);
+
+        setProducts(resProds.data || []);
+        setOrders(resOrds.data || []);
       }
     } catch (err) {
-      showToast("Gagal memuat data dashboard", "error");
+      console.error("Dashboard Fetch Error:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   const toggleShopStatus = async () => {
     if (!merchantProfile?.id) return;
@@ -87,43 +85,45 @@ export const useMerchantDashboard = () => {
     }
   };
 
-  const triggerAlarm = (orderData: any) => {
-    setIncomingOrder(orderData);
-  };
-
-  const stopAlarm = () => {
-    setIncomingOrder(null);
-  };
+  const stopAlarm = () => setIncomingOrder(null);
 
   useEffect(() => {
     fetchBaseData();
-  }, [user?.id]);
+  }, [fetchBaseData]);
 
+  // 🚀 SENSOR REALTIME UNTUK BADGE SIDEBAR
   useEffect(() => {
     if (!merchantProfile?.id) return;
 
     const channel = supabase
-      .channel(`merchant_sync_${merchantProfile.id}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "merchants", filter: `id=eq.${merchantProfile.id}` }, (payload: any) => {
-           setMerchantProfile((prev: any) => ({ ...prev, is_shop_open: payload.new.is_shop_open }));
-      })
-      // 🚀 FIX TOTAL ALARM: Dengarkan order_items, tapi FETCH DATA ORDERS UTUH untuk ditembakkan ke Alarm!
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_items", filter: `merchant_id=eq.${merchantProfile.id}` }, async (payload: any) => {
-           // Tarik detail pesanan aslinya dari tabel 'orders'
+      .channel(`merchant_global_sync_${merchantProfile.id}`)
+      // SENSOR 1: Jika ada pesanan baru masuk ke Toko (INSERT)
+      .on(
+        "postgres_changes", 
+        { event: "INSERT", schema: "public", table: "order_items", filter: `merchant_id=eq.${merchantProfile.id}` }, 
+        async (payload: any) => {
            const { data: fullOrder } = await supabase.from("orders").select("*").eq("id", payload.new.order_id).single();
-           
            if (fullOrder) {
-               triggerAlarm(fullOrder); // Boom! Alarm sekarang menerima data utuh dan akan langsung berteriak!
-               fetchBaseData(); // Refresh list order di background
+               setIncomingOrder(fullOrder); // Bunyikan Alarm
+               fetchBaseData(); // Update jumlah pesanan di badge
            }
-      })
+        }
+      )
+      // 🚀 SENSOR 2: Jika status pesanan berubah (Misal: Pembeli Cancel / UPDATE)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "orders" },
+        () => {
+          console.log("🔄 Ada perubahan status pesanan, menyelaraskan badge...");
+          fetchBaseData(); // Refresh data agar pesanan batal hilang dari hitungan badge
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
-      stopAlarm();
     };
-  }, [merchantProfile?.id]); 
+  }, [merchantProfile?.id, fetchBaseData]); 
 
   return {
     merchantProfile, products, orders, loading, incomingOrder,

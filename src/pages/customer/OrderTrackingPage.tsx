@@ -24,7 +24,8 @@ import {
   Store,
   ReceiptText,
   Gift,
-  Ban, // 🚀 Ikon Batal
+  Ban,
+  Trash2, // 🚀 Ikon Tong Sampah Baru
 } from "lucide-react";
 import QRCode from "react-qr-code";
 import { OrderChatRoom } from "../../features/chat/OrderChatRoom";
@@ -42,7 +43,7 @@ export const OrderTrackingPage = () => {
   const [order, setOrder] = useState<any>(null);
   const [courier, setCourier] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [isCancelling, setIsCancelling] = useState(false); // 🚀 State Batal
+  const [isCancelling, setIsCancelling] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [chatType, setChatType] = useState<
@@ -83,7 +84,7 @@ export const OrderTrackingPage = () => {
 
   const getCurrentStep = () => {
     if (!order) return -1;
-    if (order.status === "CANCELLED") return -1; // Kalau batal, progress bar hilang/mati
+    if (order.status === "CANCELLED") return -1;
     if (order.shipping_status === "COMPLETED") return 3;
     if (
       order.shipping_status === "SHIPPING" ||
@@ -152,7 +153,6 @@ export const OrderTrackingPage = () => {
     fetchFullData();
   }, [orderId]);
 
-  // REAL-TIME UPDATE
   useEffect(() => {
     if (!orderId) return;
     const channel = supabase
@@ -195,30 +195,38 @@ export const OrderTrackingPage = () => {
     }
   };
 
-  // 🚀 FUNGSI PEMBATALAN OLEH PEMBELI (DENGAN REFUND SALDO)
   const handleCancelOrder = async () => {
     if (!window.confirm("Apakah Anda yakin ingin membatalkan pesanan ini?"))
       return;
-
     setIsCancelling(true);
     try {
-      // Panggil fungsi RPC untuk membatalkan dan mengembalikan saldo (jika ada)
       const { error } = await supabase.rpc("cancel_order_and_refund", {
         p_order_id: order.id,
         p_user_id: user.id,
       });
-
       if (error) throw error;
-
       showToast("Pesanan berhasil dibatalkan!", "success");
-
-      // Update state lokal agar tombol menghilang
       setOrder((prev: any) => ({ ...prev, status: "CANCELLED" }));
     } catch (err: any) {
       showToast(err.message || "Gagal membatalkan pesanan.", "error");
     } finally {
       setIsCancelling(false);
     }
+  };
+
+  // 🚀 FUNGSI HAPUS DARI RIWAYAT (SOFT DELETE)
+  const handleHideOrderFromDetail = () => {
+    if (!window.confirm("Hapus pesanan ini dari riwayat belanja Anda?")) return;
+
+    // Ambil data lama, tambah ID baru, simpan kembali
+    const currentHidden = JSON.parse(
+      localStorage.getItem("hidden_orders") || "[]",
+    );
+    const updatedHidden = [...currentHidden, orderId];
+    localStorage.setItem("hidden_orders", JSON.stringify(updatedHidden));
+
+    showToast("Pesanan telah dihapus dari riwayat.", "success");
+    navigate("/order-history"); // Kembali ke riwayat
   };
 
   if (loading)
@@ -232,12 +240,12 @@ export const OrderTrackingPage = () => {
     );
 
   const isPickup = order?.shipping_method === "pickup";
-
-  // 🚀 LOGIKA FAIR CANCELLATION (TOMBOL MUNCUL JIKA BELUM DIPROSES TOKO)
   const canCancel =
     order?.status === "PAID" ||
     order?.status === "PROCESSING" ||
     order?.status === "PENDING";
+  const isFinished =
+    order?.status === "COMPLETED" || order?.status === "CANCELLED";
 
   return (
     <MobileLayout
@@ -252,7 +260,7 @@ export const OrderTrackingPage = () => {
       cartCount={0}
     >
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-black text-left uppercase tracking-tighter not-italic text-[12px]">
-        {/* TOP BAR */}
+        {/* HEADER */}
         <header
           className={`sticky top-0 z-50 h-16 flex items-center px-4 shadow-md w-full transition-colors ${order?.status === "CANCELLED" ? "bg-red-600" : "bg-[#008080]"}`}
         >
@@ -273,19 +281,32 @@ export const OrderTrackingPage = () => {
                 </span>
               </div>
             </div>
-            <div
-              className={`px-3 py-1.5 rounded-md text-[10px] font-black shadow-sm ${order?.status === "COMPLETED" ? "bg-green-500 text-white" : order?.status === "CANCELLED" ? "bg-white text-red-600" : "bg-[#FF6600] text-white animate-pulse"}`}
-            >
-              {statusMap[order?.shipping_status || order?.status] ||
-                "MEMPROSES"}
+
+            <div className="flex items-center gap-2">
+              <div
+                className={`px-3 py-1.5 rounded-md text-[10px] font-black shadow-sm ${order?.status === "COMPLETED" ? "bg-green-500 text-white" : order?.status === "CANCELLED" ? "bg-white text-red-600" : "bg-[#FF6600] text-white animate-pulse"}`}
+              >
+                {statusMap[order?.shipping_status || order?.status] ||
+                  "MEMPROSES"}
+              </div>
+
+              {/* 🚀 TOMBOL TRASH DI HEADER (HANYA JIKA SELESAI/BATAL) */}
+              {isFinished && (
+                <button
+                  onClick={handleHideOrderFromDetail}
+                  className="p-2 bg-white/20 text-white hover:bg-red-500 rounded-md transition-all shadow-sm"
+                  title="Hapus dari Riwayat"
+                >
+                  <Trash2 size={18} strokeWidth={3} />
+                </button>
+              )}
             </div>
           </div>
         </header>
 
         <main className="flex-1 w-full max-w-[1200px] mx-auto p-4 pb-32 grid grid-cols-1 md:grid-cols-12 gap-5">
-          {/* BAGIAN KIRI (RADAR & QR) */}
+          {/* BAGIAN KIRI */}
           <div className="md:col-span-7 space-y-5">
-            {/* MAP RADAR */}
             {order?.status !== "CANCELLED" && (
               <div className="h-[300px] md:h-[450px] bg-white rounded-md border border-slate-200 shadow-sm overflow-hidden relative">
                 {isLoaded ? (
@@ -333,21 +354,28 @@ export const OrderTrackingPage = () => {
               </div>
             )}
 
-            {/* STATUS DIBATALKAN PEMBERITAHUAN */}
+            {/* STATUS DIBATALKAN DENGAN TOMBOL HAPUS */}
             {order?.status === "CANCELLED" && (
               <section className="bg-red-50 p-8 rounded-md border-2 border-red-500 shadow-sm flex flex-col items-center text-center">
                 <Ban size={48} className="text-red-500 mb-4" />
                 <h2 className="text-[16px] font-[1000] text-red-600 tracking-widest uppercase mb-2">
                   PESANAN TELAH DIBATALKAN
                 </h2>
-                <p className="text-[11px] font-bold text-red-500/80 max-w-sm leading-tight">
-                  Pesanan ini telah dibatalkan. Jika Anda menggunakan saldo
-                  PasarQu Pay, dana Anda telah dikembalikan 100% ke dompet.
+                <p className="text-[11px] font-bold text-red-500/80 max-w-sm leading-tight mb-6 uppercase">
+                  Pesanan ini telah dibatalkan. Dana (jika ada) telah
+                  dikembalikan 100% ke dompet PasarQu Pay Anda.
                 </p>
+
+                {/* 🚀 TOMBOL AKSI HAPUS DI BANNER */}
+                <button
+                  onClick={handleHideOrderFromDetail}
+                  className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-md font-black text-[12px] uppercase shadow-lg active:scale-95 transition-all"
+                >
+                  <Trash2 size={18} /> HAPUS DARI DAFTAR BELANJA
+                </button>
               </section>
             )}
 
-            {/* QR CODE BUKTI (HANYA PICKUP) */}
             {isPickup &&
               order?.status !== "COMPLETED" &&
               order?.status !== "CANCELLED" && (
@@ -375,7 +403,6 @@ export const OrderTrackingPage = () => {
                 </section>
               )}
 
-            {/* STATUS TIMELINE */}
             {order?.status !== "CANCELLED" && (
               <section className="bg-white p-6 rounded-md border border-slate-200 shadow-sm">
                 <div className="flex justify-between items-center relative">
@@ -405,9 +432,8 @@ export const OrderTrackingPage = () => {
             )}
           </div>
 
-          {/* BAGIAN KANAN: RINCIAN & HARGA */}
+          {/* BAGIAN KANAN */}
           <div className="md:col-span-5 space-y-5 text-left">
-            {/* PRODUK */}
             <section className="bg-white p-5 rounded-md border border-slate-200 shadow-sm">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
                 <ReceiptText size={20} className="text-[#008080]" />
@@ -446,7 +472,6 @@ export const OrderTrackingPage = () => {
               </div>
             </section>
 
-            {/* LOKASI */}
             <section className="bg-white p-5 rounded-md border border-slate-200 shadow-sm">
               <div className="flex items-center gap-2 mb-4 text-left">
                 <MapPin
@@ -472,7 +497,6 @@ export const OrderTrackingPage = () => {
               </div>
             </section>
 
-            {/* RINGKASAN BIAYA */}
             <section className="bg-white p-6 rounded-md border border-slate-200 shadow-lg border-b-[8px] border-[#008080]">
               <div className="space-y-4 font-black uppercase text-[12px]">
                 <div className="flex justify-between text-slate-500">
@@ -495,7 +519,6 @@ export const OrderTrackingPage = () => {
                     </span>
                   </div>
                 )}
-
                 <div className="pt-5 border-t-2 border-slate-100 mt-5 flex justify-between items-end">
                   <span className="text-[11px] text-slate-400 font-[1000] mb-1 uppercase">
                     TOTAL DIBAYAR
@@ -506,34 +529,9 @@ export const OrderTrackingPage = () => {
                     RP {order?.total_price?.toLocaleString()}
                   </span>
                 </div>
-
-                {order?.cashback_amount > 0 &&
-                  order?.status !== "CANCELLED" && (
-                    <div className="mt-5 p-4 bg-teal-50 border border-teal-100 rounded-md flex items-center justify-between">
-                      <div className="flex items-center gap-3 text-[#008080]">
-                        <Gift size={24} />
-                        <div className="flex flex-col text-left">
-                          <span className="text-[10px] font-black leading-none mb-1 uppercase">
-                            HADIAH SALDO
-                          </span>
-                          <span className="text-[14px] font-[1000] leading-none font-sans uppercase">
-                            RP {order?.cashback_amount?.toLocaleString()}
-                          </span>
-                        </div>
-                      </div>
-                      <span
-                        className={`px-2 py-1 rounded text-[8px] font-black uppercase ${order?.status === "COMPLETED" ? "bg-green-500 text-white" : "bg-orange-200 text-[#FF6600]"}`}
-                      >
-                        {order?.status === "COMPLETED"
-                          ? "SUDAH CAIR"
-                          : "MENUNGGU SCAN"}
-                      </span>
-                    </div>
-                  )}
               </div>
             </section>
 
-            {/* AKSI BAWAH */}
             <div className="grid grid-cols-1 gap-3">
               {order?.shipping_status === "COMPLETED" && !hasReviewed && (
                 <button
@@ -573,8 +571,6 @@ export const OrderTrackingPage = () => {
                   )
                 )}
               </div>
-
-              {/* 🚀 TOMBOL BATALKAN PESANAN (HANYA MUNCUL JIKA TOKO BELUM TERIMA) */}
               {canCancel && (
                 <button
                   onClick={handleCancelOrder}
@@ -585,7 +581,7 @@ export const OrderTrackingPage = () => {
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
                     <Ban size={16} />
-                  )}
+                  )}{" "}
                   BATALKAN PESANAN
                 </button>
               )}
@@ -593,7 +589,7 @@ export const OrderTrackingPage = () => {
           </div>
         </main>
 
-        {/* MODALS SAMA SEPERTI SEBELUMNYA... */}
+        {/* MODALS */}
         {showReviewModal && (
           <div className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-md p-6 shadow-2xl relative animate-in zoom-in-95">
@@ -700,3 +696,5 @@ export const OrderTrackingPage = () => {
     </MobileLayout>
   );
 };
+
+export default OrderTrackingPage;

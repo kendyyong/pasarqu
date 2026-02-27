@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../contexts/AuthContext";
+import { useToast } from "../../../contexts/ToastContext";
 import { MobileLayout } from "../../../components/layout/MobileLayout";
 import {
   ShoppingBag,
@@ -11,25 +12,31 @@ import {
   Store,
   PackageX,
   Loader2,
-  ArrowLeft, // 🚀 Menambahkan ArrowLeft untuk navigasi Desktop
+  ArrowLeft,
+  Ban,
+  Trash2, // 🚀 Ikon Tong Sampah
 } from "lucide-react";
 
 export const OrderHistoryPage = () => {
   const { user } = useAuth() as any;
   const navigate = useNavigate();
+  const { showToast } = useToast();
+
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"ALL" | "ACTIVE" | "COMPLETED">(
     "ALL",
   );
 
-  useEffect(() => {
-    if (user) fetchOrders();
-  }, [user]);
+  // 🚀 STATE UNTUK PESANAN YANG DISEMBUNYIKAN (HAPUS RIWAYAT - SOFT DELETE)
+  const [hiddenOrders, setHiddenOrders] = useState<string[]>(
+    JSON.parse(localStorage.getItem("hidden_orders") || "[]"),
+  );
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (isSilent = false) => {
     try {
-      setLoading(true);
+      if (!isSilent) setLoading(true);
       const { data, error } = await supabase
         .from("orders")
         .select(
@@ -59,29 +66,104 @@ export const OrderHistoryPage = () => {
     }
   };
 
+  useEffect(() => {
+    if (user) {
+      fetchOrders();
+
+      // 🚀 KABEL SENSOR REALTIME (AUTO-SYNC)
+      const channel = supabase
+        .channel(`buyer_orders_${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "orders",
+            filter: `customer_id=eq.${user.id}`,
+          },
+          (payload) => {
+            if (payload.new.status === "CANCELLED") {
+              showToast("PESANAN DIBATALKAN OLEH TOKO.", "error");
+            } else if (payload.new.status === "PACKING") {
+              showToast("PESANAN SEDANG DISIAPKAN TOKO!", "success");
+            }
+            fetchOrders(true);
+          },
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [user]);
+
+  // FUNGSI PEMBATALAN CEPAT OLEH PEMBELI
+  const handleCancelOrder = async (e: React.MouseEvent, orderId: string) => {
+    e.stopPropagation();
+    if (
+      !window.confirm(
+        "Yakin ingin membatalkan pesanan ini? Saldo Anda akan otomatis dikembalikan 100%.",
+      )
+    )
+      return;
+
+    setCancellingId(orderId);
+    try {
+      const { error } = await supabase.rpc("cancel_order_and_refund", {
+        p_order_id: orderId,
+        p_user_id: user.id,
+      });
+
+      if (error) throw error;
+      showToast("Pesanan Berhasil Dibatalkan!", "success");
+      fetchOrders(true);
+    } catch (err: any) {
+      showToast(err.message || "Gagal membatalkan pesanan.", "error");
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  // 🚀 FUNGSI MENYEMBUNYIKAN PESANAN DARI DAFTAR (SOFT DELETE)
+  const handleHideOrder = (e: React.MouseEvent, orderId: string) => {
+    e.stopPropagation();
+    if (!window.confirm("Hapus pesanan ini dari riwayat belanja Anda?")) return;
+
+    const updatedHidden = [...hiddenOrders, orderId];
+    setHiddenOrders(updatedHidden);
+    localStorage.setItem("hidden_orders", JSON.stringify(updatedHidden));
+    showToast("Riwayat pesanan berhasil dihapus", "success");
+  };
+
   const statusMap: any = {
     UNPAID: "BELUM BAYAR",
-    PROCESSING: "DIPROSES",
+    PROCESSING: "MENUNGGU TOKO",
     READY_TO_PICKUP: "SIAP DIAMBIL",
     SHIPPING: "DIKIRIM",
     DELIVERING: "MENUJU LOKASI",
     DELIVERED: "SUDAH TIBA",
     COMPLETED: "SELESAI",
-    CANCELLED: "BATAL",
+    CANCELLED: "DIBATALKAN",
   };
 
   const getStatusColor = (status: string, shippingStatus: string) => {
     if (status === "COMPLETED" || shippingStatus === "COMPLETED")
       return "text-green-600 bg-green-50 border-green-200";
     if (status === "CANCELLED") return "text-red-600 bg-red-50 border-red-200";
-    return "text-[#FF6600] bg-orange-50 border-orange-200"; // Warna proses/aktif
+    return "text-[#FF6600] bg-orange-50 border-orange-200";
   };
 
+  // 🚀 FILTER PESANAN (MENGABAIKAN YANG SUDAH DI-HIDE)
   const filteredOrders = orders.filter((order) => {
+    // Jika pesanan ada di daftar hidden, jangan tampilkan sama sekali
+    if (hiddenOrders.includes(order.id)) return false;
+
     if (activeTab === "ACTIVE")
       return order.status !== "COMPLETED" && order.status !== "CANCELLED";
-    if (activeTab === "COMPLETED") return order.status === "COMPLETED";
-    return true; // ALL
+    if (activeTab === "COMPLETED")
+      return order.status === "COMPLETED" || order.status === "CANCELLED";
+    return true;
   });
 
   return (
@@ -100,11 +182,10 @@ export const OrderHistoryPage = () => {
         {/* --- HEADER --- */}
         <header className="bg-[#008080] sticky top-0 z-50 pt-4 pb-0 shadow-md w-full">
           <div className="max-w-[1200px] mx-auto px-4">
-            {/* 🚀 NAVIGASI & JUDUL HEADER */}
             <div className="flex items-center gap-3 mb-4">
               <button
                 onClick={() => navigate("/customer-dashboard")}
-                className="hidden md:flex p-2 bg-white/10 text-white hover:bg-white/20 rounded-md transition-all active:scale-90"
+                className="p-2 bg-white/10 text-white hover:bg-white/20 rounded-md transition-all active:scale-90"
               >
                 <ArrowLeft size={20} strokeWidth={3} />
               </button>
@@ -113,8 +194,7 @@ export const OrderHistoryPage = () => {
               </h1>
             </div>
 
-            {/* TABS FILTER */}
-            <div className="flex gap-2 pb-0 overflow-x-auto hide-scrollbar border-b border-white/10">
+            <div className="flex gap-2 pb-0 overflow-x-auto hide-scrollbar border-b border-white/10 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               {["ALL", "ACTIVE", "COMPLETED"].map((tab) => (
                 <button
                   key={tab}
@@ -129,7 +209,7 @@ export const OrderHistoryPage = () => {
                     ? "SEMUA"
                     : tab === "ACTIVE"
                       ? "BERLANGSUNG"
-                      : "SELESAI"}
+                      : "SELESAI / BATAL"}
                 </button>
               ))}
             </div>
@@ -150,12 +230,10 @@ export const OrderHistoryPage = () => {
                 <PackageX size={40} />
               </div>
               <h2 className="text-[14px] font-[1000] text-slate-700 mb-2">
-                BELUM ADA TRANSAKSI
+                BELUM ADA TRANSAKSI DI SINI
               </h2>
               <p className="text-[11px] text-slate-400 leading-tight">
-                YUK MULAI BELANJA KEBUTUHANMU
-                <br />
-                DI PASAR FAVORIT!
+                Riwayat belanjamu masih kosong atau sudah dihapus.
               </p>
               <button
                 onClick={() => navigate("/")}
@@ -172,17 +250,30 @@ export const OrderHistoryPage = () => {
                 const statusText =
                   statusMap[order.shipping_status || order.status] ||
                   order.status;
+                const isCancelled = order.status === "CANCELLED";
+                const isCompleted = order.status === "COMPLETED";
+
+                const canCancel =
+                  order.status === "PAID" ||
+                  order.status === "PROCESSING" ||
+                  order.status === "PENDING";
 
                 return (
                   <div
                     key={order.id}
                     onClick={() => navigate(`/track-order/${order.id}`)}
-                    className="bg-white rounded-md border border-slate-200 shadow-sm overflow-hidden active:scale-[0.98] hover:border-[#008080] transition-all cursor-pointer group"
+                    className={`bg-white rounded-xl border-2 transition-all cursor-pointer group shadow-sm ${isCancelled ? "border-red-100 bg-red-50/20" : "border-slate-200 hover:border-[#008080] active:scale-[0.98]"}`}
                   >
-                    {/* CARD HEADER */}
-                    <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div
+                      className={`p-4 border-b flex items-center justify-between ${isCancelled ? "border-red-100" : "border-slate-100"}`}
+                    >
                       <div className="flex items-center gap-2">
-                        <Store size={16} className="text-[#008080]" />
+                        <Store
+                          size={16}
+                          className={
+                            isCancelled ? "text-red-400" : "text-[#008080]"
+                          }
+                        />
                         <span className="text-[12px] font-[1000] tracking-wider">
                           {order.market?.name || "PASARQU"}
                         </span>
@@ -193,28 +284,42 @@ export const OrderHistoryPage = () => {
                           )}
                         </span>
                       </div>
-                      <div
-                        className={`px-2 py-1 rounded-sm text-[10px] border font-[1000] tracking-widest ${getStatusColor(order.status, order.shipping_status)}`}
-                      >
-                        {statusText}
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`px-2 py-1 rounded-sm text-[10px] border font-[1000] tracking-widest ${getStatusColor(order.status, order.shipping_status)}`}
+                        >
+                          {statusText}
+                        </div>
+
+                        {/* 🚀 TOMBOL HAPUS RIWAYAT (HANYA MUNCUL JIKA SELESAI ATAU BATAL) */}
+                        {(isCancelled || isCompleted) && (
+                          <button
+                            onClick={(e) => handleHideOrder(e, order.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                            title="Hapus Riwayat Ini"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    {/* CARD BODY (PRODUK) */}
                     <div className="p-4 flex gap-4">
                       <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-50 rounded-md border border-slate-200 shrink-0 overflow-hidden shadow-inner flex items-center justify-center">
                         {firstItem?.product?.image_url ? (
                           <img
                             src={firstItem.product.image_url}
                             alt=""
-                            className="w-full h-full object-cover"
+                            className={`w-full h-full object-cover ${isCancelled ? "grayscale opacity-70" : ""}`}
                           />
                         ) : (
                           <ShoppingBag className="w-1/2 h-1/2 text-slate-300" />
                         )}
                       </div>
                       <div className="flex-1 flex flex-col justify-center min-w-0 py-1">
-                        <h3 className="text-[12px] font-black text-slate-800 truncate mb-1">
+                        <h3
+                          className={`text-[12px] font-black uppercase truncate mb-1 ${isCancelled ? "text-slate-500 line-through" : "text-slate-800"}`}
+                        >
                           {firstItem?.product?.name || "PRODUK PASAR"}
                         </h3>
                         <p className="text-[11px] text-slate-500 font-bold">
@@ -224,29 +329,52 @@ export const OrderHistoryPage = () => {
                           </span>
                         </p>
                         {extraItemsCount > 0 && (
-                          <p className="text-[10px] text-[#008080] mt-1 tracking-widest font-black">
+                          <p
+                            className={`text-[10px] ${isCancelled ? "text-red-400" : "text-[#008080]"} mt-1 tracking-widest font-black`}
+                          >
                             + {extraItemsCount} PRODUK LAINNYA
                           </p>
                         )}
                       </div>
                     </div>
 
-                    {/* CARD FOOTER */}
-                    <div className="p-4 pt-0 flex items-center justify-between">
+                    <div className="p-4 pt-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                       <div className="flex flex-col">
                         <span className="text-[9px] text-slate-400 mb-1 tracking-[0.2em]">
                           TOTAL BELANJA
                         </span>
-                        <span className="text-[14px] font-[1000] font-sans text-slate-900 leading-none">
+                        <span
+                          className={`text-[14px] font-[1000] font-sans leading-none ${isCancelled ? "text-slate-400" : "text-slate-900"}`}
+                        >
                           RP {order.total_price.toLocaleString()}
                         </span>
                       </div>
-                      <button className="px-5 py-3 bg-slate-900 group-hover:bg-[#FF6600] text-white rounded-md text-[11px] font-black flex items-center gap-1 shadow-sm transition-colors">
-                        {order.status === "COMPLETED"
-                          ? "LIHAT DETAIL"
-                          : "LACAK PESANAN"}{" "}
-                        <ChevronRight size={14} />
-                      </button>
+
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        {canCancel && (
+                          <button
+                            disabled={cancellingId === order.id}
+                            onClick={(e) => handleCancelOrder(e, order.id)}
+                            className="flex-1 sm:flex-none px-4 py-3 bg-white border border-red-200 text-red-500 rounded-md text-[10px] font-black flex items-center justify-center gap-1 hover:bg-red-50 transition-colors shadow-sm"
+                          >
+                            {cancellingId === order.id ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <Ban size={14} />
+                            )}
+                            BATAL
+                          </button>
+                        )}
+
+                        <button className="flex-1 sm:flex-none px-5 py-3 bg-slate-900 hover:bg-[#008080] text-white rounded-md text-[10px] font-black flex items-center justify-center gap-1 shadow-sm transition-colors">
+                          {isCancelled
+                            ? "LIHAT DETAIL BATAL"
+                            : order.status === "COMPLETED"
+                              ? "LIHAT DETAIL"
+                              : "LACAK PESANAN"}
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -258,3 +386,5 @@ export const OrderHistoryPage = () => {
     </MobileLayout>
   );
 };
+
+export default OrderHistoryPage;
