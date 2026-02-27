@@ -1,731 +1,857 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
-import { supabase } from "../../../lib/supabaseClient";
-import { useAuth } from "../../../contexts/AuthContext";
-import { useToast } from "../../../contexts/ToastContext";
+import { useParams, useNavigate } from "react-router-dom";
 import {
-  ShoppingBag,
-  Clock,
+  GoogleMap,
+  useJsApiLoader,
+  MarkerF,
+  DirectionsRenderer,
+} from "@react-google-maps/api";
+import { supabase } from "../../lib/supabaseClient";
+import { useAuth } from "../../contexts/AuthContext";
+import { useToast } from "../../contexts/ToastContext";
+import {
+  ArrowLeft,
   Loader2,
-  MapPin,
-  Send,
-  Printer,
-  AlertCircle,
+  Bike,
+  ShoppingBag,
   Package,
-  Store,
-  KeyRound,
-  UserCheck,
-  X,
-  Truck,
-  Search,
-  MessageCircle,
-  Ban,
   CheckCircle2,
-  Trash2, // 🚀 Ikon Tong Sampah
+  Wallet,
+  MapPin,
+  Download,
+  HeadphonesIcon,
+  X,
+  Star,
+  MessageCircle,
+  QrCode,
+  Store,
+  ReceiptText,
+  Gift,
+  Ban,
+  Trash2,
 } from "lucide-react";
+import QRCode from "react-qr-code";
+import { OrderChatRoom } from "../../features/chat/OrderChatRoom";
+import { ComplaintForm } from "../../components/shared/ComplaintForm";
+import { MobileLayout } from "../../components/layout/MobileLayout";
 
-interface Props {
-  merchantProfile: any;
-  stopAlarm?: () => void;
-}
+const mapContainerStyle = { width: "100%", height: "100%" };
 
-export const MerchantOrders: React.FC<Props> = ({
-  merchantProfile,
-  stopAlarm,
-}) => {
-  const { user } = useAuth();
+// 🚀 IKON CUSTOM LEVEL PRO
+const ICONS = {
+  courier: "https://cdn-icons-png.flaticon.com/512/713/713438.png",
+  home: "https://cdn-icons-png.flaticon.com/512/1946/1946488.png",
+  store: "https://cdn-icons-png.flaticon.com/512/1055/1055672.png",
+};
+
+export const OrderTrackingPage = () => {
+  const { user, profile } = useAuth() as any;
   const { showToast } = useToast();
+  const { orderId } = useParams();
+  const navigate = useNavigate();
 
-  const [orders, setOrders] = useState<any[]>([]);
+  const [order, setOrder] = useState<any>(null);
+  const [courier, setCourier] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("pending");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isUpdating, setIsUpdating] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(new Date().getTime());
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
+  const [chatType, setChatType] = useState<
+    "merchant_customer" | "courier_customer"
+  >("merchant_customer");
+  const [orderItems, setOrderItems] = useState<any[]>([]);
 
-  // 🚀 STATE UNTUK PESANAN YANG DISEMBUNYIKAN (TONG SAMPAH)
-  const [hiddenOrders, setHiddenOrders] = useState<string[]>([]);
+  // RADAR ROUTING STATE
+  const [directions, setDirections] = useState<any>(null);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
 
-  // STATE UNTUK MODAL PIN AMBIL SENDIRI
-  const [pinModalOrder, setPinModalOrder] = useState<any>(null);
-  const [pinInput, setPinInput] = useState("");
-  const [isVerifying, setIsVerifying] = useState(false);
+  // REVIEW STATE
+  const [hasReviewed, setHasReviewed] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
-  // MUAT DAFTAR PESANAN YANG DISEMBUNYIKAN SAAT HALAMAN DIBUKA
-  useEffect(() => {
-    if (user?.id) {
-      const hidden = JSON.parse(
-        localStorage.getItem(`merchant_hidden_orders_${user.id}`) || "[]",
-      );
-      setHiddenOrders(hidden);
-    }
-  }, [user?.id]);
+  // 🚀 LOAD GOOGLE MAPS API DENGAN LIBRARIES DIRECTIONS
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+    libraries: ["places", "routes"],
+  });
 
-  // UPDATE TIMER SETIAP MENIT UNTUK SLA
-  useEffect(() => {
-    const timer = setInterval(
-      () => setCurrentTime(new Date().getTime()),
-      60000,
-    );
-    return () => clearInterval(timer);
-  }, []);
+  const steps = [
+    { label: "DIBAYAR", key: "PAID", icon: Wallet },
+    { label: "DIKEMAS", key: "PACKING", icon: Package },
+    { label: "DIKIRIM", key: "SHIPPING", icon: Bike },
+    { label: "SELESAI", key: "COMPLETED", icon: CheckCircle2 },
+  ];
 
-  const fetchOrders = useCallback(
-    async (isSilent = false) => {
-      if (!user?.id) return;
-      if (!isSilent) setLoading(true);
+  const statusMap: any = {
+    UNPAID: "MENUNGGU PEMBAYARAN",
+    PROCESSING: "SEDANG DISIAPKAN",
+    READY_TO_PICKUP: "SIAP DIAMBIL",
+    SHIPPING: "DALAM PENGIRIMAN",
+    DELIVERING: "KURIR MENUJU LOKASI",
+    DELIVERED: "SUDAH TIBA",
+    COMPLETED: "PESANAN SELESAI",
+    CANCELLED: "DIBATALKAN",
+  };
 
-      try {
-        const { data: items, error: itemsError } = await supabase
-          .from("order_items")
-          .select(
-            `
-          *,
-          orders!inner (
-            id, status, shipping_status, created_at, total_price,
-            shipping_cost, service_fee, courier_surge_fee,
-            total_merchants, address, notes, customer_id,
-            shipping_method, pickup_code, pickup_expired_at
-          )
-        `,
-          )
-          .eq("merchant_id", user.id);
+  const getCurrentStep = () => {
+    if (!order) return -1;
+    if (order.status === "CANCELLED") return -1;
+    if (order.shipping_status === "COMPLETED") return 3;
+    if (
+      order.shipping_status === "SHIPPING" ||
+      order.shipping_status === "DELIVERING"
+    )
+      return 2;
+    if (
+      order.shipping_status === "PACKING" ||
+      order.shipping_status === "READY_TO_PICKUP" ||
+      order.status === "PACKING"
+    )
+      return 1;
+    if (order.status === "PAID" || order.status === "PROCESSING") return 0;
+    return -1;
+  };
 
-        if (itemsError) throw itemsError;
+  const fetchFullData = useCallback(async () => {
+    if (!orderId) return;
+    try {
+      setLoading(true);
+      // 🚀 TARIK DATA KOORDINAT PASAR SUPER ADMIN SEBAGAI ANCHOR!
+      const { data: orderData, error: orderErr } = await supabase
+        .from("orders")
+        .select(
+          "*, market:markets(name, latitude, longitude), merchant:merchants(latitude, longitude)",
+        )
+        .eq("id", orderId)
+        .maybeSingle();
 
-        if (!items || items.length === 0) {
-          setOrders([]);
-          setLoading(false);
-          return;
-        }
-
-        const productIds = [...new Set(items.map((i) => i.product_id))];
-        const customerIds = [
-          ...new Set(items.map((i) => i.orders?.customer_id)),
-        ].filter(Boolean);
-
-        const [resProducts, resCustomers] = await Promise.all([
-          supabase
-            .from("products")
-            .select("id, name, image_url, unit")
-            .in("id", productIds),
-          supabase
-            .from("profiles")
-            .select("id, full_name, phone_number")
-            .in("id", customerIds),
-        ]);
-
-        const products = resProducts.data || [];
-        const customers = resCustomers.data || [];
-
-        const grouped = items.reduce((acc: any, item: any) => {
-          const orderData = item.orders;
-          if (!orderData) return acc;
-          const orderId = orderData.id;
-
-          if (!acc[orderId]) {
-            const customer = customers.find(
-              (c) => c.id === orderData.customer_id,
-            );
-            acc[orderId] = {
-              ...orderData,
-              customer: customer || { full_name: "PELANGGAN PASARQU" },
-              my_items: [],
-            };
-          }
-
-          const product = products.find((p) => p.id === item.product_id);
-          acc[orderId].my_items.push({
-            ...item,
-            product_details: product || {
-              name: "PRODUK TIDAK TERDAFTAR",
-              unit: "PCS",
-            },
-          });
-          return acc;
-        }, {});
-
-        const sortedOrders = Object.values(grouped).sort(
-          (a: any, b: any) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-        );
-
-        setOrders(sortedOrders);
-      } catch (err: any) {
-        console.error("Fetch Orders Error:", err.message);
-      } finally {
-        setLoading(false);
+      if (orderErr) throw orderErr;
+      if (!orderData) {
+        setOrder(null);
+        return;
       }
-    },
-    [user?.id],
-  );
+      setOrder(orderData);
+
+      const { data: rawItems } = await supabase
+        .from("order_items")
+        .select("*, product:products(name, image_url)")
+        .eq("order_id", orderId);
+      if (rawItems) setOrderItems(rawItems);
+
+      if (orderData.courier_id) {
+        const { data: cData } = await supabase
+          .from("couriers")
+          .select("*")
+          .eq("id", orderData.courier_id)
+          .maybeSingle();
+        setCourier(cData);
+      }
+
+      const { data: reviewData } = await supabase
+        .from("reviews")
+        .select("id")
+        .eq("order_id", orderId)
+        .maybeSingle();
+      if (reviewData) setHasReviewed(true);
+    } catch (err: any) {
+      showToast("GAGAL MEMUAT DATA PESANAN", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [orderId]);
 
   useEffect(() => {
-    fetchOrders();
-    if (!user?.id) return;
+    fetchFullData();
+  }, [fetchFullData]);
 
-    const channel = supabase
-      .channel(`live_orders_merchant_hub_${user.id}`)
+  // 🚀 SENSOR LIVE TRACKING ORDER & KURIR
+  useEffect(() => {
+    if (!orderId) return;
+    const orderChannel = supabase
+      .channel(`live-order-${orderId}`)
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "UPDATE",
           schema: "public",
-          table: "order_items",
-          filter: `merchant_id=eq.${user.id}`,
+          table: "orders",
+          filter: `id=eq.${orderId}`,
         },
-        () => fetchOrders(true),
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "orders" },
-        () => fetchOrders(true),
+        (payload) => setOrder(payload.new),
       )
       .subscribe();
 
+    let courierChannel: any = null;
+    if (order?.courier_id) {
+      courierChannel = supabase
+        .channel(`live-courier-${order.courier_id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "couriers",
+            filter: `id=eq.${order.courier_id}`,
+          },
+          (payload) => setCourier(payload.new),
+        )
+        .subscribe();
+    }
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(orderChannel);
+      if (courierChannel) supabase.removeChannel(courierChannel);
     };
-  }, [fetchOrders, user?.id]);
+  }, [orderId, order?.courier_id]);
 
-  const handleProcessOrder = async (order: any) => {
-    setIsUpdating(order.id);
-    const isPickup = order.shipping_method === "pickup";
+  // 🚀 ENGINE POLYLINE MAPS (GARIS RUTE CERDAS)
+  useEffect(() => {
+    if (!isLoaded || !order?.delivery_lat) return;
 
-    try {
-      const { error } = await supabase
-        .from("orders")
-        .update({
-          status: "PACKING",
-          shipping_status: isPickup ? "READY_TO_PICKUP" : "SEARCHING_COURIER",
-        })
-        .eq("id", order.id);
-
-      if (error) throw error;
-      if (stopAlarm) stopAlarm();
-      showToast(
-        isPickup ? "PESANAN DISIAPKAN!" : "PESANAN DITERIMA. MENCARI KURIR...",
-        "success",
+    const calculateRoute = () => {
+      const directionsService = new window.google.maps.DirectionsService();
+      let origin: google.maps.LatLng | null = null;
+      let destination = new window.google.maps.LatLng(
+        order.delivery_lat,
+        order.delivery_lng,
       );
-      fetchOrders(true);
+
+      if (courier?.current_lat && courier?.current_lng) {
+        origin = new window.google.maps.LatLng(
+          courier.current_lat,
+          courier.current_lng,
+        );
+      } else if (order?.merchant?.latitude && order?.merchant?.longitude) {
+        origin = new window.google.maps.LatLng(
+          order.merchant.latitude,
+          order.merchant.longitude,
+        );
+      }
+
+      if (origin) {
+        directionsService.route(
+          {
+            origin,
+            destination,
+            travelMode: window.google.maps.TravelMode.DRIVING,
+          },
+          (result, status) => {
+            if (status === window.google.maps.DirectionsStatus.OK)
+              setDirections(result);
+          },
+        );
+      }
+    };
+
+    calculateRoute();
+  }, [
+    isLoaded,
+    courier?.current_lat,
+    order?.delivery_lat,
+    order?.merchant?.latitude,
+  ]);
+
+  const handleSubmitReview = async () => {
+    if (rating === 0) return showToast("PILIH JUMLAH BINTANG!", "error");
+    setIsSubmittingReview(true);
+    try {
+      const { error } = await supabase.from("reviews").insert({
+        order_id: order.id,
+        merchant_id: order.market_id,
+        customer_id: user?.id,
+        rating,
+        comment: reviewComment,
+      });
+      if (error) throw error;
+      showToast("ULASAN BERHASIL TERKIRIM!", "success");
+      setHasReviewed(true);
+      setShowReviewModal(false);
     } catch (err: any) {
       showToast(err.message, "error");
     } finally {
-      setIsUpdating(null);
+      setIsSubmittingReview(false);
     }
   };
 
-  const handleRejectOrder = async (order: any) => {
-    if (
-      !window.confirm(
-        "Yakin ingin menolak pesanan ini? Saldo pembeli akan dikembalikan otomatis.",
-      )
-    )
+  const handleCancelOrder = async () => {
+    if (!window.confirm("Apakah Anda yakin ingin membatalkan pesanan ini?"))
       return;
-
-    setIsUpdating(order.id);
+    setIsCancelling(true);
     try {
       const { error } = await supabase.rpc("cancel_order_and_refund", {
         p_order_id: order.id,
-        p_user_id: order.customer_id,
+        p_user_id: user.id,
       });
-
       if (error) throw error;
-      if (stopAlarm) stopAlarm();
-      showToast("PESANAN BERHASIL DITOLAK.", "info");
-      fetchOrders(true);
+      showToast("Pesanan berhasil dibatalkan!", "success");
+      setOrder((prev: any) => ({ ...prev, status: "CANCELLED" }));
     } catch (err: any) {
-      showToast(err.message, "error");
+      showToast(err.message || "Gagal membatalkan pesanan.", "error");
     } finally {
-      setIsUpdating(null);
+      setIsCancelling(false);
     }
   };
 
-  const handleVerifyPIN = async () => {
-    if (!pinModalOrder || pinInput.length !== 4) {
-      showToast("Masukkan 4 digit PIN dengan benar", "error");
-      return;
+  const handleHideOrderFromDetail = () => {
+    if (!window.confirm("Hapus pesanan ini dari riwayat belanja Anda?")) return;
+    const currentHidden = JSON.parse(
+      localStorage.getItem("hidden_orders") || "[]",
+    );
+    const updatedHidden = [...currentHidden, orderId];
+    localStorage.setItem("hidden_orders", JSON.stringify(updatedHidden));
+    showToast("Pesanan telah dihapus dari riwayat.", "success");
+    navigate("/order-history");
+  };
+
+  if (loading)
+    return (
+      <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-[100] gap-4 font-black">
+        <Loader2 className="animate-spin text-[#008080]" size={32} />
+        <p className="text-[12px] tracking-widest uppercase text-slate-400">
+          MEMUAT RADAR...
+        </p>
+      </div>
+    );
+
+  const isPickup = order?.shipping_method === "pickup";
+  const canCancel =
+    order?.status === "PAID" ||
+    order?.status === "PROCESSING" ||
+    order?.status === "PENDING";
+  const isFinished =
+    order?.status === "COMPLETED" || order?.status === "CANCELLED";
+
+  // 🚀 HIERARKI SMART ANCHOR (FOKUS PETA)
+  const getMapCenter = () => {
+    if (courier?.current_lat && courier?.current_lng) {
+      return { lat: courier.current_lat, lng: courier.current_lng };
     }
-    setIsVerifying(true);
-
-    try {
-      if (new Date() > new Date(pinModalOrder.pickup_expired_at))
-        throw new Error("WAKTU PENGAMBILAN HABIS. DANA DITAHAN SISTEM.");
-      if (pinInput !== pinModalOrder.pickup_code)
-        throw new Error("PIN YANG DIMASUKKAN SALAH!");
-
-      const { error: rpcError } = await supabase.rpc(
-        "complete_order_transaction",
-        { p_order_id: pinModalOrder.id },
-      );
-      if (rpcError) throw rpcError;
-
-      showToast("PIN COCOK! PESANAN SELESAI & SALDO MASUK.", "success");
-      setPinModalOrder(null);
-      setPinInput("");
-      fetchOrders(true);
-    } catch (err: any) {
-      showToast(err.message, "error");
-    } finally {
-      setIsVerifying(false);
+    if (order?.delivery_lat && order?.delivery_lng) {
+      return { lat: order.delivery_lat, lng: order.delivery_lng };
     }
+    if (order?.merchant?.latitude && order?.merchant?.longitude) {
+      return { lat: order.merchant.latitude, lng: order.merchant.longitude };
+    }
+    // THE ULTIMATE ANCHOR: KORDINAT PASAR DARI SUPER ADMIN
+    if (order?.market?.latitude && order?.market?.longitude) {
+      return { lat: order.market.latitude, lng: order.market.longitude };
+    }
+    return { lat: -0.8327, lng: 117.2476 }; // Safe fallback system
   };
 
-  const handlePrintLabel = (order: any) => {
-    window.open(`/invoice/${order.id}`, "_blank");
-  };
-
-  // 🚀 FUNGSI SEMBUNYIKAN PESANAN (TONG SAMPAH)
-  const handleHideOrder = (orderId: string) => {
-    if (!window.confirm("Sembunyikan pesanan ini dari daftar Anda?")) return;
-    const updatedHidden = [...hiddenOrders, orderId];
-    setHiddenOrders(updatedHidden);
-    if (user?.id)
-      localStorage.setItem(
-        `merchant_hidden_orders_${user.id}`,
-        JSON.stringify(updatedHidden),
-      );
-    showToast("Pesanan disembunyikan dari daftar.", "success");
-  };
-
-  // FILTERING GABUNGAN & HIDE SAMPAH
-  const filteredOrders = orders.filter((o) => {
-    if (hiddenOrders.includes(o.id)) return false; // Abaikan jika masuk daftar sembunyi
-
-    let matchTab = false;
-    if (statusFilter === "pending")
-      matchTab = ["PAID", "PENDING", "PROCESSING"].includes(o.status);
-    else if (statusFilter === "shipping")
-      matchTab =
-        ["PACKING", "ON_DELIVERY", "SHIPPING", "DELIVERING"].includes(
-          o.status,
-        ) ||
-        ["SEARCHING_COURIER", "READY_TO_PICKUP"].includes(o.shipping_status);
-    else if (statusFilter === "completed")
-      matchTab =
-        o.status === "COMPLETED" ||
-        o.status === "CANCELLED" ||
-        o.shipping_status === "COMPLETED";
-
-    const matchSearch =
-      o.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (o.customer?.full_name || "")
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
-    return matchTab && matchSearch;
-  });
+  const currentCenter = getMapCenter();
 
   return (
-    <>
-      {pinModalOrder &&
-        createPortal(
-          <div className="fixed inset-0 z-[99999] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-white w-full max-w-sm rounded-xl overflow-hidden shadow-2xl relative border-4 border-[#FF6600]">
+    <MobileLayout
+      activeTab="orders"
+      onTabChange={(tab: string) => {
+        if (tab === "home") navigate("/");
+        if (tab === "account") navigate("/customer-dashboard");
+        if (tab === "orders") navigate("/order-history");
+      }}
+      onSearch={() => {}}
+      onCartClick={() => {}}
+      cartCount={0}
+    >
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-black text-left uppercase tracking-tighter not-italic text-[12px]">
+        {/* HEADER */}
+        <header
+          className={`sticky top-0 z-50 h-16 flex items-center px-4 shadow-md w-full transition-colors ${order?.status === "CANCELLED" ? "bg-red-600" : "bg-[#008080]"}`}
+        >
+          <div className="w-full max-w-[1200px] mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
               <button
-                onClick={() => {
-                  setPinModalOrder(null);
-                  setPinInput("");
-                }}
-                className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center bg-white/20 rounded-md text-white hover:bg-red-500 transition-colors"
+                onClick={() => navigate("/order-history")}
+                className="p-2 hover:bg-white/10 rounded-md text-white transition-all"
               >
-                <X size={16} />
+                <ArrowLeft size={24} strokeWidth={3} />
               </button>
-              <div className="bg-[#FF6600] p-8 text-center text-white flex flex-col items-center">
-                <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center mb-4">
-                  <KeyRound size={32} />
-                </div>
-                <h3 className="font-black tracking-widest uppercase text-[16px]">
-                  VERIFIKASI PIN
-                </h3>
-                <p className="text-[10px] mt-2 opacity-80 uppercase tracking-widest font-bold">
-                  Minta 4 Angka Rahasia ke Pembeli
-                </p>
-              </div>
-              <div className="p-8 space-y-6 text-center">
-                <input
-                  type="text"
-                  maxLength={4}
-                  value={pinInput}
-                  onChange={(e) =>
-                    setPinInput(e.target.value.replace(/\D/g, ""))
-                  }
-                  placeholder="0 0 0 0"
-                  className="w-full text-center text-[32px] font-black tracking-[1em] py-4 border-b-4 border-slate-200 focus:border-[#FF6600] outline-none text-slate-800 transition-colors bg-slate-50 rounded-t-xl"
-                />
-                <button
-                  disabled={isVerifying || pinInput.length !== 4}
-                  onClick={handleVerifyPIN}
-                  className="w-full py-4 rounded-xl bg-slate-900 hover:bg-[#008080] text-white font-black uppercase text-[12px] tracking-[0.1em] active:scale-95 transition-all disabled:opacity-50 flex justify-center items-center gap-2 shadow-lg"
-                >
-                  {isVerifying ? (
-                    <Loader2 size={18} className="animate-spin" />
-                  ) : (
-                    <UserCheck size={18} />
-                  )}{" "}
-                  VALIDASI & CAIRKAN
-                </button>
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] text-white/70 leading-none mb-1 tracking-wider">
+                  STATUS PESANAN
+                </span>
+                <span className="text-[14px] font-[1000] text-white leading-none">
+                  #{order?.id?.slice(0, 8)}
+                </span>
               </div>
             </div>
-          </div>,
-          document.body,
-        )}
-
-      <div className="w-full space-y-6 animate-in fade-in duration-500 text-left font-sans pb-20 font-black uppercase tracking-tighter">
-        {/* HEADER & SEARCH BAR */}
-        <div className="bg-white border-2 border-slate-100 p-6 rounded-xl shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b-8 border-[#008080]">
-          <div>
-            <h2 className="text-2xl text-slate-900 leading-none flex items-center gap-2">
-              <ShoppingBag className="text-[#008080]" size={24} /> DAFTAR
-              PESANAN
-            </h2>
-            <p className="text-[10px] text-slate-400 mt-1 tracking-widest">
-              KELOLA TRANSAKSI PENJUALAN TOKO
-            </p>
-          </div>
-          <div className="relative w-full md:w-72">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              size={16}
-            />
-            <input
-              type="text"
-              placeholder="CARI NAMA / ID PESANAN..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg pl-10 pr-4 py-3 text-[11px] font-black outline-none focus:border-[#008080] transition-all"
-            />
-          </div>
-        </div>
-
-        {/* FILTER TABS */}
-        <div className="flex bg-slate-50 p-1.5 rounded-xl border-2 border-slate-100 overflow-x-auto no-scrollbar">
-          <TabButton
-            active={statusFilter === "pending"}
-            label="MASUK"
-            onClick={() => setStatusFilter("pending")}
-            count={
-              orders.filter(
-                (o) =>
-                  ["PAID", "PENDING", "PROCESSING"].includes(o.status) &&
-                  !hiddenOrders.includes(o.id),
-              ).length
-            }
-          />
-          <TabButton
-            active={statusFilter === "shipping"}
-            label="DIPROSES"
-            onClick={() => setStatusFilter("shipping")}
-            count={
-              orders.filter(
-                (o) =>
-                  ([
-                    "PACKING",
-                    "ON_DELIVERY",
-                    "SHIPPING",
-                    "DELIVERING",
-                  ].includes(o.status) ||
-                    ["SEARCHING_COURIER", "READY_TO_PICKUP"].includes(
-                      o.shipping_status,
-                    )) &&
-                  !hiddenOrders.includes(o.id),
-              ).length
-            }
-          />
-          <TabButton
-            active={statusFilter === "completed"}
-            label="SELESAI"
-            onClick={() => setStatusFilter("completed")}
-          />
-        </div>
-
-        {/* LIST PESANAN */}
-        {loading ? (
-          <div className="py-24 text-center flex flex-col items-center gap-4 bg-white border-2 border-slate-100 rounded-xl">
-            <Loader2 className="animate-spin text-[#008080]" size={40} />
-            <p className="font-black text-[10px] text-slate-400 tracking-widest">
-              MENYINKRONKAN DATA PASAR...
-            </p>
-          </div>
-        ) : filteredOrders.length === 0 ? (
-          <div className="py-24 text-center bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl">
-            <AlertCircle size={48} className="mx-auto text-slate-300 mb-4" />
-            <p className="text-[12px] font-black text-slate-400 tracking-widest">
-              TIDAK ADA PESANAN DI KATEGORI INI
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {filteredOrders.map((order) => {
-              const isPickup = order.shipping_method === "pickup";
-              const isNew = ["PAID", "PENDING", "PROCESSING"].includes(
-                order.status,
-              );
-              const isCancelled = order.status === "CANCELLED";
-              const isCompleted =
-                order.status === "COMPLETED" ||
-                order.shipping_status === "COMPLETED"; // 🚀 FIX STATUS SELESAI
-
-              // HITUNG SLA TIMER
-              const orderTime = new Date(order.created_at).getTime();
-              const diffInMinutes = Math.floor(
-                (currentTime - orderTime) / (1000 * 60),
-              );
-              const remainingTime = 30 - diffInMinutes;
-              const isLate = remainingTime <= 0;
-
-              return (
-                <div
-                  key={order.id}
-                  className={`bg-white border-2 rounded-xl shadow-sm overflow-hidden transition-all relative ${isCancelled ? "border-red-200 opacity-60" : isCompleted ? "border-green-200 opacity-80" : isNew && isLate ? "border-red-500" : isPickup ? "border-[#FF6600]/30 hover:border-[#FF6600]" : "border-slate-100 hover:border-[#008080]"}`}
+            <div className="flex items-center gap-2">
+              <div
+                className={`px-3 py-1.5 rounded-md text-[10px] font-black shadow-sm ${order?.status === "COMPLETED" ? "bg-green-500 text-white" : order?.status === "CANCELLED" ? "bg-white text-red-600" : "bg-[#FF6600] text-white animate-pulse"}`}
+              >
+                {statusMap[order?.shipping_status || order?.status] ||
+                  "MEMPROSES"}
+              </div>
+              {isFinished && (
+                <button
+                  onClick={handleHideOrderFromDetail}
+                  className="p-2 bg-white/20 text-white hover:bg-red-500 rounded-md transition-all shadow-sm"
                 >
-                  {/* ORDER TOP BAR */}
-                  <div
-                    className={`px-5 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b-2 ${isCancelled ? "bg-red-50 border-red-100" : isCompleted ? "bg-green-50 border-green-100" : isPickup ? "bg-orange-50/50 border-orange-100" : "bg-slate-50 border-slate-100"}`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`px-3 py-1.5 rounded-md border-2 flex items-center gap-2 shadow-sm ${isCancelled ? "bg-white border-red-200 text-red-500" : isCompleted ? "bg-white border-green-200 text-green-600" : isPickup ? "bg-white border-orange-200 text-[#FF6600]" : "bg-white border-slate-200 text-[#008080]"}`}
-                      >
-                        {isCancelled ? (
-                          <Ban size={14} />
-                        ) : isCompleted ? (
-                          <CheckCircle2 size={14} />
-                        ) : isPickup ? (
-                          <ShoppingBag size={14} />
-                        ) : (
-                          <Truck size={14} />
-                        )}
-                        <span className="text-[11px] font-black uppercase tracking-widest">
-                          {isCancelled
-                            ? "DIBATALKAN"
-                            : isCompleted
-                              ? "TRANSAKSI SELESAI"
-                              : isPickup
-                                ? "AMBIL SENDIRI"
-                                : "KURIR PASAR"}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-slate-400">
-                        <Clock size={14} />
-                        <span className="text-[10px] font-black uppercase tracking-widest">
-                          {new Date(order.created_at).toLocaleTimeString(
-                            "id-ID",
-                            { hour: "2-digit", minute: "2-digit" },
-                          )}
-                        </span>
-                      </div>
-                    </div>
+                  <Trash2 size={18} strokeWidth={3} />
+                </button>
+              )}
+            </div>
+          </div>
+        </header>
 
-                    <div className="flex items-center gap-3 w-full md:w-auto justify-between">
-                      {isNew && !isCancelled && !isCompleted && (
-                        <div
-                          className={`text-[9px] px-3 py-1.5 rounded-md flex items-center gap-1 shadow-sm ${isLate ? "bg-red-600 text-white animate-pulse" : "bg-orange-100 text-orange-700"}`}
-                        >
-                          <Clock size={10} />{" "}
-                          {isLate
-                            ? "TERLAMBAT MERESPON!"
-                            : `SISA WAKTU: ${remainingTime} MNT`}
-                        </div>
-                      )}
-                      <span
-                        className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest shadow-sm ${isCancelled ? "bg-red-500 text-white" : isCompleted ? "bg-green-600 text-white" : isNew ? "bg-[#008080] text-white" : "bg-slate-200 text-slate-500"}`}
-                      >
-                        {order.status === "PROCESSING"
-                          ? "COD - BARU"
-                          : isCompleted
-                            ? "SELESAI"
-                            : order.status}
-                      </span>
-                    </div>
+        <main className="flex-1 w-full max-w-[1200px] mx-auto p-4 pb-32 grid grid-cols-1 md:grid-cols-12 gap-5">
+          {/* BAGIAN KIRI (PETA RADAR PRO) */}
+          <div className="md:col-span-7 space-y-5">
+            {order?.status !== "CANCELLED" && !isPickup && (
+              <div className="h-[350px] md:h-[450px] bg-slate-200 rounded-md border border-slate-200 shadow-sm overflow-hidden relative">
+                {loadError ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-red-500">
+                    <MapPin size={32} />
+                    <p>GAGAL MEMUAT PETA</p>
                   </div>
+                ) : !isLoaded ? (
+                  <div className="w-full h-full flex items-center justify-center bg-slate-100 animate-pulse text-[#008080]">
+                    MEMANASKAN RADAR...
+                  </div>
+                ) : (
+                  <GoogleMap
+                    mapContainerStyle={mapContainerStyle}
+                    center={currentCenter}
+                    zoom={15}
+                    options={{
+                      disableDefaultUI: true,
+                      gestureHandling: "greedy",
+                      mapId: "PASARQU_MAP",
+                    }}
+                    onLoad={(map) => setMapInstance(map)}
+                  >
+                    {/* GARIS RUTE */}
+                    {directions && (
+                      <DirectionsRenderer
+                        directions={directions}
+                        options={{
+                          suppressMarkers: true,
+                          polylineOptions: {
+                            strokeColor: "#008080",
+                            strokeWeight: 5,
+                          },
+                        }}
+                      />
+                    )}
 
-                  {/* ITEMS LIST */}
-                  <div className="p-5 space-y-3">
-                    {order.my_items?.map((item: any, idx: number) => (
+                    {/* LOKASI PASAR / TOKO */}
+                    {!courier?.current_lat &&
+                      (order?.merchant?.latitude ? (
+                        <MarkerF
+                          position={{
+                            lat: order.merchant.latitude,
+                            lng: order.merchant.longitude,
+                          }}
+                          icon={{
+                            url: ICONS.store,
+                            scaledSize: new window.google.maps.Size(40, 40),
+                          }}
+                        />
+                      ) : order?.market?.latitude ? (
+                        <MarkerF
+                          position={{
+                            lat: order.market.latitude,
+                            lng: order.market.longitude,
+                          }}
+                          icon={{
+                            url: ICONS.store,
+                            scaledSize: new window.google.maps.Size(40, 40),
+                          }}
+                        />
+                      ) : null)}
+
+                    {/* LOKASI PEMBELI */}
+                    {order?.delivery_lat && (
+                      <MarkerF
+                        position={{
+                          lat: order.delivery_lat,
+                          lng: order.delivery_lng,
+                        }}
+                        icon={{
+                          url: ICONS.home,
+                          scaledSize: new window.google.maps.Size(40, 40),
+                        }}
+                      />
+                    )}
+
+                    {/* LOKASI KURIR BERGERAK */}
+                    {courier?.current_lat && (
+                      <MarkerF
+                        position={{
+                          lat: courier.current_lat,
+                          lng: courier.current_lng,
+                        }}
+                        icon={{
+                          url: ICONS.courier,
+                          scaledSize: new window.google.maps.Size(50, 50),
+                        }}
+                        zIndex={999}
+                      />
+                    )}
+                  </GoogleMap>
+                )}
+
+                {/* OVERLAY STATUS RADAR */}
+                <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-md px-3 py-2 rounded-md shadow-md flex items-center gap-2 border border-slate-200">
+                  <div
+                    className={`w-2.5 h-2.5 rounded-full animate-pulse ${courier?.current_lat ? "bg-green-500" : "bg-orange-500"}`}
+                  ></div>
+                  <span className="text-[10px] tracking-widest">
+                    {courier?.current_lat
+                      ? "KURIR TERDETEKSI"
+                      : "MENUNGGU KURIR"}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* STATUS DIBATALKAN */}
+            {order?.status === "CANCELLED" && (
+              <section className="bg-red-50 p-8 rounded-md border-2 border-red-500 shadow-sm flex flex-col items-center text-center">
+                <Ban size={48} className="text-red-500 mb-4" />
+                <h2 className="text-[16px] font-[1000] text-red-600 tracking-widest uppercase mb-2">
+                  PESANAN TELAH DIBATALKAN
+                </h2>
+                <p className="text-[11px] font-bold text-red-500/80 max-w-sm leading-tight mb-6 uppercase">
+                  Pesanan ini telah dibatalkan. Dana (jika ada) telah
+                  dikembalikan 100% ke dompet PasarQu Pay Anda.
+                </p>
+                <button
+                  onClick={handleHideOrderFromDetail}
+                  className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-md font-black text-[12px] uppercase shadow-lg active:scale-95 transition-all"
+                >
+                  <Trash2 size={18} /> HAPUS DARI DAFTAR BELANJA
+                </button>
+              </section>
+            )}
+
+            {/* SEKSI AMBIL SENDIRI */}
+            {isPickup &&
+              order?.status !== "COMPLETED" &&
+              order?.status !== "CANCELLED" && (
+                <section className="bg-white p-8 rounded-md border-2 border-[#FF6600] shadow-lg flex flex-col items-center text-center">
+                  <div className="flex items-center gap-2 text-[#FF6600] mb-5">
+                    <QrCode size={22} />
+                    <h2 className="text-[14px] font-[1000] tracking-widest uppercase">
+                      KLAIM PENGAMBILAN
+                    </h2>
+                  </div>
+                  <div className="bg-white p-4 rounded-md border-4 border-slate-900 mb-5 shadow-inner">
+                    <QRCode value={order?.id || "PNDG"} size={180} />
+                  </div>
+                  <p className="text-[12px] font-black text-slate-800 mb-4 leading-tight uppercase px-4">
+                    TUNJUKKAN KODE INI KE PEDAGANG UNTUK VERIFIKASI PENGAMBILAN
+                    BARANG.
+                  </p>
+                  <div className="flex items-center gap-2 bg-orange-50 text-[#FF6600] px-4 py-2 rounded-md border border-orange-100">
+                    <Gift size={18} />
+                    <span className="text-[11px] font-black uppercase">
+                      BONUS RP {order?.cashback_amount?.toLocaleString()} CAIR
+                      SETELAH SCAN
+                    </span>
+                  </div>
+                </section>
+              )}
+
+            {/* TIMELINE PESANAN */}
+            {order?.status !== "CANCELLED" && (
+              <section className="bg-white p-6 rounded-md border border-slate-200 shadow-sm">
+                <div className="flex justify-between items-center relative">
+                  <div className="absolute top-[18px] left-8 right-8 h-[2px] bg-slate-100 -z-0" />
+                  {steps.map((step, idx) => {
+                    const isActive = idx <= getCurrentStep();
+                    return (
                       <div
                         key={idx}
-                        className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100 hover:bg-slate-100 transition-colors"
+                        className="relative z-10 flex flex-col items-center w-1/4"
                       >
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 bg-white border border-slate-200 rounded-md flex items-center justify-center text-slate-400 shrink-0 shadow-sm">
-                            <Package size={20} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-[12px] font-black text-slate-800 uppercase leading-none mb-1.5">
-                              {item.product_details?.name}
-                            </p>
-                            <p className="text-[10px] font-black text-[#FF6600] uppercase tracking-widest">
-                              {item.quantity} {item.product_details?.unit} x RP{" "}
-                              {item.price_at_purchase?.toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                        <p className="text-[14px] font-black text-slate-900 tracking-tighter">
-                          RP{" "}
-                          {(
-                            item.quantity * item.price_at_purchase
-                          ).toLocaleString()}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* BOTTOM INFO & ACTION */}
-                  <div className="px-5 py-5 bg-white border-t-2 border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
-                    <div className="flex items-start gap-3 w-full md:w-auto">
-                      <div
-                        className={`w-10 h-10 rounded-md flex items-center justify-center shrink-0 border ${isCancelled ? "bg-red-50 border-red-200 text-red-500" : isCompleted ? "bg-green-50 border-green-200 text-green-600" : isPickup ? "bg-orange-50 border-orange-200 text-[#FF6600]" : "bg-teal-50 border-teal-200 text-[#008080]"}`}
-                      >
-                        <MapPin size={18} />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="text-[12px] font-black text-slate-900 uppercase">
-                            {order.customer?.full_name}
-                          </p>
-                          <span className="text-slate-300">•</span>
-                          <p className="text-[10px] font-black text-[#008080]">
-                            {order.customer?.phone_number ||
-                              order.customer?.phone}
-                          </p>
-                        </div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase leading-tight line-clamp-1 max-w-[250px]">
-                          {order.address}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap md:flex-nowrap items-center gap-3 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 pt-4 md:pt-0 border-slate-50">
-                      <div className="text-left md:text-right w-full md:w-auto mb-2 md:mb-0">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                          TOTAL BAYAR
-                        </p>
-                        <p
-                          className={`text-2xl font-black ${isCancelled ? "text-slate-400 line-through" : "text-[#FF6600]"} tracking-tighter leading-none`}
+                        <div
+                          className={`w-10 h-10 rounded-md flex items-center justify-center border-2 transition-all ${isActive ? "bg-[#008080] border-[#008080] text-white shadow-md scale-110" : "bg-white border-slate-100 text-slate-200"}`}
                         >
-                          RP {order.total_price?.toLocaleString()}
-                        </p>
+                          <step.icon size={18} />
+                        </div>
+                        <span
+                          className={`text-[9px] mt-2 font-black leading-none text-center transition-colors ${isActive ? "text-[#008080]" : "text-slate-300"}`}
+                        >
+                          {step.label}
+                        </span>
                       </div>
-
-                      <div className="flex gap-2 w-full md:w-auto">
-                        {!isCancelled && (
-                          <button
-                            onClick={() =>
-                              window.open(
-                                `https://wa.me/${order.customer?.phone_number?.replace(/^0/, "62") || ""}`,
-                                "_blank",
-                              )
-                            }
-                            className="p-3 bg-green-50 text-green-600 border border-green-200 rounded-xl hover:bg-green-600 hover:text-white transition-all shadow-sm"
-                            title="Chat Pembeli"
-                          >
-                            <MessageCircle size={18} />
-                          </button>
-                        )}
-                        {!isCancelled && (
-                          <button
-                            onClick={() => handlePrintLabel(order)}
-                            className="p-3 bg-slate-50 text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-900 hover:text-white transition-all shadow-sm"
-                            title="Cetak Resi"
-                          >
-                            <Printer size={18} />
-                          </button>
-                        )}
-
-                        {/* 🚀 TOMBOL TONG SAMPAH JIKA BATAL ATAU SELESAI */}
-                        {(isCancelled || isCompleted) && (
-                          <button
-                            onClick={() => handleHideOrder(order.id)}
-                            className="p-3 bg-red-50 text-red-500 border border-red-200 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm"
-                            title="Sembunyikan Pesanan"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        )}
-
-                        {/* 🚀 LOGIKA TOMBOL STATUS (DIPERBAIKI) */}
-                        {isNew && !isCancelled && !isCompleted ? (
-                          <>
-                            <button
-                              disabled={isUpdating === order.id}
-                              onClick={() => handleRejectOrder(order)}
-                              className="px-4 py-3 bg-white border-2 border-red-200 text-red-500 hover:bg-red-50 font-black text-[11px] uppercase tracking-widest rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 shadow-sm"
-                            >
-                              {isUpdating === order.id ? (
-                                <Loader2 size={16} className="animate-spin" />
-                              ) : (
-                                <Ban size={16} />
-                              )}{" "}
-                              <span className="hidden md:inline">TOLAK</span>
-                            </button>
-                            <button
-                              disabled={isUpdating === order.id}
-                              onClick={() => handleProcessOrder(order)}
-                              className={`flex-1 md:flex-none px-6 py-3 text-white font-black text-[11px] uppercase tracking-widest rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg ${isPickup ? "bg-[#FF6600] hover:bg-orange-700" : "bg-[#008080] hover:bg-teal-800"}`}
-                            >
-                              {isUpdating === order.id ? (
-                                <Loader2 size={16} className="animate-spin" />
-                              ) : isPickup ? (
-                                <Package size={16} />
-                              ) : (
-                                <Send size={16} />
-                              )}{" "}
-                              {isPickup ? "SIAPKAN" : "TERIMA"}
-                            </button>
-                          </>
-                        ) : order.status === "PACKING" && isPickup ? (
-                          <button
-                            onClick={() => setPinModalOrder(order)}
-                            className="flex-1 md:flex-none px-6 py-3 bg-slate-900 text-white font-black text-[11px] uppercase tracking-widest rounded-xl hover:bg-[#FF6600] transition-colors flex items-center justify-center gap-2 shadow-xl"
-                          >
-                            <KeyRound size={16} className="animate-pulse" />{" "}
-                            INPUT PIN
-                          </button>
-                        ) : isCompleted ? (
-                          <div className="flex-1 md:flex-none px-6 py-3 font-black text-[11px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 bg-green-100 text-green-700">
-                            <CheckCircle2 size={16} /> SELESAI
-                          </div>
-                        ) : (
-                          <div
-                            className={`flex-1 md:flex-none px-6 py-3 font-black text-[11px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 ${isCancelled ? "bg-red-100 text-red-500" : "bg-slate-100 text-slate-500"}`}
-                          >
-                            {!isCancelled && (
-                              <Loader2 size={14} className="animate-spin" />
-                            )}
-                            {isCancelled
-                              ? "BATAL"
-                              : isPickup
-                                ? "TUNGGU DIAMBIL"
-                                : "TUNGGU KURIR"}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </section>
+            )}
+          </div>
+
+          {/* BAGIAN KANAN (DETAIL, ALAMAT, TOTAL) */}
+          <div className="md:col-span-5 space-y-5 text-left">
+            <section className="bg-white p-5 rounded-md border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
+                <ReceiptText size={20} className="text-[#008080]" />
+                <h4 className="text-[12px] font-[1000] tracking-widest uppercase">
+                  RINCIAN PRODUK
+                </h4>
+              </div>
+              <div className="space-y-4">
+                {orderItems.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="flex justify-between items-center text-[12px] font-black text-slate-700"
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="w-10 h-10 bg-slate-100 rounded-md overflow-hidden shrink-0 border border-slate-200">
+                        <img
+                          src={item.product?.image_url}
+                          className="w-full h-full object-cover"
+                          alt="Product"
+                        />
+                      </div>
+                      <span className="truncate uppercase">
+                        {item.product?.name}{" "}
+                        <span className="text-slate-400 font-bold ml-1">
+                          X{item.quantity}
+                        </span>
+                      </span>
+                    </div>
+                    <span className="font-sans ml-4 uppercase">
+                      {(
+                        item.quantity * item.price_at_purchase
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="bg-white p-5 rounded-md border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-2 mb-4 text-left">
+                <MapPin
+                  size={20}
+                  className={isPickup ? "text-[#008080]" : "text-[#FF6600]"}
+                />
+                <h4 className="text-[12px] font-[1000] uppercase">
+                  {isPickup ? "TITIK PENGAMBILAN" : "ALAMAT ANTAR"}
+                </h4>
+              </div>
+              <div className="flex items-start gap-3 text-left">
+                <div className="p-2 bg-slate-50 rounded-md text-slate-500">
+                  {isPickup ? <Store size={22} /> : <Bike size={22} />}
+                </div>
+                <div>
+                  <p className="text-[13px] font-[1000] text-slate-800 leading-tight mb-1 uppercase">
+                    {isPickup ? order?.market?.name : profile?.full_name}
+                  </p>
+                  <p className="text-[12px] font-bold text-slate-500 leading-snug uppercase">
+                    {order?.address}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="bg-white p-6 rounded-md border border-slate-200 shadow-lg border-b-[8px] border-[#008080]">
+              <div className="space-y-4 font-black uppercase text-[12px]">
+                <div className="flex justify-between text-slate-500">
+                  <span>METODE BAYAR</span>
+                  <span className="text-slate-900">
+                    {order?.payment_method}
+                  </span>
+                </div>
+                <div className="flex justify-between text-[#008080]">
+                  <span>BIAYA LAYANAN</span>
+                  <span className="font-sans">
+                    +{order?.service_fee?.toLocaleString()}
+                  </span>
+                </div>
+                {order?.used_balance > 0 && (
+                  <div className="flex justify-between text-[#FF6600]">
+                    <span>SALDO TERPAKAI</span>
+                    <span className="font-sans">
+                      -{order?.used_balance?.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                <div className="pt-5 border-t-2 border-slate-100 mt-5 flex justify-between items-end">
+                  <span className="text-[11px] text-slate-400 font-[1000] mb-1 uppercase">
+                    TOTAL DIBAYAR
+                  </span>
+                  <span
+                    className={`text-[28px] ${order?.status === "CANCELLED" ? "text-slate-300 line-through decoration-red-500" : "text-[#FF6600]"} font-[1000] font-sans tracking-tighter leading-none`}
+                  >
+                    RP {order?.total_price?.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            {/* TOMBOL ACTION BAWAH */}
+            <div className="grid grid-cols-1 gap-3">
+              {order?.shipping_status === "COMPLETED" && !hasReviewed && (
+                <button
+                  onClick={() => setShowReviewModal(true)}
+                  className="w-full bg-[#FF6600] text-white py-4 rounded-md flex items-center justify-center gap-2 font-black text-[12px] uppercase shadow-md active:scale-95"
+                >
+                  <Star fill="currentColor" size={18} /> NILAI PESANAN SEKARANG
+                </button>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setShowSupportModal(true)}
+                  className="bg-slate-100 text-slate-600 py-3 rounded-md flex items-center justify-center gap-2 font-black text-[11px] uppercase active:scale-95"
+                >
+                  <HeadphonesIcon size={16} /> BANTUAN
+                </button>
+                {order?.shipping_status === "COMPLETED" ? (
+                  <button
+                    onClick={() => window.open(`/invoice/${orderId}`, "_blank")}
+                    className="bg-white border-2 border-slate-900 text-slate-900 py-3 rounded-md flex items-center justify-center gap-2 font-black text-[11px] uppercase active:scale-95"
+                  >
+                    <Download size={16} /> NOTA PDF
+                  </button>
+                ) : (
+                  order?.courier_id &&
+                  order?.status !== "CANCELLED" && (
+                    <button
+                      onClick={() => {
+                        setChatType("courier_customer");
+                        setShowChat(true);
+                      }}
+                      className="bg-slate-900 text-white py-3 rounded-md flex items-center justify-center gap-2 font-black text-[11px] uppercase active:scale-95"
+                    >
+                      <MessageCircle size={16} className="text-[#FF6600]" />{" "}
+                      CHAT KURIR
+                    </button>
+                  )
+                )}
+              </div>
+              {canCancel && (
+                <button
+                  onClick={handleCancelOrder}
+                  disabled={isCancelling}
+                  className="w-full mt-2 bg-white border-2 border-red-200 text-red-500 hover:bg-red-50 py-3.5 rounded-md flex items-center justify-center gap-2 font-black text-[11px] uppercase active:scale-95 transition-all shadow-sm"
+                >
+                  {isCancelling ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Ban size={16} />
+                  )}{" "}
+                  BATALKAN PESANAN
+                </button>
+              )}
+            </div>
+          </div>
+        </main>
+
+        {/* MODAL AREA */}
+        {showReviewModal && (
+          <div className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-sm rounded-md p-6 shadow-2xl relative animate-in zoom-in-95">
+              <button
+                onClick={() => setShowReviewModal(false)}
+                className="absolute top-4 right-4 text-slate-400"
+              >
+                <X size={20} />
+              </button>
+              <h2 className="text-[14px] font-black text-slate-800 uppercase mb-6 text-center tracking-widest">
+                PENILAIAN PESANAN
+              </h2>
+              <div className="flex justify-center gap-2 mb-6">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setRating(star)}
+                    onMouseEnter={() => setHoverRating(star)}
+                    onMouseLeave={() => setHoverRating(0)}
+                    className="transition-all"
+                  >
+                    <Star
+                      size={32}
+                      fill={
+                        (hoverRating || rating) >= star ? "#FF6600" : "none"
+                      }
+                      className={
+                        (hoverRating || rating) >= star
+                          ? "text-[#FF6600]"
+                          : "text-slate-200"
+                      }
+                      strokeWidth={2}
+                    />
+                  </button>
+                ))}
+              </div>
+              <textarea
+                placeholder="TULIS ULASAN ANDA..."
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value.toUpperCase())}
+                className="w-full h-24 bg-slate-50 border border-slate-200 rounded-md p-3 text-[12px] font-black outline-none focus:border-[#008080] mb-4 uppercase"
+              />
+              <button
+                onClick={handleSubmitReview}
+                disabled={rating === 0 || isSubmittingReview}
+                className="w-full py-4 bg-[#008080] text-white rounded-md font-black text-[12px] uppercase flex justify-center items-center gap-2 shadow-lg"
+              >
+                {isSubmittingReview ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  "KIRIM ULASAN SEKARANG"
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showChat && (
+          <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-2">
+            <div className="w-full max-w-md h-[85vh] bg-white rounded-md flex flex-col shadow-2xl overflow-hidden">
+              <div className="p-4 flex justify-between items-center bg-[#008080] text-white">
+                <div className="text-left">
+                  <p className="text-[14px] font-black uppercase tracking-widest">
+                    CHAT KURIR
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowChat(false)}
+                  className="w-8 h-8 flex items-center justify-center bg-white/10 rounded-md"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex-1 bg-slate-50">
+                <OrderChatRoom
+                  orderId={orderId!}
+                  chatType={chatType}
+                  receiverName={"KURIR PASARQU"}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showSupportModal && (
+          <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="relative w-full max-w-lg bg-white rounded-md p-4 animate-in zoom-in">
+              <button
+                onClick={() => setShowSupportModal(false)}
+                className="absolute -top-10 right-0 flex items-center gap-2 text-white font-black text-[11px] uppercase"
+              >
+                <X size={18} /> TUTUP
+              </button>
+              <ComplaintForm
+                orderId={orderId}
+                onSuccess={() =>
+                  setTimeout(() => setShowSupportModal(false), 2000)
+                }
+              />
+            </div>
           </div>
         )}
       </div>
-    </>
+    </MobileLayout>
   );
 };
 
-const TabButton = ({ active, label, onClick, count }: any) => (
-  <button
-    onClick={onClick}
-    className={`flex-1 px-4 py-3 text-[11px] font-black uppercase tracking-widest transition-all rounded-lg flex items-center justify-center gap-2 ${active ? "bg-slate-900 text-white shadow-md" : "text-slate-500 hover:bg-slate-200"}`}
-  >
-    {label}
-    {count !== undefined && count > 0 && (
-      <span
-        className={`px-2 py-0.5 rounded-md text-[9px] ${active ? "bg-[#FF6600] text-white" : "bg-red-100 text-red-600"}`}
-      >
-        {count}
-      </span>
-    )}
-  </button>
-);
-
-export default MerchantOrders;
+export default OrderTrackingPage;
