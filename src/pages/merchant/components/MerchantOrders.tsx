@@ -140,16 +140,42 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
     [user?.id],
   );
 
+  // 🚀 SENSOR LIVE AUTO-SYNC (DIPERBAIKI UNTUK TINGKAT RESPONSIVITAS 100%)
   useEffect(() => {
     fetchOrders();
+
+    if (!user?.id) return;
+
+    // Pasang 2 Kabel Sensor: Satu untuk perubahan status order, satu lagi untuk pesanan baru di order_items
     const channel = supabase
-      .channel(`merchant_orders_${user?.id}`)
+      .channel(`live_orders_${user.id}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "orders" },
-        () => fetchOrders(true),
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "order_items",
+          filter: `merchant_id=eq.${user.id}`,
+        },
+        () => {
+          console.log("🔥 PESANAN BARU MASUK! Menarik data...");
+          fetchOrders(true); // Tarik data diam-diam tanpa loading screen
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "orders",
+        },
+        () => {
+          console.log("🔄 STATUS PESANAN BERUBAH! Sinkronisasi...");
+          fetchOrders(true);
+        },
       )
       .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
     };
@@ -223,10 +249,10 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
     window.open(`/invoice/${order.id}`, "_blank");
   };
 
-  // 🚀 FILTERING GABUNGAN YANG SUDAH DIPERBAIKI
+  // FILTERING GABUNGAN
   const filteredOrders = orders.filter((o) => {
     let matchTab = false;
-    // 🚨 BUG FIXED: Tambahkan "PROCESSING" agar COD masuk ke Tab Masuk
+    // SUDAH FIXED: Masukkan "PROCESSING" (COD)
     if (statusFilter === "pending")
       matchTab = ["PAID", "PENDING", "PROCESSING"].includes(o.status);
     else if (statusFilter === "shipping")
@@ -328,7 +354,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
           </div>
         </div>
 
-        {/* 🚀 FILTER TABS DENGAN BADGE (DIPERBAIKI) */}
+        {/* FILTER TABS DENGAN BADGE */}
         <div className="flex bg-slate-50 p-1.5 rounded-xl border-2 border-slate-100 overflow-x-auto no-scrollbar">
           <TabButton
             active={statusFilter === "pending"}
@@ -384,7 +410,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                 order.status,
               );
 
-              // 🚀 HITUNG SLA TIMER (Batas Waktu Respon 30 Menit)
+              // HITUNG SLA TIMER
               const orderTime = new Date(order.created_at).getTime();
               const diffInMinutes = Math.floor(
                 (currentTime - orderTime) / (1000 * 60),
@@ -432,7 +458,6 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                     </div>
 
                     <div className="flex items-center gap-3 w-full md:w-auto justify-between">
-                      {/* SLA TIMER BADGE */}
                       {isNew && (
                         <div
                           className={`text-[9px] px-3 py-1.5 rounded-md flex items-center gap-1 shadow-sm ${isLate ? "bg-red-600 text-white animate-pulse" : "bg-orange-100 text-orange-700"}`}
@@ -520,7 +545,6 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                       </div>
 
                       <div className="flex gap-2 w-full md:w-auto">
-                        {/* 🚀 TOMBOL CHAT WHATSAPP & PRINT */}
                         <button
                           onClick={() =>
                             window.open(
@@ -541,7 +565,6 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                           <Printer size={18} />
                         </button>
 
-                        {/* TOMBOL AKSI UTAMA (Diperbaiki agar COD bisa diproses) */}
                         {isNew ? (
                           <button
                             disabled={isUpdating === order.id}
@@ -588,7 +611,6 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
   );
 };
 
-// 🚀 TAB BUTTON (SUDUT TAJAM & ADA BADGE NOTIFIKASI)
 const TabButton = ({ active, label, onClick, count }: any) => (
   <button
     onClick={onClick}
