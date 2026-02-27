@@ -1,12 +1,20 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient"; 
 import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext"; // 🚀 UNTUK NOTIFIKASI
+import { useNavigate } from "react-router-dom"; // 🚀 UNTUK PINDAH HALAMAN
 
 export const useCourierDashboard = () => {
   const { user } = useAuth();
+  const { showToast } = useToast();
+  const navigate = useNavigate();
   
   const [courierData, setCourierData] = useState<any>(null);
-  const [activeOrder, setActiveOrder] = useState<any>(null);
+  
+  // 🚀 STATE DIPISAH AGAR LEBIH JELAS
+  const [activeOrder, setActiveOrder] = useState<any>(null); // Order yang sedang dikerjakan kurir
+  const [availableOrders, setAvailableOrders] = useState<any[]>([]); // Order baru di radar
+  
   const [transactions, setTransactions] = useState<any[]>([]);
   const [isOnline, setIsOnline] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -16,7 +24,6 @@ export const useCourierDashboard = () => {
     if (!user) return;
     try {
       // 1. SAFE FETCH PROFILE (ANTI 400 ERROR)
-      // Tarik data profil murni tanpa embel-embel join tabel
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
@@ -26,7 +33,6 @@ export const useCourierDashboard = () => {
       if (profileData) {
         let finalProfile = { ...profileData };
 
-        // Jika kurir punya market_id, kita cari nama pasarnya secara manual
         if (profileData.market_id) {
           const { data: marketData } = await supabase
             .from("markets")
@@ -44,6 +50,19 @@ export const useCourierDashboard = () => {
         if (finalProfile.latitude) {
           setCurrentCoords({ lat: finalProfile.latitude, lng: finalProfile.longitude });
         }
+
+        // 🚀 AMBIL TUGAS BARU DI RADAR (YANG SIAP DIJEMPUT DI PASAR YANG SAMA)
+        if (finalProfile.market_id) {
+          const { data: radarOrders } = await supabase
+            .from("orders")
+            .select("*, profiles:customer_id(name)")
+            .eq("market_id", finalProfile.market_id)
+            .eq("status", "READY_TO_PICKUP")
+            .is("courier_id", null) // Belum diambil kurir lain
+            .order("created_at", { ascending: false });
+            
+          setAvailableOrders(radarOrders || []);
+        }
       }
 
       // 2. SAFE FETCH TRANSACTIONS
@@ -56,7 +75,7 @@ export const useCourierDashboard = () => {
       
       if (logs) setTransactions(logs);
 
-      // 3. SAFE FETCH ACTIVE ORDER (ANTI 400 ERROR)
+      // 3. SAFE FETCH ACTIVE ORDER (TUGAS YANG SEDANG DIKERJAKAN KURIR INI)
       const { data: orderData } = await supabase
         .from("orders")
         .select("*")
@@ -71,7 +90,6 @@ export const useCourierDashboard = () => {
                             String(ord.status).toUpperCase() === "SELESAI";
         
         if (!isCompleted) {
-          // AMBIL DATA PELANGGAN & TOKO SECARA MANUAL
           let customerData = null;
           let merchantData = null;
 
@@ -120,15 +138,42 @@ export const useCourierDashboard = () => {
     return { success: false, msg: "GAGAL UPDATE STATUS" };
   };
 
+  // 🚀 FUNGSI AMBIL TUGAS (BARU DITAMBAHKAN)
+  const acceptOrder = async (orderId: string) => {
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ 
+          status: "PICKING_UP", // Ubah status jadi Menjemput
+          courier_id: user?.id    // Daftarkan nama kurir di pesanan
+        })
+        .eq("id", orderId)
+        .eq("status", "READY_TO_PICKUP")
+        .is("courier_id", null); // Validasi ganda: Pastikan belum diambil orang lain
+
+      if (error) throw error;
+
+      showToast("TUGAS BERHASIL DIAMBIL!", "success");
+      
+      // 🚀 MENUJU HALAMAN PENGIRIMAN
+      navigate(`/courier/order-active/${orderId}`);
+      
+    } catch (err) {
+      console.error(err);
+      showToast("TUGAS GAGAL DIAMBIL, MUNGKIN SUDAH DIAMBIL KURIR LAIN!", "error");
+      fetchInitialData(); // Refresh radar
+    }
+  };
+
   useEffect(() => {
     fetchInitialData();
     if (!user) return;
 
+    // 🚀 RADAR REALTIME GABUNGAN
     const channel = supabase
       .channel(`courier_dashboard_${user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `courier_id=eq.${user.id}` }, fetchInitialData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, fetchInitialData) // Pantau semua pesanan
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.id}` }, (payload: any) => {
-         // Agar nama pasar tidak hilang saat update profile dari realtime
          setCourierData((prev: any) => ({ ...prev, ...payload.new }));
          setIsOnline(payload.new.is_active);
       })
@@ -140,12 +185,14 @@ export const useCourierDashboard = () => {
 
   return {
     courierData,
-    activeOrder,
+    activeOrder, // Tugas yang sedang berjalan
+    availableOrders, // Tugas yang ada di radar
     transactions,
     isOnline,
     loading,
     currentCoords,
     fetchInitialData,
-    toggleOnlineStatus
+    toggleOnlineStatus,
+    acceptOrder // 🚀 FUNGSI INI SEKARANG SUDAH ADA
   };
 };

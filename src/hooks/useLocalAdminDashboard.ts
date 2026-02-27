@@ -4,7 +4,6 @@ import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useJsApiLoader } from "@react-google-maps/api";
 
-// 🚀 MASTER LIBRARIES: Seragam agar tidak Blank Putih
 const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] = ["places", "routes", "geometry", "drawing"];
 
 export const useLocalAdminDashboard = () => {
@@ -20,7 +19,8 @@ export const useLocalAdminDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [isAlarmActive, setIsAlarmActive] = useState(false);
-  const alarmAudio = useRef<HTMLAudioElement | null>(null);
+  
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [myMarket, setMyMarket] = useState<any>(null);
   const [myMerchants, setMyMerchants] = useState<any[]>([]);
@@ -32,7 +32,6 @@ export const useLocalAdminDashboard = () => {
   const [weeklyChartData, setWeeklyChartData] = useState<any[]>([]);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
 
-  // 1. FUNGSI AMBIL DATA
   const fetchData = useCallback(async () => {
     if (!profile?.managed_market_id) {
       setIsLoading(false);
@@ -110,31 +109,31 @@ export const useLocalAdminDashboard = () => {
     } catch (error) { console.error("Global Fetch Error:", error); } finally { setIsLoading(false); }
   }, [profile]);
 
-  // 2. LOGIKA ALARM (HANYA BEEP SEKALI - ANTI BERISIK)
   const triggerAlarm = useCallback(() => {
     if (isMuted) return;
     setIsAlarmActive(true);
-    if (alarmAudio.current) {
-      alarmAudio.current.loop = false; // 🚀 FIX: Tidak berulang-ulang
-      alarmAudio.current.play().catch(() => {});
+    
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0; 
+      audioRef.current.play().catch((e) => console.warn("Audio diblokir browser, butuh klik user dulu.", e));
       
-      // Reset status alarm setelah 2 detik agar indikator visual hilang sendiri
-      setTimeout(() => setIsAlarmActive(false), 2000);
+      setTimeout(() => setIsAlarmActive(false), 3000);
     }
   }, [isMuted]);
 
   const stopAlarm = () => {
     setIsAlarmActive(false);
-    if (alarmAudio.current) {
-      alarmAudio.current.pause();
-      alarmAudio.current.currentTime = 0;
+    if (audioRef.current) {
+      audioRef.current.pause();
     }
   };
 
-  // 3. INISIALISASI AUDIO & DATA
+  // 3. INISIALISASI FILE AUDIO (DENGAN TRIK ANTI-CACHE)
   useEffect(() => {
-    // 🚀 MENGGUNAKAN SUARA NOTIFIKASI DIGITAL YANG BERSIH
-    alarmAudio.current = new Audio("https://actions.google.com/sounds/v1/communication/notification_high.ogg");
+    // 🚀 TRIK ANTI-CACHE: Tambahkan angka acak (?v=...) agar browser selalu mengambil file terbaru, bukan sisa masa lalu!
+    const timestamp = new Date().getTime();
+    audioRef.current = new Audio(`/sounds/Alarm.mp3?v=${timestamp}`);
+
     if (profile) fetchData();
   }, [profile, fetchData]);
 
@@ -146,7 +145,7 @@ export const useLocalAdminDashboard = () => {
     const orderSub = supabase.channel("engine_order")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter: `market_id=eq.${mid}` }, (payload: any) => {
         fetchData();
-        if (payload.eventType === "INSERT" || (payload.new.status === "PROCESSING" && payload.old.status === "UNPAID")) {
+        if (payload.eventType === "INSERT" || (payload.new.status === "PROCESSING" && payload.old?.status === "UNPAID")) {
             triggerAlarm();
             showToast("🚨 ADA PESANAN MASUK!", "success");
         }

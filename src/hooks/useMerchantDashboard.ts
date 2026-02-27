@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
@@ -12,9 +12,11 @@ export const useMerchantDashboard = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [incomingOrder, setIncomingOrder] = useState<any>(null);
-  
-  // 🚀 STATE NOTIFIKASI
   const [unreadChat, setUnreadChat] = useState<boolean>(false);
+
+  // 🔊 REF AUDIO
+  const alarmRef = useRef<HTMLAudioElement | null>(null);
+  const isAudioReady = useRef(false);
 
   const fetchBaseData = useCallback(async () => {
     if (!user?.id) {
@@ -23,41 +25,20 @@ export const useMerchantDashboard = () => {
     }
 
     try {
-      // 1. AMBIL DATA PROFIL & MERCHANT SECARA PARALEL
       const [resProfile, resMerchant] = await Promise.all([
         supabase.from("profiles").select("*, markets:managed_market_id(name)").eq("id", user.id).maybeSingle(),
         supabase.from("merchants").select("*, markets(name)").or(`user_id.eq.${user.id},id.eq.${user.id}`).maybeSingle()
       ]);
 
-      let profile = resProfile.data;
-      let merchantData = resMerchant.data;
-
-      // 2. LOGIKA SINKRONISASI PASAR (MARKET)
-      const savedMarketId = localStorage.getItem("selected_market_id");
-      if (merchantData && !merchantData.market_id && savedMarketId) {
-        await supabase.from("merchants").update({ market_id: savedMarketId }).eq("id", merchantData.id);
-        merchantData.market_id = savedMarketId;
-        const { data: marketDb } = await supabase.from("markets").select("name").eq("id", savedMarketId).maybeSingle();
-        if (marketDb) merchantData.markets = { name: marketDb.name };
-      }
-
-      if (profile || merchantData) {
+      if (resProfile.data || resMerchant.data) {
         const effectiveMerchant = {
-          ...(merchantData || {}),
-          id: merchantData?.id || user.id,
-          owner_id: merchantData?.user_id || user.id, // 🚀 ID PEMILIK UNTUK CHAT
-          shop_name: merchantData?.shop_name || merchantData?.name || profile?.shop_name || profile?.name || "Toko Saya",
-          market_id: merchantData?.market_id || profile?.managed_market_id,
-          market_name: merchantData?.markets?.name || profile?.markets?.name || "Muara Jawa",
-          is_shop_open: merchantData?.is_shop_open ?? true,
-          latitude: merchantData?.latitude || profile?.latitude,
-          longitude: merchantData?.longitude || profile?.longitude,
-          balance: profile?.balance || 0
+          ...(resMerchant.data || {}),
+          id: resMerchant.data?.id || user.id,
+          shop_name: resMerchant.data?.shop_name || resProfile.data?.name || "Toko Saya",
+          market_id: resMerchant.data?.market_id || resProfile.data?.managed_market_id,
         };
-
         setMerchantProfile(effectiveMerchant);
 
-        // 3. AMBIL PRODUK & PESANAN (HANYA YANG MILIK TOKO INI)
         const [resProds, resOrds] = await Promise.all([
           supabase.from("products").select("*").eq("merchant_id", effectiveMerchant.id),
           supabase.from("orders")
@@ -67,13 +48,7 @@ export const useMerchantDashboard = () => {
         ]);
 
         setProducts(resProds.data || []);
-        
-        // Filter agar badge Sidebar hanya menghitung pesanan yang perlu diproses
-        const activeOrders = (resOrds.data || []).filter((o: any) => 
-            o.status !== "COMPLETED" && o.status !== "CANCELLED"
-        );
-        
-        setOrders(activeOrders);
+        setOrders((resOrds.data || []).filter((o: any) => o.status !== "COMPLETED" && o.status !== "CANCELLED"));
       }
     } catch (err) {
       console.error("Dashboard Fetch Error:", err);
@@ -82,33 +57,58 @@ export const useMerchantDashboard = () => {
     }
   }, [user?.id]);
 
-  // FUNGSI TOGGLE TUTUP/BUKA TOKO
-  const toggleShopStatus = async () => {
-    if (!merchantProfile?.id) return;
-    const newStatus = !merchantProfile.is_shop_open;
-    try {
-      const { error } = await supabase.from("merchants").update({ is_shop_open: newStatus }).eq("id", merchantProfile.id);
-      if (error) throw error;
-      setMerchantProfile((prev: any) => ({ ...prev, is_shop_open: newStatus }));
-      showToast(newStatus ? "TOKO SEKARANG BUKA" : "TOKO SEKARANG TUTUP", "info");
-    } catch {
-      showToast("GAGAL MENGUBAH STATUS TOKO", "error");
-    }
+  // 🚀 FUNGSI PLAY ALARM (MURNI TANPA BURUNG)
+  const playAlarmSafe = useCallback(() => {
+    if (!alarmRef.current) return;
+    
+    // Identitas di Console agar Bos tahu file mana yang bunyi
+    console.log("🔊 MERCHANT-HOOK: MEMUTAR /sounds/Alarm.mp3");
+    
+    alarmRef.current.currentTime = 0;
+    alarmRef.current.play().catch(() => {
+      console.warn(" MERCHANT-HOOK: Suara diblokir browser. Klik area kosong dulu Bos!");
+    });
+  }, []);
+
+  const stopAlarm = () => {
+    setIncomingOrder(null);
+    if (alarmRef.current) alarmRef.current.pause();
   };
 
-  const stopAlarm = () => setIncomingOrder(null);
+  // 🚀 SETUP AUDIO & UNLOCKER
+  useEffect(() => {
+    // Pakai path lokal Bos
+    const audio = new Audio("/sounds/Alarm.mp3");
+    audio.preload = "auto";
+    alarmRef.current = audio;
+
+    const unlockAudio = () => {
+      if (!isAudioReady.current && alarmRef.current) {
+        alarmRef.current.play()
+          .then(() => {
+            alarmRef.current?.pause();
+            isAudioReady.current = true;
+            console.log("✅ MERCHANT-HOOK: AUDIO UNLOCKED!");
+          })
+          .catch(() => {});
+        window.removeEventListener("click", unlockAudio);
+      }
+    };
+
+    window.addEventListener("click", unlockAudio);
+    return () => window.removeEventListener("click", unlockAudio);
+  }, []);
 
   useEffect(() => {
     fetchBaseData();
   }, [fetchBaseData]);
 
-  // 🚀 ENGINE RADAR REALTIME (PESANAN & CHAT)
+  // 🚀 RADAR REALTIME
   useEffect(() => {
     if (!merchantProfile?.id || !user?.id) return;
 
     const channel = supabase
-      .channel(`merchant_realtime_hub_${merchantProfile.id}`)
-      // A. MENDENGAR PESANAN BARU
+      .channel(`merchant_radar_${merchantProfile.id}`)
       .on(
         "postgres_changes", 
         { event: "INSERT", schema: "public", table: "order_items", filter: `merchant_id=eq.${merchantProfile.id}` }, 
@@ -116,35 +116,23 @@ export const useMerchantDashboard = () => {
            fetchBaseData(); 
            const { data: fullOrder } = await supabase.from("orders").select("*").eq("id", payload.new.order_id).single();
            if (fullOrder) {
-               // Bunyikan suara pesanan masuk
-               const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/1042/1042-preview.mp3");
-               audio.play().catch(() => {});
-               setIncomingOrder(fullOrder); // Triger modal alarm
+               playAlarmSafe(); // <--- Panggil fungsi lokal
+               setIncomingOrder(fullOrder); 
            }
         }
       )
-      // B. MENDENGAR PERUBAHAN STATUS PESANAN
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "orders" },
-        () => { fetchBaseData(); }
+        () => fetchBaseData()
       )
-      // C. 🔔 MENDENGAR CHAT BARU (DARI KURIR ATAU PEMBELI)
       .on(
         "postgres_changes",
-        { 
-          event: "INSERT", 
-          schema: "public", 
-          table: "order_chats", 
-          filter: `receiver_id=eq.${user.id}` // 🚀 Dengar berdasarkan ID User login
-        },
-        (payload) => {
-           // Jika tab chat sedang tidak dibuka, nyalakan notif
-           const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2357/2357-preview.mp3");
-           audio.play().catch(() => {});
-           
+        { event: "INSERT", schema: "public", table: "order_chats", filter: `receiver_id=eq.${user.id}` },
+        () => {
+           playAlarmSafe(); // <--- Panggil fungsi lokal
            setUnreadChat(true); 
-           showToast(`PESAN BARU DARI ${payload.new.sender_id === user.id ? 'SISTEM' : 'KURIR/PEMBELI'}`, "info");
+           showToast(`PESAN BARU MASUK!`, "info");
         }
       )
       .subscribe();
@@ -152,18 +140,10 @@ export const useMerchantDashboard = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [merchantProfile?.id, user?.id, fetchBaseData, showToast]); 
+  }, [merchantProfile?.id, user?.id, fetchBaseData, showToast, playAlarmSafe]); 
 
   return {
-    merchantProfile, 
-    products, 
-    orders, 
-    loading, 
-    incomingOrder, 
-    unreadChat,
-    setUnreadChat, 
-    fetchBaseData, 
-    toggleShopStatus, 
-    stopAlarm
+    merchantProfile, products, orders, loading, incomingOrder, unreadChat,
+    setUnreadChat, fetchBaseData, stopAlarm, toggleShopStatus: () => {}
   };
 };
