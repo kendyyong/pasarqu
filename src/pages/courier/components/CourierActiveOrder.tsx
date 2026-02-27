@@ -40,26 +40,64 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
   const isCompleted = order?.status === "COMPLETED";
   const isCanceled = order?.status === "CANCELLED";
 
-  // GPS TRACKER REAL-TIME
+  // 🚀 GPS TRACKER REAL-TIME (SUDAH DI-TUNE UP)
   useEffect(() => {
-    if (order?.status === "SHIPPING" && user?.id) {
+    // 1. Pastikan GPS hanya menyala saat kurir sedang dalam perjalanan
+    const isActiveDelivery =
+      order?.status === "SHIPPING" ||
+      order?.status === "DELIVERING" ||
+      order?.shipping_status === "SHIPPING";
+
+    if (isActiveDelivery && user?.id) {
+      console.log("🛰️ GPS Tracker Diaktifkan...");
+
       const interval = setInterval(() => {
+        if (!navigator.geolocation) {
+          console.warn("Browser tidak mendukung GPS!");
+          return;
+        }
+
         navigator.geolocation.getCurrentPosition(
           async (position) => {
             const { latitude, longitude } = position.coords;
-            await supabase
-              .from("couriers") // Pastikan tabel ini ada, atau ganti ke "profiles" jika tidak ada
-              .update({ current_lat: latitude, current_lng: longitude })
+
+            // 🚀 FIX: Tembak koordinat ke tabel 'profiles' (Sesuai arsitektur PasarQu)
+            const { error } = await supabase
+              .from("profiles")
+              .update({
+                latitude: latitude,
+                longitude: longitude,
+              })
               .eq("id", user.id);
+
+            if (error) {
+              console.error("❌ Gagal update GPS ke server:", error.message);
+            } else {
+              console.log("📍 GPS Terkirim:", latitude, longitude);
+            }
           },
-          (error) => console.error("GPS Error:", error),
-          { enableHighAccuracy: true, maximumAge: 0 },
+          (error) => {
+            console.error(
+              "❌ GPS Error (Pastikan Izin Lokasi HP Nyala):",
+              error.message,
+            );
+          },
+          {
+            enableHighAccuracy: true, // Paksa pakai GPS satelit
+            maximumAge: 0,
+            timeout: 10000,
+          },
         );
-      }, 5000);
+      }, 5000); // ⏱️ Update lokasi setiap 5 detik
+
       setLocationInterval(interval);
-      return () => clearInterval(interval);
+
+      return () => {
+        clearInterval(interval);
+        console.log("🛑 GPS Tracker Dimatikan.");
+      };
     }
-  }, [order?.status, user?.id]);
+  }, [order?.status, order?.shipping_status, user?.id]);
 
   // 🚀 LOGIKA UPDATE STATUS YANG BENAR
   const handleStatusUpdate = async () => {
