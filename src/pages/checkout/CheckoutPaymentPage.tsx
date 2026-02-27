@@ -9,7 +9,6 @@ import { calculateDistance } from "../../utils/courierLogic";
 import { ArrowLeft } from "lucide-react";
 import { MobileLayout } from "../../components/layout/MobileLayout";
 
-// IMPORT 4 KOMPONEN BARU KITA
 import { CheckoutMethods } from "./components/CheckoutMethods";
 import { CheckoutSummary } from "./components/CheckoutSummary";
 import { CashbackModal } from "./components/CashbackModal";
@@ -87,8 +86,6 @@ export const CheckoutPaymentPage = () => {
           Number(r.buyer_service_fee || 0) +
             (isPickup ? 0 : extraCount * Number(r.surge_fee || 0)),
         );
-
-        // KALKULASI LOGISTICS ENGINE (Hak App & Hak Kurir)
         const appCutFromBase =
           baseFare * (Number(r.app_fee_percent || 0) / 100);
         const totalExtraFeeKurir = isPickup
@@ -118,9 +115,7 @@ export const CheckoutPaymentPage = () => {
           system_fee: Math.round(systemFee),
           courier_earning_total: Math.round(courierNet),
         });
-      } catch (err) {
-        console.error("Logistics Error:", err);
-      }
+      } catch (err) {}
     },
     [selectedMarket, cart, shippingMethod],
   );
@@ -157,8 +152,6 @@ export const CheckoutPaymentPage = () => {
     setLoading(true);
     const mysteryBonus =
       shippingMethod === "pickup" ? calculateMysteryCashback(subtotalCart) : 0;
-
-    // 🚀 GENERATE KODE 4 ANGKA & WAKTU KEDALUWARSA JIKA AMBIL SENDIRI
     const pickupPIN =
       shippingMethod === "pickup"
         ? Math.floor(1000 + Math.random() * 9000).toString()
@@ -194,8 +187,6 @@ export const CheckoutPaymentPage = () => {
             shippingMethod === "pickup"
               ? 0
               : shippingDetails.courier_earning_total,
-
-          // 🚀 SIMPAN KE DATABASE
           pickup_code: pickupPIN,
           pickup_expired_at: pickupExpired,
         })
@@ -225,8 +216,9 @@ export const CheckoutPaymentPage = () => {
 
       if (paymentMethod === "cod") {
         clearCart();
-        showToast("PESANAN COD BERHASIL!", "success");
+        showToast("PESANAN COD BERHASIL DIBUAT!", "success");
         setLoading(false);
+        // 🚀 KEMBALIKAN FITUR TRACK ORDER BOS!
         navigate(`/track-order/${newOrder.id}`);
       } else {
         const { data: payData } = await supabase.functions.invoke(
@@ -250,6 +242,7 @@ export const CheckoutPaymentPage = () => {
                 setCreatedOrderId(newOrder.id);
                 setShowSurprise(true);
               } else {
+                // 🚀 KEMBALIKAN FITUR TRACK ORDER
                 navigate(`/track-order/${newOrder.id}`);
               }
             },
@@ -262,7 +255,6 @@ export const CheckoutPaymentPage = () => {
         }
       }
     } catch (err: any) {
-      console.error("Error Transaksi:", err);
       showToast(err.message, "error");
       setLoading(false);
     }
@@ -296,9 +288,7 @@ export const CheckoutPaymentPage = () => {
             {selectedMarket?.name}
           </div>
         </header>
-
         <main className="max-w-[1200px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-5 p-4 mt-2">
-          {/* BAGIAN KIRI: METODE & PETA */}
           <div className="md:col-span-2 space-y-5">
             <CheckoutMethods
               shippingMethod={shippingMethod}
@@ -306,8 +296,6 @@ export const CheckoutPaymentPage = () => {
               paymentMethod={paymentMethod}
               setPaymentMethod={setPaymentMethod}
             />
-
-            {/* PETA GOOGLE MAPS HANYA MUNCUL KALAU PILIH KURIR */}
             {shippingMethod === "courier" && (
               <CheckoutAddress
                 isLoaded={isLoaded}
@@ -319,8 +307,6 @@ export const CheckoutPaymentPage = () => {
               />
             )}
           </div>
-
-          {/* BAGIAN KANAN: RINGKASAN & DOMPET */}
           <div className="md:col-span-1">
             <CheckoutSummary
               profile={profile}
@@ -336,8 +322,7 @@ export const CheckoutPaymentPage = () => {
             />
           </div>
         </main>
-
-        {/* MODAL CASHBACK */}
+        {/* 🚀 KEMBALIKAN FITUR TRACK ORDER PADA MODAL CASHBACK */}
         <CashbackModal
           show={showSurprise}
           amount={cashbackAmount}

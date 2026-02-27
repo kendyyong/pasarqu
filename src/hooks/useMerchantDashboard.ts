@@ -21,7 +21,6 @@ export const useMerchantDashboard = () => {
 
     setLoading(true);
     try {
-      // 1. AMBIL DATA PROFIL & MERCHANT
       const [resProfile, resMerchant] = await Promise.all([
         supabase.from("profiles").select("*, markets:managed_market_id(name)").eq("id", user.id).maybeSingle(),
         supabase.from("merchants").select("*, markets(name)").or(`user_id.eq.${user.id},id.eq.${user.id}`).maybeSingle()
@@ -30,34 +29,16 @@ export const useMerchantDashboard = () => {
       let profile = resProfile.data;
       let merchantData = resMerchant.data;
 
-      // 🚀 ========================================================
-      // FITUR PENAMBAL OTOMATIS: AUTO-BIND MARKET ID
-      // ========================================================
       const savedMarketId = localStorage.getItem("selected_market_id");
       
-      // Jika di tabel merchants market_id-nya KOSONG, tapi di HP ada memori pilihan pasar
       if (merchantData && !merchantData.market_id && savedMarketId) {
-        console.log("Menambal market_id otomatis dari memori HP ke Supabase...");
-        
-        // 1. Update ke Supabase secara diam-diam
-        await supabase
-          .from("merchants")
-          .update({ market_id: savedMarketId })
-          .eq("id", merchantData.id);
-          
-        // 2. Update state lokal agar tidak perlu refresh
+        await supabase.from("merchants").update({ market_id: savedMarketId }).eq("id", merchantData.id);
         merchantData.market_id = savedMarketId;
-        
-        // 3. Tarik nama pasarnya sekalian
         const { data: marketDb } = await supabase.from("markets").select("name").eq("id", savedMarketId).maybeSingle();
-        if (marketDb) {
-           merchantData.markets = { name: marketDb.name };
-        }
+        if (marketDb) merchantData.markets = { name: marketDb.name };
       }
-      // ========================================================
 
       if (profile || merchantData) {
-        // 2. LOGIKA GABUNGAN (SINKRONISASI LOKASI)
         const effectiveMerchant = {
           ...(merchantData || {}),
           id: merchantData?.id || user.id,
@@ -65,14 +46,12 @@ export const useMerchantDashboard = () => {
           market_id: merchantData?.market_id || profile?.managed_market_id,
           market_name: merchantData?.markets?.name || profile?.markets?.name || "Muara Jawa",
           is_shop_open: merchantData?.is_shop_open ?? true,
-          // FIX: Ambil koordinat dari profile jika di merchant masih kosong agar Sidebar update status
           latitude: merchantData?.latitude || profile?.latitude,
           longitude: merchantData?.longitude || profile?.longitude,
         };
 
         setMerchantProfile(effectiveMerchant);
 
-        // 3. FETCH PRODUCTS & ORDERS
         try {
             const { data: prods } = await supabase.from("products").select("*").eq("merchant_id", effectiveMerchant.id);
             setProducts(prods || []);
@@ -87,12 +66,8 @@ export const useMerchantDashboard = () => {
         } catch (subErr) {
             console.warn("Gagal memuat rincian produk/order:", subErr);
         }
-
-      } else {
-        console.warn("⚠️ Profil tidak ditemukan di tabel profiles.");
       }
     } catch (err) {
-      console.error("Dashboard Fetch Error:", err);
       showToast("Gagal memuat data dashboard", "error");
     } finally {
       setLoading(false);
@@ -113,7 +88,6 @@ export const useMerchantDashboard = () => {
   };
 
   const triggerAlarm = (orderData: any) => {
-    // Audio otomatis di-handle oleh komponen MerchantAlarmModal
     setIncomingOrder(orderData);
   };
 
@@ -130,21 +104,19 @@ export const useMerchantDashboard = () => {
 
     const channel = supabase
       .channel(`merchant_sync_${merchantProfile.id}`)
-      .on(
-        "postgres_changes", 
-        { event: "UPDATE", schema: "public", table: "merchants", filter: `id=eq.${merchantProfile.id}` }, 
-        (payload: any) => {
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "merchants", filter: `id=eq.${merchantProfile.id}` }, (payload: any) => {
            setMerchantProfile((prev: any) => ({ ...prev, is_shop_open: payload.new.is_shop_open }));
-        }
-      )
-      .on(
-        "postgres_changes", 
-        { event: "INSERT", schema: "public", table: "order_items", filter: `merchant_id=eq.${merchantProfile.id}` }, 
-        (payload: any) => {
-           triggerAlarm(payload.new);
-           fetchBaseData();
-        }
-      )
+      })
+      // 🚀 FIX TOTAL ALARM: Dengarkan order_items, tapi FETCH DATA ORDERS UTUH untuk ditembakkan ke Alarm!
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_items", filter: `merchant_id=eq.${merchantProfile.id}` }, async (payload: any) => {
+           // Tarik detail pesanan aslinya dari tabel 'orders'
+           const { data: fullOrder } = await supabase.from("orders").select("*").eq("id", payload.new.order_id).single();
+           
+           if (fullOrder) {
+               triggerAlarm(fullOrder); // Boom! Alarm sekarang menerima data utuh dan akan langsung berteriak!
+               fetchBaseData(); // Refresh list order di background
+           }
+      })
       .subscribe();
 
     return () => {
