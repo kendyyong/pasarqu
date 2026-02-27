@@ -32,9 +32,9 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("pending");
-  const [searchTerm, setSearchTerm] = useState(""); // 🚀 STATE BARU PENCARIAN
+  const [searchTerm, setSearchTerm] = useState("");
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(new Date().getTime()); // 🚀 STATE UNTUK TIMER
+  const [currentTime, setCurrentTime] = useState(new Date().getTime());
 
   // STATE UNTUK MODAL PIN AMBIL SENDIRI
   const [pinModalOrder, setPinModalOrder] = useState<any>(null);
@@ -223,11 +223,12 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
     window.open(`/invoice/${order.id}`, "_blank");
   };
 
-  // 🚀 FILTERING GABUNGAN (TAB & PENCARIAN)
+  // 🚀 FILTERING GABUNGAN YANG SUDAH DIPERBAIKI
   const filteredOrders = orders.filter((o) => {
     let matchTab = false;
+    // 🚨 BUG FIXED: Tambahkan "PROCESSING" agar COD masuk ke Tab Masuk
     if (statusFilter === "pending")
-      matchTab = o.status === "PAID" || o.status === "PENDING";
+      matchTab = ["PAID", "PENDING", "PROCESSING"].includes(o.status);
     else if (statusFilter === "shipping")
       matchTab =
         ["PACKING", "ON_DELIVERY", "SHIPPING"].includes(o.status) ||
@@ -245,7 +246,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
 
   return (
     <>
-      {/* MODAL INPUT PIN PEMBELI (TETAP SAMA TAPI SUDUT TAJAM) */}
+      {/* MODAL INPUT PIN PEMBELI */}
       {pinModalOrder &&
         createPortal(
           <div className="fixed inset-0 z-[99999] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
@@ -300,7 +301,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
         )}
 
       <div className="w-full space-y-6 animate-in fade-in duration-500 text-left font-sans pb-20 font-black uppercase tracking-tighter">
-        {/* 🚀 HEADER & SEARCH BAR GAHAR */}
+        {/* HEADER & SEARCH BAR GAHAR */}
         <div className="bg-white border-2 border-slate-100 p-6 rounded-xl shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b-8 border-[#008080]">
           <div>
             <h2 className="text-2xl text-slate-900 leading-none flex items-center gap-2">
@@ -327,13 +328,17 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
           </div>
         </div>
 
-        {/* 🚀 FILTER TABS DENGAN BADGE */}
+        {/* 🚀 FILTER TABS DENGAN BADGE (DIPERBAIKI) */}
         <div className="flex bg-slate-50 p-1.5 rounded-xl border-2 border-slate-100 overflow-x-auto no-scrollbar">
           <TabButton
             active={statusFilter === "pending"}
             label="MASUK"
             onClick={() => setStatusFilter("pending")}
-            count={orders.filter((o) => o.status === "PAID").length}
+            count={
+              orders.filter((o) =>
+                ["PAID", "PENDING", "PROCESSING"].includes(o.status),
+              ).length
+            }
           />
           <TabButton
             active={statusFilter === "shipping"}
@@ -375,8 +380,9 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
           <div className="space-y-6">
             {filteredOrders.map((order) => {
               const isPickup = order.shipping_method === "pickup";
-              const isNew =
-                order.status === "PAID" || order.status === "PENDING";
+              const isNew = ["PAID", "PENDING", "PROCESSING"].includes(
+                order.status,
+              );
 
               // 🚀 HITUNG SLA TIMER (Batas Waktu Respon 30 Menit)
               const orderTime = new Date(order.created_at).getTime();
@@ -426,7 +432,7 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                     </div>
 
                     <div className="flex items-center gap-3 w-full md:w-auto justify-between">
-                      {/* 🚀 SLA TIMER BADGE */}
+                      {/* SLA TIMER BADGE */}
                       {isNew && (
                         <div
                           className={`text-[9px] px-3 py-1.5 rounded-md flex items-center gap-1 shadow-sm ${isLate ? "bg-red-600 text-white animate-pulse" : "bg-orange-100 text-orange-700"}`}
@@ -438,9 +444,11 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                         </div>
                       )}
                       <span
-                        className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest shadow-sm ${order.status === "PAID" ? "bg-[#008080] text-white" : "bg-slate-200 text-slate-500"}`}
+                        className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest shadow-sm ${isNew ? "bg-[#008080] text-white" : "bg-slate-200 text-slate-500"}`}
                       >
-                        {order.status}
+                        {order.status === "PROCESSING"
+                          ? "COD - BARU"
+                          : order.status}
                       </span>
                     </div>
                   </div>
@@ -533,8 +541,8 @@ export const MerchantOrders: React.FC<Props> = ({ merchantProfile }) => {
                           <Printer size={18} />
                         </button>
 
-                        {/* TOMBOL AKSI UTAMA */}
-                        {order.status === "PAID" ? (
+                        {/* TOMBOL AKSI UTAMA (Diperbaiki agar COD bisa diproses) */}
+                        {isNew ? (
                           <button
                             disabled={isUpdating === order.id}
                             onClick={() => handleProcessOrder(order)}
