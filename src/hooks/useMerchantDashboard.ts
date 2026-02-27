@@ -53,7 +53,6 @@ export const useMerchantDashboard = () => {
         setMerchantProfile(effectiveMerchant);
 
         // 2. FETCH PRODUCTS & ORDERS
-        // 🚀 Kita tarik data order yang belum selesai/batal agar badge tetap akurat
         const [resProds, resOrds] = await Promise.all([
           supabase.from("products").select("*").eq("merchant_id", effectiveMerchant.id),
           supabase.from("orders")
@@ -63,7 +62,14 @@ export const useMerchantDashboard = () => {
         ]);
 
         setProducts(resProds.data || []);
-        setOrders(resOrds.data || []);
+
+        // 🚀 LOGIKA FIX BADGE: Hanya masukkan pesanan yang AKTIF (Belum Selesai & Belum Batal)
+        // Agar angka di Sidebar (badge) sinkron dengan list pesanan yang tampil
+        const activeOrders = (resOrds.data || []).filter((o: any) => 
+            o.status !== "COMPLETED" && o.status !== "CANCELLED"
+        );
+        
+        setOrders(activeOrders);
       }
     } catch (err) {
       console.error("Dashboard Fetch Error:", err);
@@ -97,25 +103,21 @@ export const useMerchantDashboard = () => {
 
     const channel = supabase
       .channel(`merchant_global_sync_${merchantProfile.id}`)
-      // SENSOR 1: Jika ada pesanan baru masuk ke Toko (INSERT)
       .on(
         "postgres_changes", 
         { event: "INSERT", schema: "public", table: "order_items", filter: `merchant_id=eq.${merchantProfile.id}` }, 
         async (payload: any) => {
+           fetchBaseData(); 
            const { data: fullOrder } = await supabase.from("orders").select("*").eq("id", payload.new.order_id).single();
-           if (fullOrder) {
-               setIncomingOrder(fullOrder); // Bunyikan Alarm
-               fetchBaseData(); // Update jumlah pesanan di badge
-           }
+           if (fullOrder) setIncomingOrder(fullOrder); // Bunyikan Alarm
         }
       )
-      // 🚀 SENSOR 2: Jika status pesanan berubah (Misal: Pembeli Cancel / UPDATE)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "orders" },
         () => {
-          console.log("🔄 Ada perubahan status pesanan, menyelaraskan badge...");
-          fetchBaseData(); // Refresh data agar pesanan batal hilang dari hitungan badge
+          // 🔄 Jika ada perubahan status pesanan (Batal/Selesai), sinkronkan angka badge
+          fetchBaseData();
         }
       )
       .subscribe();

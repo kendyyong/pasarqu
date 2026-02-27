@@ -12,6 +12,9 @@ import { CheckoutPaymentPage } from "../../pages/checkout/CheckoutPaymentPage";
 import { ProtectedRoute } from "../../components/layout/ProtectedRoute";
 import { ChatRoom } from "../../pages/chat/ChatRoom";
 
+// 🚀 PUSAT PENGATURAN AKUN
+import { AccountSettingsPage } from "../../pages/customer/components/AccountSettingsPage";
+
 // 🚀 FIX KABEL IMPORT: Mengarah ke folder courier/components/ sesuai lokasi asli file Bos
 import { DigitalPaymentsPage } from "../../pages/courier/components/DigitalPaymentsPage";
 
@@ -24,10 +27,11 @@ export const CustomerRoutes = () => [
     path="/product/:productId"
     element={<ProductDetail />}
   />,
+
   <Route key="shop-detail" path="/shop/:merchantId" element={<ShopDetail />} />,
+
   <Route key="terms-cash" path="/terms-cashback" element={<TermsCashback />} />,
 
-  // 🚀 INI DIA KABEL YANG HILANG! JALAN TOL MENUJU DETAIL PESANAN
   <Route
     key="track-order"
     path="/track-order/:orderId"
@@ -47,6 +51,7 @@ export const CustomerRoutes = () => [
       </ProtectedRoute>
     }
   />,
+
   <Route
     key="cust-dash"
     path="/customer-dashboard"
@@ -56,6 +61,7 @@ export const CustomerRoutes = () => [
       </ProtectedRoute>
     }
   />,
+
   <Route
     key="pay"
     path="/pasarqu-pay"
@@ -65,6 +71,7 @@ export const CustomerRoutes = () => [
       </ProtectedRoute>
     }
   />,
+
   <Route
     key="checkout"
     path="/checkout"
@@ -74,6 +81,18 @@ export const CustomerRoutes = () => [
       </ProtectedRoute>
     }
   />,
+
+  // 🚀 RUTE PENGATURAN PROFIL (FOTO, NAMA, DLL)
+  <Route
+    key="settings-profile"
+    path="/settings/profile"
+    element={
+      <ProtectedRoute allowedRoles={ALL_SHOPPERS}>
+        <AccountSettingsPage />
+      </ProtectedRoute>
+    }
+  />,
+
   <Route
     key="addr"
     path="/settings/address"
@@ -83,6 +102,7 @@ export const CustomerRoutes = () => [
       </ProtectedRoute>
     }
   />,
+
   <Route
     key="orders"
     path="/order-history"
@@ -93,7 +113,7 @@ export const CustomerRoutes = () => [
     }
   />,
 
-  // 🚀 RUTE BARU: PRODUK DIGITAL (PULSA, DATA, LISTRIK)
+  // 🚀 RUTE PRODUK DIGITAL (PULSA, DATA, LISTRIK)
   <Route
     key="digital-payments"
     path="/digital-payments"
