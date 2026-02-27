@@ -29,6 +29,8 @@ import {
   X,
   ShieldCheck,
   ShoppingBasket,
+  Bike, // 🚀 TAMBAHAN IMPORT
+  ArrowRight, // 🚀 TAMBAHAN IMPORT
 } from "lucide-react";
 
 import { MobileLayout } from "../../components/layout/MobileLayout";
@@ -79,7 +81,6 @@ export const CustomerDashboard = () => {
   const fetchOrderStats = async () => {
     setLoading(true);
     try {
-      // 🚀 FIX LOGIKA ULASAN: Kita tambahkan "reviews(id)" untuk mengecek apakah order ini sudah diulas
       const { data: orders, error } = await supabase
         .from("orders")
         .select(
@@ -111,7 +112,6 @@ export const CustomerDashboard = () => {
             o.status !== "CANCELLED",
         );
 
-        // 🚀 FIX: HANYA MENGHITUNG PESANAN SELESAI YANG "BELUM DIULAS" (Array reviews kosong)
         const reviewable = orders.filter(
           (o: any) =>
             (o.shipping_status === "COMPLETED" || o.status === "COMPLETED") &&
@@ -182,6 +182,12 @@ export const CustomerDashboard = () => {
     sessionStorage.removeItem("app_mode");
     if (profile?.is_verified) navigate("/merchant-dashboard");
     else navigate("/waiting-approval");
+  };
+
+  // 🚀 FUNGSI KEMBALI KE MODE KURIR
+  const handleReturnToCourier = () => {
+    sessionStorage.removeItem("app_mode");
+    navigate("/courier-dashboard");
   };
 
   const handleDismissAlert = (e: React.MouseEvent, orderId: string) => {
@@ -384,10 +390,11 @@ export const CustomerDashboard = () => {
                 </div>
               </div>
 
-              {profile?.role === "MERCHANT" && (
+              {/* 🚀 TOMBOL SAKTI UNTUK MERCHANT */}
+              {profile?.role?.toUpperCase() === "MERCHANT" && (
                 <button
                   onClick={handleReturnToShop}
-                  className="w-full bg-gradient-to-r from-teal-800 to-[#008080] p-4 rounded-2xl flex items-center justify-between group active:scale-95 shadow-lg border border-teal-700 relative overflow-hidden transition-all"
+                  className="w-full mt-2 bg-gradient-to-r from-teal-800 to-[#008080] p-4 rounded-2xl flex items-center justify-between group active:scale-95 shadow-lg border border-teal-700 relative overflow-hidden transition-all"
                 >
                   <div className="absolute right-0 top-0 opacity-10">
                     <Store size={80} />
@@ -407,6 +414,32 @@ export const CustomerDashboard = () => {
                   </div>
                   <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-white backdrop-blur-sm relative z-10">
                     <ChevronRight size={16} />
+                  </div>
+                </button>
+              )}
+
+              {/* 🚀 TOMBOL SAKTI UNTUK KURIR */}
+              {(profile?.role?.toLowerCase() === "courier" ||
+                profile?.role?.toUpperCase() === "COURIER") && (
+                <button
+                  onClick={handleReturnToCourier}
+                  className="w-full mt-2 bg-gradient-to-r from-slate-900 to-slate-800 border-2 border-[#FF6600] p-4 rounded-2xl flex items-center justify-between group active:scale-95 shadow-xl shadow-[#FF6600]/20 transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#FF6600]/20 rounded-xl flex items-center justify-center border border-[#FF6600]/30">
+                      <Bike size={20} className="text-[#FF6600]" />
+                    </div>
+                    <div className="text-left">
+                      <h3 className="text-[13px] font-black text-white uppercase tracking-wide leading-none mb-1">
+                        MODE DRIVER
+                      </h3>
+                      <p className="text-[9px] text-slate-400 font-bold tracking-widest uppercase">
+                        KEMBALI CARI CUAN HARI INI!
+                      </p>
+                    </div>
+                  </div>
+                  <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-[#FF6600] group-hover:translate-x-1 transition-transform">
+                    <ArrowRight size={16} />
                   </div>
                 </button>
               )}
