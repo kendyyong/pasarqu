@@ -30,10 +30,12 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
   const [showChat, setShowChat] = useState(false);
   const [locationInterval, setLocationInterval] = useState<any>(null);
 
+  // 🚀 UPDATE STATE: Tambahkan receiverId agar chat sampai ke tujuan
   const [chatTarget, setChatTarget] = useState<{
     type: "courier_customer" | "courier_merchant";
     name: string;
-  }>({ type: "courier_customer", name: "Pelanggan" });
+    receiverId: string;
+  }>({ type: "courier_customer", name: "Pelanggan", receiverId: "" });
 
   const isCompleted =
     order?.status === "COMPLETED" || order?.shipping_status === "COMPLETED";
@@ -57,15 +59,11 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           { enableHighAccuracy: true, maximumAge: 0 },
         );
       }, 5000);
-
       setLocationInterval(interval);
       return () => clearInterval(interval);
-    } else {
-      if (locationInterval) clearInterval(locationInterval);
     }
   }, [order?.shipping_status, user?.id]);
 
-  // UPDATE STATUS & PEMOTONGAN SALDO BERDASARKAN CONFIG LOGISTICS SUPER ADMIN
   const handleStatusUpdate = async () => {
     setLoading(true);
     try {
@@ -83,85 +81,52 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
       ) {
         nextStatus = "COMPLETED";
         isFinalStep = true;
-      } else {
-        nextStatus = "SHIPPING";
       }
 
       if (isFinalStep) {
-        // PENYELESAIAN ORDER: Berikan pendapatan ke kurir
-        // 🚀 MENGGUNAKAN MESIN PENCAIRAN OTOMATIS YANG BARU
         const { error: rpcError } = await supabase.rpc(
           "complete_order_transaction",
-          {
-            p_order_id: order.id,
-          },
+          { p_order_id: order.id },
         );
-
         if (rpcError) throw rpcError;
-        if (locationInterval) clearInterval(locationInterval);
-        showToast("Pesanan Selesai! Saldo masuk ke dompet Anda.", "success");
+        showToast("Pesanan Selesai! Saldo masuk.", "success");
       } else {
-        // MULAI ORDER: Potong saldo kurir (Hak Aplikasi / System Fee)
-        // Membaca nominal pasti yang sudah dihitung saat pembeli checkout berdasarkan tarif distrik
-        const deductionAmount = Number(
-          order.app_fee || order.system_fee || order.platform_fee || 0,
-        );
-
-        // 1. Panggil fungsi potong saldo di database
-        if (deductionAmount > 0) {
-          const { error: deductError } = await supabase.rpc(
-            "deduct_courier_balance",
-            {
-              p_courier_id: user?.id,
-              p_amount: deductionAmount,
-              p_order_id: order.id,
-            },
-          );
-
-          // Jika saldo kurang, proses akan otomatis berhenti di sini
-          if (deductError) throw deductError;
-        }
-
-        // 2. Jika saldo berhasil dipotong (atau tidak ada potongan), baru ubah status pesanan
         const { error } = await supabase
           .from("orders")
           .update({ shipping_status: nextStatus })
           .eq("id", order.id);
-
         if (error) throw error;
-        showToast(
-          `Order diambil! Saldo terpotong Rp ${deductionAmount.toLocaleString("id-ID")}`,
-          "success",
-        );
+        showToast("Status Diperbarui!", "success");
       }
-
       onFinished();
     } catch (err: any) {
-      console.error("Update Error:", err);
-      // Akan menampilkan pesan: "Saldo Anda tidak mencukupi..." jika saldo < potongan
-      showToast(err.message || "Gagal memproses pesanan", "error");
+      showToast(err.message || "Gagal update", "error");
     } finally {
       setLoading(false);
     }
   };
 
+  // 🚀 FUNGSI OPEN CHAT YANG SUDAH DIPERBAIKI
   const openChat = (
     type: "courier_customer" | "courier_merchant",
     name: string,
+    receiverId: string,
   ) => {
-    setChatTarget({ type, name });
+    if (!receiverId) {
+      showToast("ID PENERIMA TIDAK DITEMUKAN!", "error");
+      return;
+    }
+    setChatTarget({ type, name, receiverId });
     setShowChat(true);
   };
 
   return (
     <>
-      {/* PORTAL CHAT */}
       {showChat &&
         createPortal(
           <div className="fixed inset-0 z-[999999] bg-white md:bg-slate-900/80 backdrop-blur-sm flex justify-center">
-            <div className="w-full max-w-[480px] flex flex-col h-[100dvh] bg-white overflow-hidden shadow-2xl relative animate-in slide-in-from-bottom-8 duration-300">
-              {/* HEADER CHAT */}
-              <div className="p-4 flex justify-between items-center bg-[#008080] text-white shrink-0 pt-safe shadow-sm z-10">
+            <div className="w-full max-w-[480px] flex flex-col h-[100dvh] bg-white overflow-hidden shadow-2xl relative animate-in slide-in-from-bottom-8">
+              <div className="p-4 flex justify-between items-center bg-[#008080] text-white shrink-0 pt-safe shadow-sm">
                 <div className="flex items-center gap-3 ml-2">
                   <div className="w-2 h-2 rounded-full bg-teal-300 animate-pulse"></div>
                   <div>
@@ -175,16 +140,17 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                 </div>
                 <button
                   onClick={() => setShowChat(false)}
-                  className="w-10 h-10 hover:bg-teal-700 rounded-full flex items-center justify-center transition-colors active:scale-90"
+                  className="w-10 h-10 hover:bg-teal-700 rounded-full flex items-center justify-center transition-all"
                 >
                   <X size={24} strokeWidth={3} />
                 </button>
               </div>
 
-              {/* AREA KONTEN CHAT */}
               <div className="flex-1 w-full bg-slate-50 relative overflow-hidden flex flex-col">
+                {/* 🚀 KIRIM receiverId KE RUANG CHAT */}
                 <OrderChatRoom
                   orderId={order.id}
+                  receiverId={chatTarget.receiverId}
                   receiverName={chatTarget.name}
                   chatType={chatTarget.type}
                 />
@@ -194,9 +160,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           document.body,
         )}
 
-      {/* KONTEN UTAMA RADAR */}
-      <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 text-left font-black uppercase tracking-tighter not-italic pb-4">
-        {/* HEADER STATUS */}
+      <div className="space-y-6 animate-in slide-in-from-bottom-4 text-left font-black uppercase tracking-tighter not-italic pb-4">
         <div
           className={`p-6 rounded-md flex justify-between items-center shadow-md transition-all border-l-4 ${isCompleted ? "bg-slate-200 border-slate-400 text-slate-500" : "bg-white border-[#008080] text-slate-800"}`}
         >
@@ -211,7 +175,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
               )}
             </div>
             <div>
-              <h2 className="text-[16px] font-[1000] uppercase leading-none">
+              <h2 className="text-[16px] font-[1000] leading-none">
                 {isCompleted
                   ? "SELESAI"
                   : order.shipping_status?.replace(/_/g, " ")}
@@ -227,6 +191,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
               openChat(
                 "courier_customer",
                 order.profiles?.full_name || "Pelanggan",
+                order.customer_id,
               )
             }
             className={`w-12 h-12 rounded-full flex items-center justify-center transition-all active:scale-90 ${isCompleted ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-[#008080] text-white shadow-md hover:bg-teal-700"}`}
@@ -235,9 +200,8 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           </button>
         </div>
 
-        {/* BODY AREA */}
         <div className="bg-white p-5 rounded-md border border-slate-200 shadow-sm space-y-5">
-          {/* BAGIAN TOKO */}
+          {/* TOKO */}
           <div className="flex gap-4 p-4 bg-orange-50/50 rounded-md border border-orange-100">
             <div className="w-10 h-10 bg-orange-50 text-[#FF6600] rounded-md flex items-center justify-center shrink-0 border border-orange-100 shadow-inner">
               <Store size={20} />
@@ -254,6 +218,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                   openChat(
                     "courier_merchant",
                     order.merchants?.shop_name || "Toko",
+                    order.merchant_id,
                   )
                 }
                 className="mt-3 flex items-center justify-center w-full gap-2 py-3 bg-white border border-orange-200 text-[#FF6600] rounded-md text-[10px] font-black uppercase tracking-widest hover:bg-orange-50 transition-all shadow-sm active:scale-95"
@@ -263,7 +228,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
             </div>
           </div>
 
-          {/* BAGIAN PELANGGAN */}
+          {/* PELANGGAN */}
           <div className="flex gap-4 p-4 bg-slate-50 rounded-md border border-slate-100">
             <div className="w-10 h-10 bg-white text-[#008080] rounded-md flex items-center justify-center shrink-0 border border-slate-200 shadow-inner">
               <MapPin size={20} />
@@ -275,13 +240,13 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
               <h4 className="font-[1000] text-slate-900 text-[12px] uppercase mt-1.5">
                 {order.profiles?.full_name || "PEMBELI PASARQU"}
               </h4>
-
               <div className="flex gap-2 mt-3">
                 <button
                   onClick={() =>
                     openChat(
                       "courier_customer",
                       order.profiles?.full_name || "Pelanggan",
+                      order.customer_id,
                     )
                   }
                   className={`flex-1 py-3 rounded-md font-[1000] text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 ${isCompleted ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#008080] text-white shadow-md hover:bg-teal-700"}`}
@@ -293,7 +258,6 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                   )}
                   {isCompleted ? "TERKUNCI" : "CHAT PEMBELI"}
                 </button>
-
                 <a
                   href={
                     isCompleted ? "#" : `tel:${order.profiles?.phone_number}`
@@ -307,12 +271,11 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           </div>
         </div>
 
-        {/* TOMBOL UPDATE STATUS */}
         {!isCompleted && (
           <button
             onClick={handleStatusUpdate}
             disabled={loading}
-            className="w-full py-5 bg-[#FF6600] text-white rounded-md font-[1000] uppercase text-[12px] md:text-[14px] tracking-widest shadow-md active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 disabled:bg-slate-300 transition-all"
+            className="w-full py-5 bg-[#FF6600] text-white rounded-md font-[1000] uppercase text-[12px] md:text-[14px] tracking-widest shadow-md active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 transition-all"
           >
             {loading ? (
               <Loader2 className="animate-spin" size={20} />
@@ -329,3 +292,5 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
     </>
   );
 };
+
+export default CourierActiveOrder;
