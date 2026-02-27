@@ -12,6 +12,9 @@ export const useMerchantDashboard = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [incomingOrder, setIncomingOrder] = useState<any>(null);
+  
+  // 🚀 STATE BARU: Notifikasi Chat Belum Terbaca
+  const [unreadChat, setUnreadChat] = useState<boolean>(false);
 
   const fetchBaseData = useCallback(async () => {
     if (!user?.id) {
@@ -20,7 +23,6 @@ export const useMerchantDashboard = () => {
     }
 
     try {
-      // 1. AMBIL DATA PROFIL & MERCHANT
       const [resProfile, resMerchant] = await Promise.all([
         supabase.from("profiles").select("*, markets:managed_market_id(name)").eq("id", user.id).maybeSingle(),
         supabase.from("merchants").select("*, markets(name)").or(`user_id.eq.${user.id},id.eq.${user.id}`).maybeSingle()
@@ -52,7 +54,6 @@ export const useMerchantDashboard = () => {
 
         setMerchantProfile(effectiveMerchant);
 
-        // 2. FETCH PRODUCTS & ORDERS
         const [resProds, resOrds] = await Promise.all([
           supabase.from("products").select("*").eq("merchant_id", effectiveMerchant.id),
           supabase.from("orders")
@@ -62,9 +63,7 @@ export const useMerchantDashboard = () => {
         ]);
 
         setProducts(resProds.data || []);
-
-        // 🚀 LOGIKA FIX BADGE: Hanya masukkan pesanan yang AKTIF (Belum Selesai & Belum Batal)
-        // Agar angka di Sidebar (badge) sinkron dengan list pesanan yang tampil
+        
         const activeOrders = (resOrds.data || []).filter((o: any) => 
             o.status !== "COMPLETED" && o.status !== "CANCELLED"
         );
@@ -97,27 +96,44 @@ export const useMerchantDashboard = () => {
     fetchBaseData();
   }, [fetchBaseData]);
 
-  // 🚀 SENSOR REALTIME UNTUK BADGE SIDEBAR
+  // 🚀 SENSOR REALTIME: PESANAN & CHAT
   useEffect(() => {
     if (!merchantProfile?.id) return;
 
     const channel = supabase
       .channel(`merchant_global_sync_${merchantProfile.id}`)
+      // 1. Dengar Pesanan Baru
       .on(
         "postgres_changes", 
         { event: "INSERT", schema: "public", table: "order_items", filter: `merchant_id=eq.${merchantProfile.id}` }, 
         async (payload: any) => {
            fetchBaseData(); 
            const { data: fullOrder } = await supabase.from("orders").select("*").eq("id", payload.new.order_id).single();
-           if (fullOrder) setIncomingOrder(fullOrder); // Bunyikan Alarm
+           if (fullOrder) setIncomingOrder(fullOrder);
         }
       )
+      // 2. Dengar Update Status Pesanan
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "orders" },
-        () => {
-          // 🔄 Jika ada perubahan status pesanan (Batal/Selesai), sinkronkan angka badge
-          fetchBaseData();
+        () => { fetchBaseData(); }
+      )
+      // 3. 🔔 DENGAR CHAT BARU DARI KURIR/CUSTOMER
+      .on(
+        "postgres_changes",
+        { 
+          event: "INSERT", 
+          schema: "public", 
+          table: "order_chats", 
+          filter: `receiver_id=eq.${merchantProfile.id}` 
+        },
+        (payload) => {
+           // Bunyikan suara notifikasi "Ting!"
+           const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2357/2357-preview.mp3");
+           audio.play().catch(() => {});
+           
+           setUnreadChat(true); // Nyalakan tanda merah di UI
+           showToast("ADA PESAN BARU DARI KURIR!", "info");
         }
       )
       .subscribe();
@@ -128,7 +144,7 @@ export const useMerchantDashboard = () => {
   }, [merchantProfile?.id, fetchBaseData]); 
 
   return {
-    merchantProfile, products, orders, loading, incomingOrder,
-    fetchBaseData, toggleShopStatus, stopAlarm
+    merchantProfile, products, orders, loading, incomingOrder, unreadChat,
+    setUnreadChat, fetchBaseData, toggleShopStatus, stopAlarm
   };
 };

@@ -23,6 +23,7 @@ interface Props {
   orderCount: number;
   productCount: number;
   isDarkMode: boolean;
+  hasUnreadChat?: boolean; // 🚀 FIX: Pintu sekarang sudah dibuka!
 }
 
 export const MerchantSidebar: React.FC<Props> = ({
@@ -36,6 +37,7 @@ export const MerchantSidebar: React.FC<Props> = ({
   orderCount,
   productCount,
   isDarkMode,
+  hasUnreadChat, // 🚀 Ambil kiriman paket notifikasinya di sini
 }) => {
   const hasLocation =
     merchantProfile?.latitude && merchantProfile?.latitude !== 0;
@@ -127,10 +129,16 @@ export const MerchantSidebar: React.FC<Props> = ({
           />
           <NavItem
             isDarkMode={isDarkMode}
-            icon={<MessageSquare size={18} />}
+            icon={
+              <MessageSquare
+                size={18}
+                className={hasUnreadChat ? "animate-bounce text-red-500" : ""}
+              />
+            }
             label="CHAT"
             active={activeTab === "messages"}
             onClick={() => setActiveTab("messages")}
+            hasDot={hasUnreadChat} // 🚀 Munculkan titik merah di desktop
           />
           <NavItem
             isDarkMode={isDarkMode}
@@ -219,10 +227,16 @@ export const MerchantSidebar: React.FC<Props> = ({
         />
         <MobileItem
           isDarkMode={isDarkMode}
-          icon={<MessageSquare size={20} />}
+          icon={
+            <MessageSquare
+              size={20}
+              className={hasUnreadChat ? "animate-pulse" : ""}
+            />
+          }
           label="CHAT"
           active={activeTab === "messages"}
           onClick={() => setActiveTab("messages")}
+          hasDot={hasUnreadChat} // 🚀 Munculkan titik merah di mobile
         />
 
         {/* TOMBOL SAKTI + (TENGAH) */}
@@ -246,7 +260,6 @@ export const MerchantSidebar: React.FC<Props> = ({
           count={orderCount}
         />
 
-        {/* 🚀 FIX: Tombol PRODUK kembali ada di bawah */}
         <MobileItem
           isDarkMode={isDarkMode}
           icon={<Package size={20} />}
@@ -261,7 +274,15 @@ export const MerchantSidebar: React.FC<Props> = ({
 };
 
 // --- SUB-KOMPONEN NAV ITEM ---
-const NavItem = ({ icon, label, active, onClick, count, isDarkMode }: any) => (
+const NavItem = ({
+  icon,
+  label,
+  active,
+  onClick,
+  count,
+  isDarkMode,
+  hasDot,
+}: any) => (
   <button
     onClick={onClick}
     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-[11px] font-bold uppercase tracking-widest ${
@@ -275,15 +296,19 @@ const NavItem = ({ icon, label, active, onClick, count, isDarkMode }: any) => (
     }`}
   >
     <div
-      className={
+      className={`relative ${
         active
           ? "text-[#008080]"
           : isDarkMode
             ? "text-slate-500"
             : "text-slate-400"
-      }
+      }`}
     >
       {icon}
+      {/* 🔴 TITIK MERAH DESKTOP */}
+      {hasDot && (
+        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-600 rounded-full border-2 border-white animate-pulse"></span>
+      )}
     </div>
     <span className="flex-1 text-left">{label}</span>
     {count > 0 && (
@@ -310,6 +335,7 @@ const MobileItem = ({
   onClick,
   count,
   isDarkMode,
+  hasDot, // 🚀 Terima prop dot
 }: any) => (
   <button
     onClick={onClick}
@@ -323,6 +349,11 @@ const MobileItem = ({
   >
     <div className="relative">
       {icon}
+      {/* 🔴 TITIK MERAH MOBILE (CHAT) */}
+      {hasDot && (
+        <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-600 rounded-full border-2 border-white animate-bounce shadow-sm"></span>
+      )}
+      {/* BADGE ANGKA (ORDERS/PRODUCTS) */}
       {count > 0 && (
         <span className="absolute -top-1.5 -right-1.5 px-1 min-w-[16px] h-[16px] bg-[#FF6600] text-white text-[9px] font-bold flex items-center justify-center rounded-full border-2 border-white shadow-sm">
           {count}
