@@ -16,14 +16,14 @@ import { CheckoutAddress } from "./components/CheckoutAddress";
 const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
   ["places", "routes", "geometry", "drawing"];
 
-// 🚀 MESIN PENGHITUNG JARAK (INLINE AGAR 100% TIDAK ERROR)
 const getDistanceKM = (
   lat1: number,
   lon1: number,
   lat2: number,
   lon2: number,
 ) => {
-  const R = 6371; // Radius bumi dalam KM
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+  const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
@@ -33,7 +33,7 @@ const getDistanceKM = (
       Math.sin(dLon / 2) *
       Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // Hasil dalam KM
+  return R * c;
 };
 
 export const CheckoutPaymentPage = () => {
@@ -45,10 +45,7 @@ export const CheckoutPaymentPage = () => {
   const [loading, setLoading] = useState(false);
   const [shippingDetails, setShippingDetails] = useState<any>(null);
   const [manualAddress, setManualAddress] = useState("");
-  const [deliveryCoords, setDeliveryCoords] = useState({
-    lat: -6.2,
-    lng: 106.8,
-  });
+  const [deliveryCoords, setDeliveryCoords] = useState({ lat: 0, lng: 0 });
 
   const [shippingMethod, setShippingMethod] = useState<"courier" | "pickup">(
     "courier",
@@ -70,47 +67,37 @@ export const CheckoutPaymentPage = () => {
 
   const subtotalCart = cart.reduce((s, i) => s + i.price * i.quantity, 0);
 
-  const calculateMysteryCashback = (subtotal: number) => {
-    const percentages = [0.03, 0.04, 0.05];
-    return Math.round(
-      subtotal * percentages[Math.floor(Math.random() * percentages.length)],
-    );
-  };
-
-  // 🚀 ENGINE LOGISTIK PRO (SUDAH DISAMBUNGKAN DENGAN ATURAN SUPER ADMIN)
   const updateLogistics = useCallback(
-    async (lat: number, lng: number) => {
-      if (!selectedMarket || cart.length === 0) return;
+    async (currentLat: number, currentLng: number) => {
+      if (!selectedMarket || !currentLat || !currentLng) return;
+
       try {
-        const mLat = Number(selectedMarket.latitude) || 0;
-        const mLng = Number(selectedMarket.longitude) || 0;
+        // 🚀 FIX: Menggunakan Number() agar TypeScript tidak error
+        const marketLat = Number(selectedMarket.latitude);
+        const marketLng = Number(selectedMarket.longitude);
+        const buyerLat = Number(currentLat);
+        const buyerLng = Number(currentLng);
 
-        // 1. Hitung Jarak
-        let distance = 0;
-        if (mLat !== 0 && mLng !== 0) {
-          distance = getDistanceKM(lat, lng, mLat, mLng);
-        }
+        const distance = getDistanceKM(
+          buyerLat,
+          buyerLng,
+          marketLat,
+          marketLng,
+        );
 
-        // 2. Tarik Aturan Super Admin
         let { data: r } = await supabase
           .from("shipping_rates")
           .select("*")
           .eq("district_name", selectedMarket.district || "")
           .maybeSingle();
 
-        // 🚀 FALLBACK: Jika Distrik tidak ketemu, ambil aturan pertama yang ada di database!
         if (!r) {
-          const { data: defaultR } = await supabase
+          const { data: firstRate } = await supabase
             .from("shipping_rates")
             .select("*")
             .limit(1)
             .maybeSingle();
-          r = defaultR;
-        }
-
-        // 🚀 HARD FALLBACK: Jika database kosong melompong
-        if (!r) {
-          r = {
+          r = firstRate || {
             base_fare: 8000,
             base_distance_km: 3,
             price_per_km: 2000,
@@ -126,68 +113,58 @@ export const CheckoutPaymentPage = () => {
           uniqueMerchants.length > 1 ? uniqueMerchants.length - 1 : 0;
         const isPickup = shippingMethod === "pickup";
 
-        // 🚀 3. PERHITUNGAN ONGKIR BERDASARKAN JARAK (INI YANG BOS TUNGGU!)
         let baseFare = isPickup ? 0 : Number(r.base_fare || 0);
+        const freeDist = Number(r.base_distance_km || 3);
 
-        // Cek jika jarak lebih dari jarak dasar (misal > 3KM)
-        if (!isPickup && distance > Number(r.base_distance_km || 3)) {
-          const extraKm = Math.ceil(distance - Number(r.base_distance_km || 3)); // Bulatkan ke atas
-          baseFare += extraKm * Number(r.price_per_km || 0);
+        if (!isPickup && distance > freeDist) {
+          const extraKm = distance - freeDist;
+          baseFare += Math.ceil(extraKm) * Number(r.price_per_km || 0);
         }
 
         const totalExtraFeeKurir = isPickup
           ? 0
           : extraCount * Number(r.multi_stop_fee || 0);
         const surgeCost = isPickup ? 0 : extraCount * Number(r.surge_fee || 0);
-
         const realShippingCost = baseFare + totalExtraFeeKurir + surgeCost;
 
-        // 🚀 4. LOGIKA GRATIS ONGKIR
         let userPayShipping = realShippingCost;
         let appSubsidy = 0;
-        const minOrderForFreeShipping = Number(r.free_shipping_min_order || 0);
-        if (
-          !isPickup &&
-          minOrderForFreeShipping > 0 &&
-          subtotalCart >= minOrderForFreeShipping
-        ) {
+        const minOrderFS = Number(r.free_shipping_min_order || 0);
+        if (!isPickup && minOrderFS > 0 && subtotalCart >= minOrderFS) {
           userPayShipping = 0;
           appSubsidy = realShippingCost;
         }
 
-        // 🚀 5. BIAYA LAYANAN
         const totalLayanan = Math.round(
           Number(r.buyer_service_fee || 0) +
             Number(r.handling_fee || 0) +
             (isPickup ? 0 : extraCount * Number(r.surge_fee || 0)),
         );
 
-        const appCutFromBase =
-          baseFare * (Number(r.app_fee_percent || 0) / 100);
-        const courierNet = baseFare - appCutFromBase + totalExtraFeeKurir;
-        const totalExtraAppShare = isPickup
+        const appCut = baseFare * (Number(r.app_fee_percent || 0) / 100);
+        const courierNet = baseFare - appCut + totalExtraFeeKurir;
+        const appShareExtra = isPickup
           ? 0
           : extraCount * Number(r.multi_stop_app_share || 0);
         const systemFee =
-          appCutFromBase +
+          appCut +
           Number(r.buyer_service_fee || 0) +
           Number(r.handling_fee || 0) +
-          totalExtraAppShare +
+          appShareExtra +
           surgeCost;
 
         setShippingDetails({
           base_fare: Math.round(userPayShipping),
           real_shipping_cost: Math.round(realShippingCost),
           app_subsidy: Math.round(appSubsidy),
-          distance_km: distance.toFixed(1), // Pastikan KM terkirim ke Ringkasan!
+          distance_km: distance.toFixed(1),
           combined_service_fee: totalLayanan,
           grand_total: Math.round(userPayShipping + totalLayanan),
-          seller_admin_percent: Number(r.seller_admin_fee_percent || 0),
           system_fee: Math.round(systemFee),
           courier_earning_total: Math.round(courierNet),
         });
       } catch (err) {
-        console.error("Gagal update ongkir", err);
+        console.error("Logistic Error:", err);
       }
     },
     [selectedMarket, cart, shippingMethod, subtotalCart],
@@ -195,18 +172,20 @@ export const CheckoutPaymentPage = () => {
 
   useEffect(() => {
     if (selectedMarket && profile) {
-      const lat = Number(profile?.latitude) || Number(selectedMarket.latitude);
-      const lng =
-        Number(profile?.longitude) || Number(selectedMarket.longitude);
-      setDeliveryCoords({ lat, lng });
+      // 🚀 FIX: Konversi aman untuk sync awal
+      const initialLat =
+        Number(profile.latitude) || Number(selectedMarket.latitude);
+      const initialLng =
+        Number(profile.longitude) || Number(selectedMarket.longitude);
+
+      setDeliveryCoords({ lat: initialLat, lng: initialLng });
       setManualAddress(
         (profile.address_street || profile.address || "").toUpperCase(),
       );
-      updateLogistics(lat, lng);
+      updateLogistics(initialLat, initialLng);
     }
-  }, [selectedMarket, profile, updateLogistics]);
+  }, [selectedMarket, profile?.id, updateLogistics]);
 
-  // HITUNG TOTAL AKHIR
   const totalSebelumSaldo = Math.max(
     0,
     subtotalCart + (shippingDetails?.grand_total || 0),
@@ -218,20 +197,16 @@ export const CheckoutPaymentPage = () => {
 
   const handlePayment = async () => {
     if (!user || !selectedMarket || !shippingDetails) {
-      showToast("Data belum lengkap, mohon tunggu...", "error");
+      showToast("Sedang menghitung jarak...", "error");
       return;
     }
 
     setLoading(true);
     const mysteryBonus =
-      shippingMethod === "pickup" ? calculateMysteryCashback(subtotalCart) : 0;
+      shippingMethod === "pickup" ? Math.round(subtotalCart * 0.05) : 0;
     const pickupPIN =
       shippingMethod === "pickup"
         ? Math.floor(1000 + Math.random() * 9000).toString()
-        : null;
-    const pickupExpired =
-      shippingMethod === "pickup"
-        ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         : null;
 
     try {
@@ -261,15 +236,13 @@ export const CheckoutPaymentPage = () => {
               ? 0
               : shippingDetails.courier_earning_total,
           pickup_code: pickupPIN,
-          pickup_expired_at: pickupExpired,
         })
         .select()
         .single();
 
-      if (orderErr)
-        throw new Error(`Gagal simpan pesanan: ${orderErr.message}`);
+      if (orderErr) throw orderErr;
 
-      const { error: itemsErr } = await supabase.from("order_items").insert(
+      await supabase.from("order_items").insert(
         cart.map((i) => ({
           order_id: newOrder.id,
           product_id: i.id,
@@ -278,7 +251,6 @@ export const CheckoutPaymentPage = () => {
           merchant_id: i.merchant_id,
         })),
       );
-      if (itemsErr) throw new Error("Gagal simpan rincian item");
 
       if (usedBalanceAmount > 0) {
         await supabase.rpc("deduct_user_balance", {
@@ -289,8 +261,7 @@ export const CheckoutPaymentPage = () => {
 
       if (paymentMethod === "cod") {
         clearCart();
-        showToast("PESANAN COD BERHASIL DIBUAT!", "success");
-        setLoading(false);
+        showToast("PESANAN BERHASIL!", "success");
         navigate(`/track-order/${newOrder.id}`);
       } else {
         const { data: payData } = await supabase.functions.invoke(
@@ -300,7 +271,6 @@ export const CheckoutPaymentPage = () => {
               order_id: newOrder.id,
               amount: grandTotalAkhir,
               customer_name: profile?.full_name || user.email,
-              customer_email: user.email,
             },
           },
         );
@@ -309,13 +279,7 @@ export const CheckoutPaymentPage = () => {
           (window as any).snap.pay(payData.token, {
             onSuccess: () => {
               clearCart();
-              if (shippingMethod === "pickup") {
-                setCashbackAmount(mysteryBonus);
-                setCreatedOrderId(newOrder.id);
-                setShowSurprise(true);
-              } else {
-                navigate(`/track-order/${newOrder.id}`);
-              }
+              navigate(`/track-order/${newOrder.id}`);
             },
             onPending: () => {
               clearCart();
@@ -334,10 +298,7 @@ export const CheckoutPaymentPage = () => {
   return (
     <MobileLayout
       activeTab="orders"
-      onTabChange={(tab: string) => {
-        if (tab === "home") navigate("/");
-        if (tab === "account") navigate("/customer-dashboard");
-      }}
+      onTabChange={(t) => navigate(t === "home" ? "/" : "/customer-dashboard")}
       onSearch={() => {}}
       onCartClick={() => {}}
       cartCount={0}
