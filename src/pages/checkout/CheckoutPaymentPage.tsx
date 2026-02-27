@@ -5,7 +5,6 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useMarket } from "../../contexts/MarketContext";
 import { useToast } from "../../contexts/ToastContext";
 import { useNavigate } from "react-router-dom";
-import { calculateDistance } from "../../utils/courierLogic";
 import { ArrowLeft } from "lucide-react";
 import { MobileLayout } from "../../components/layout/MobileLayout";
 
@@ -16,6 +15,26 @@ import { CheckoutAddress } from "./components/CheckoutAddress";
 
 const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
   ["places", "routes", "geometry", "drawing"];
+
+// 🚀 MESIN PENGHITUNG JARAK (INLINE AGAR 100% TIDAK ERROR)
+const getDistanceKM = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+) => {
+  const R = 6371; // Radius bumi dalam KM
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Hasil dalam KM
+};
 
 export const CheckoutPaymentPage = () => {
   const { user, profile } = useAuth() as any;
@@ -58,29 +77,48 @@ export const CheckoutPaymentPage = () => {
     );
   };
 
-  // 🚀 ENGINE LOGISTIK PRO (UPDATE DENGAN ATURAN SUPER ADMIN)
+  // 🚀 ENGINE LOGISTIK PRO (SUDAH DISAMBUNGKAN DENGAN ATURAN SUPER ADMIN)
   const updateLogistics = useCallback(
     async (lat: number, lng: number) => {
       if (!selectedMarket || cart.length === 0) return;
       try {
-        // 1. Ambil jarak menggunakan rumus Haversine
-        const distance = calculateDistance(
-          lat,
-          lng,
-          Number(selectedMarket.latitude),
-          Number(selectedMarket.longitude),
-        );
+        const mLat = Number(selectedMarket.latitude) || 0;
+        const mLng = Number(selectedMarket.longitude) || 0;
 
-        // 2. Tarik aturan dari Super Admin berdasarkan Distrik
-        const { data: r } = await supabase
+        // 1. Hitung Jarak
+        let distance = 0;
+        if (mLat !== 0 && mLng !== 0) {
+          distance = getDistanceKM(lat, lng, mLat, mLng);
+        }
+
+        // 2. Tarik Aturan Super Admin
+        let { data: r } = await supabase
           .from("shipping_rates")
           .select("*")
-          .eq("district_name", selectedMarket.district)
-          .single();
+          .eq("district_name", selectedMarket.district || "")
+          .maybeSingle();
 
-        if (!r) return;
+        // 🚀 FALLBACK: Jika Distrik tidak ketemu, ambil aturan pertama yang ada di database!
+        if (!r) {
+          const { data: defaultR } = await supabase
+            .from("shipping_rates")
+            .select("*")
+            .limit(1)
+            .maybeSingle();
+          r = defaultR;
+        }
 
-        // 3. Cek berapa banyak toko yang berbeda di dalam keranjang
+        // 🚀 HARD FALLBACK: Jika database kosong melompong
+        if (!r) {
+          r = {
+            base_fare: 8000,
+            base_distance_km: 3,
+            price_per_km: 2000,
+            app_fee_percent: 20,
+            buyer_service_fee: 2000,
+          };
+        }
+
         const uniqueMerchants = [
           ...new Set(cart.map((item) => item.merchant_id)),
         ];
@@ -88,51 +126,45 @@ export const CheckoutPaymentPage = () => {
           uniqueMerchants.length > 1 ? uniqueMerchants.length - 1 : 0;
         const isPickup = shippingMethod === "pickup";
 
-        // 🚀 4. PERHITUNGAN ONGKIR (DASAR + EXTRA KM)
-        let baseFare = isPickup ? 0 : Number(r.base_fare);
+        // 🚀 3. PERHITUNGAN ONGKIR BERDASARKAN JARAK (INI YANG BOS TUNGGU!)
+        let baseFare = isPickup ? 0 : Number(r.base_fare || 0);
 
-        // JIKA JARAK LEBIH DARI JARAK DASAR (Misal: > 3 KM)
-        if (!isPickup && distance > Number(r.base_distance_km)) {
-          const extraKm = Math.ceil(distance - Number(r.base_distance_km)); // Dibulatkan ke atas
-          baseFare += extraKm * Number(r.price_per_km);
+        // Cek jika jarak lebih dari jarak dasar (misal > 3KM)
+        if (!isPickup && distance > Number(r.base_distance_km || 3)) {
+          const extraKm = Math.ceil(distance - Number(r.base_distance_km || 3)); // Bulatkan ke atas
+          baseFare += extraKm * Number(r.price_per_km || 0);
         }
 
-        // Tambahan biaya jika lebih dari 1 toko
         const totalExtraFeeKurir = isPickup
           ? 0
           : extraCount * Number(r.multi_stop_fee || 0);
-        const surgeCost = isPickup ? 0 : extraCount * Number(r.surge_fee || 0); // Asumsi surge dipakai per extra toko
+        const surgeCost = isPickup ? 0 : extraCount * Number(r.surge_fee || 0);
 
-        // TOTAL ONGKIR ASLI (Belum Dipotong Promo)
         const realShippingCost = baseFare + totalExtraFeeKurir + surgeCost;
 
-        // 🚀 5. LOGIKA GRATIS ONGKIR DARI SUPER ADMIN
+        // 🚀 4. LOGIKA GRATIS ONGKIR
         let userPayShipping = realShippingCost;
         let appSubsidy = 0;
-
         const minOrderForFreeShipping = Number(r.free_shipping_min_order || 0);
         if (
           !isPickup &&
           minOrderForFreeShipping > 0 &&
           subtotalCart >= minOrderForFreeShipping
         ) {
-          userPayShipping = 0; // Pembeli bayar ongkir Rp 0
-          appSubsidy = realShippingCost; // Aplikasi yang menanggung
+          userPayShipping = 0;
+          appSubsidy = realShippingCost;
         }
 
-        // 🚀 6. BIAYA LAYANAN (Service Fee + Handling Fee)
+        // 🚀 5. BIAYA LAYANAN
         const totalLayanan = Math.round(
           Number(r.buyer_service_fee || 0) +
-            Number(r.handling_fee || 0) + // Fitur baru
+            Number(r.handling_fee || 0) +
             (isPickup ? 0 : extraCount * Number(r.surge_fee || 0)),
         );
 
-        // 7. PERHITUNGAN HAK KURIR (Kurir tetap dapat penuh meskipun ada gratis ongkir)
         const appCutFromBase =
           baseFare * (Number(r.app_fee_percent || 0) / 100);
         const courierNet = baseFare - appCutFromBase + totalExtraFeeKurir;
-
-        // 8. BIAYA SISTEM (TOTAL PENDAPATAN APP DARI TRANSAKSI INI)
         const totalExtraAppShare = isPickup
           ? 0
           : extraCount * Number(r.multi_stop_app_share || 0);
@@ -144,13 +176,13 @@ export const CheckoutPaymentPage = () => {
           surgeCost;
 
         setShippingDetails({
-          base_fare: Math.round(userPayShipping), // Ini yang akan muncul di layar pembeli
-          real_shipping_cost: Math.round(realShippingCost), // Simpan ongkir aslinya untuk record
-          app_subsidy: Math.round(appSubsidy), // Simpan berapa besar subsidinya
-          distance_km: distance.toFixed(1), // Munculkan KM di layar jika diperlukan
+          base_fare: Math.round(userPayShipping),
+          real_shipping_cost: Math.round(realShippingCost),
+          app_subsidy: Math.round(appSubsidy),
+          distance_km: distance.toFixed(1), // Pastikan KM terkirim ke Ringkasan!
           combined_service_fee: totalLayanan,
           grand_total: Math.round(userPayShipping + totalLayanan),
-          seller_admin_percent: Number(r.seller_admin_fee_percent),
+          seller_admin_percent: Number(r.seller_admin_fee_percent || 0),
           system_fee: Math.round(systemFee),
           courier_earning_total: Math.round(courierNet),
         });
@@ -209,7 +241,7 @@ export const CheckoutPaymentPage = () => {
           customer_id: user.id,
           market_id: selectedMarket.id,
           total_price: grandTotalAkhir,
-          shipping_cost: Math.round(shippingDetails.base_fare), // Masukkan Ongkir yang dibayar user (bisa 0 jika gratis)
+          shipping_cost: Math.round(shippingDetails.base_fare),
           service_fee: Math.round(shippingDetails.combined_service_fee),
           status: paymentMethod === "cod" ? "PROCESSING" : "UNPAID",
           address:
