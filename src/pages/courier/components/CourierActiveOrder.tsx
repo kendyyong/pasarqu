@@ -12,8 +12,8 @@ import {
   Loader2,
   Truck,
   X,
-  Lock,
   Store,
+  AlertTriangle,
 } from "lucide-react";
 
 import { OrderChatRoom } from "../../../features/chat/OrderChatRoom";
@@ -30,25 +30,25 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
   const [showChat, setShowChat] = useState(false);
   const [locationInterval, setLocationInterval] = useState<any>(null);
 
-  // 🚀 STATE CHAT: Sekarang wajib membawa receiverId
+  // 🚀 STATE CHAT
   const [chatTarget, setChatTarget] = useState<{
     type: "courier_customer" | "courier_merchant";
     name: string;
     receiverId: string;
   }>({ type: "courier_customer", name: "Pelanggan", receiverId: "" });
 
-  const isCompleted =
-    order?.status === "COMPLETED" || order?.shipping_status === "COMPLETED";
+  const isCompleted = order?.status === "COMPLETED";
+  const isCanceled = order?.status === "CANCELLED";
 
   // GPS TRACKER REAL-TIME
   useEffect(() => {
-    if (order?.shipping_status === "SHIPPING" && user?.id) {
+    if (order?.status === "SHIPPING" && user?.id) {
       const interval = setInterval(() => {
         navigator.geolocation.getCurrentPosition(
           async (position) => {
             const { latitude, longitude } = position.coords;
             await supabase
-              .from("couriers")
+              .from("couriers") // Pastikan tabel ini ada, atau ganti ke "profiles" jika tidak ada
               .update({ current_lat: latitude, current_lng: longitude })
               .eq("id", user.id);
           },
@@ -59,43 +59,70 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
       setLocationInterval(interval);
       return () => clearInterval(interval);
     }
-  }, [order?.shipping_status, user?.id]);
+  }, [order?.status, user?.id]);
 
+  // 🚀 LOGIKA UPDATE STATUS YANG BENAR
   const handleStatusUpdate = async () => {
+    if (!order?.id) return;
     setLoading(true);
+
     try {
       let nextStatus = "";
-      let isFinalStep = false;
+      let toastMsg = "";
 
-      if (
-        order.shipping_status === "SEARCHING_COURIER" ||
-        order.shipping_status === "PACKING"
-      ) {
-        nextStatus = "SHIPPING";
-      } else if (
-        order.shipping_status === "SHIPPING" ||
-        order.shipping_status === "DELIVERING"
-      ) {
-        nextStatus = "COMPLETED";
-        isFinalStep = true;
+      // LOGIC 1: Jika masih PACKING, Kurir TIDAK BOLEH ambil!
+      if (order.status === "PACKING") {
+        showToast("TUNGGU TOKO SELESAI BUNGKUS DULU, BOS!", "error");
+        setLoading(false);
+        return;
       }
 
-      if (isFinalStep) {
+      // LOGIC 2: Dari Menjemput -> Sedang Mengantar
+      if (order.status === "READY_TO_PICKUP" || order.status === "PICKING_UP") {
+        nextStatus = "SHIPPING";
+        toastMsg = "STATUS: MENUJU LOKASI PEMBELI 🛵💨";
+      }
+      // LOGIC 3: Dari Sedang Mengantar -> Selesai
+      else if (order.status === "SHIPPING" || order.status === "DELIVERING") {
+        nextStatus = "COMPLETED";
+      }
+
+      // EKSEKUSI PENYELESAIAN (FINAL STEP)
+      if (nextStatus === "COMPLETED") {
+        // Panggil fungsi RPC untuk menyelesaikan transaksi dan mencairkan uang
         const { error: rpcError } = await supabase.rpc(
           "complete_order_transaction",
           { p_order_id: order.id },
         );
+
         if (rpcError) throw rpcError;
-        showToast("Pesanan Selesai! Saldo Cair.", "success");
-      } else {
+
+        // 🛡️ DOUBLE CHECK: Pastikan status utama (status) dan shipping_status berubah!
+        await supabase
+          .from("orders")
+          .update({
+            status: "COMPLETED",
+            shipping_status: "COMPLETED",
+          })
+          .eq("id", order.id);
+
+        showToast("TUGAS SELESAI! SALDO CAIR! 💰", "success");
+      }
+      // EKSEKUSI PERPINDAHAN STATUS BIASA
+      else if (nextStatus !== "") {
         const { error } = await supabase
           .from("orders")
-          .update({ shipping_status: nextStatus })
+          .update({
+            status: nextStatus,
+            shipping_status: nextStatus, // Samakan agar tidak ada miskomunikasi sistem
+          })
           .eq("id", order.id);
+
         if (error) throw error;
-        showToast("Status: Sedang Dikirim", "success");
+        showToast(toastMsg, "success");
       }
-      onFinished();
+
+      onFinished(); // Refresh data
     } catch (err: any) {
       showToast(err.message || "Gagal update status", "error");
     } finally {
@@ -144,7 +171,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
               <div className="flex-1 w-full bg-slate-50 relative overflow-hidden flex flex-col">
                 <OrderChatRoom
                   orderId={order.id}
-                  receiverId={chatTarget.receiverId} // 🚀 PENTING: Mengirim ID Penerima
+                  receiverId={chatTarget.receiverId}
                   receiverName={chatTarget.name}
                   chatType={chatTarget.type}
                 />
@@ -156,7 +183,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
 
       <div className="space-y-6 animate-in slide-in-from-bottom-4 text-left font-black uppercase tracking-tighter pb-4">
         <div
-          className={`p-6 rounded-md flex justify-between items-center shadow-md transition-all border-l-4 ${isCompleted ? "bg-slate-200 border-slate-400" : "bg-white border-[#008080]"}`}
+          className={`p-6 rounded-md flex justify-between items-center shadow-md transition-all border-l-4 ${isCompleted ? "bg-slate-200 border-slate-400" : isCanceled ? "bg-red-50 border-red-500" : "bg-white border-[#008080]"}`}
         >
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-md flex items-center justify-center shadow-inner bg-teal-50 text-[#008080]">
@@ -167,13 +194,15 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
               )}
             </div>
             <div>
-              <h2 className="text-[16px] leading-none">
+              <h2 className="text-[16px] leading-none text-slate-800">
                 {isCompleted
                   ? "SELESAI"
-                  : order.shipping_status?.replace(/_/g, " ")}
+                  : isCanceled
+                    ? "DIBATALKAN"
+                    : order.status?.replace(/_/g, " ")}
               </h2>
               <p className="text-[10px] text-slate-400 mt-1">
-                ID: #{order.id.slice(0, 8)}
+                ID: #{order.id?.slice(0, 8)}
               </p>
             </div>
           </div>
@@ -185,7 +214,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                 order.customer_id,
               )
             }
-            className="w-12 h-12 rounded-full bg-[#008080] text-white shadow-md flex items-center justify-center"
+            className="w-12 h-12 rounded-full bg-[#008080] text-white shadow-md flex items-center justify-center active:scale-95"
           >
             <MessageCircle size={24} />
           </button>
@@ -234,13 +263,13 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                       order.customer_id,
                     )
                   }
-                  className="flex-1 py-3 bg-[#008080] text-white rounded-md text-[10px] flex items-center justify-center gap-2"
+                  className="flex-1 py-3 bg-[#008080] text-white rounded-md text-[10px] flex items-center justify-center gap-2 active:scale-95"
                 >
                   <MessageSquare size={14} /> CHAT PEMBELI
                 </button>
                 <a
                   href={`tel:${order.profiles?.phone_number}`}
-                  className="w-12 bg-white border border-slate-200 text-slate-600 rounded-md flex items-center justify-center"
+                  className="w-12 bg-white border border-slate-200 text-slate-600 rounded-md flex items-center justify-center active:scale-95"
                 >
                   <Phone size={16} />
                 </a>
@@ -249,22 +278,35 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           </div>
         </div>
 
-        {!isCompleted && (
-          <button
-            onClick={handleStatusUpdate}
-            disabled={loading}
-            className="w-full py-5 bg-[#FF6600] text-white rounded-md font-[1000] uppercase text-[14px] shadow-md active:scale-95 flex items-center justify-center gap-3"
-          >
-            {loading ? (
-              <Loader2 className="animate-spin" size={20} />
+        {/* AREA TOMBOL EKSEKUSI BAWAH */}
+        {!isCompleted && !isCanceled && (
+          <>
+            {order.status === "PACKING" ? (
+              <div className="w-full py-5 bg-slate-200 text-slate-500 rounded-md font-[1000] uppercase text-[12px] shadow-sm flex items-center justify-center gap-3">
+                <Loader2 className="animate-spin" size={18} />
+                MENUNGGU TOKO SELESAI BUNGKUS...
+              </div>
             ) : (
-              <CheckCircle size={20} strokeWidth={3} />
+              <button
+                onClick={handleStatusUpdate}
+                disabled={loading}
+                className={`w-full py-5 text-white rounded-md font-[1000] uppercase text-[14px] shadow-md active:scale-95 flex items-center justify-center gap-3 transition-colors ${
+                  order.status === "SHIPPING" || order.status === "DELIVERING"
+                    ? "bg-[#008080] hover:bg-teal-700"
+                    : "bg-[#FF6600] hover:bg-orange-600"
+                }`}
+              >
+                {loading ? (
+                  <Loader2 className="animate-spin" size={20} />
+                ) : (
+                  <CheckCircle size={20} strokeWidth={3} />
+                )}
+                {order.status === "SHIPPING" || order.status === "DELIVERING"
+                  ? "KONFIRMASI BARANG TIBA!"
+                  : "SAYA SUDAH AMBIL BARANG"}
+              </button>
             )}
-            {order.shipping_status === "SHIPPING" ||
-            order.shipping_status === "DELIVERING"
-              ? "KONFIRMASI TIBA"
-              : "AMBIL ORDER & JALAN"}
-          </button>
+          </>
         )}
       </div>
     </>

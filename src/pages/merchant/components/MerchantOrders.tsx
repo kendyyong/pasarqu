@@ -22,7 +22,7 @@ import {
   Ban,
   CheckCircle2,
   Trash2,
-  DownloadCloud, // 🚀 IKON BARU UNTUK EXCEL
+  DownloadCloud,
 } from "lucide-react";
 
 interface Props {
@@ -172,7 +172,6 @@ export const MerchantOrders: React.FC<Props> = ({
     };
   }, [fetchOrders, user?.id]);
 
-  // 🚀 FUNGSI EXPORT EXCEL/CSV LEVEL DEWA
   const handleExportCSV = () => {
     try {
       if (orders.length === 0)
@@ -214,20 +213,23 @@ export const MerchantOrders: React.FC<Props> = ({
   };
 
   const handleProcessOrder = async (order: any) => {
-    /* ... */ setIsUpdating(order.id);
+    setIsUpdating(order.id);
     const isPickup = order.shipping_method === "pickup";
     try {
       const { error } = await supabase
         .from("orders")
         .update({
-          status: "PACKING",
-          shipping_status: isPickup ? "READY_TO_PICKUP" : "SEARCHING_COURIER",
+          status: "PACKING", // Toko mulai bungkus
+          // JIKA BUKAN PICKUP, STATUS PENGIRIMAN TETAP PENDING DULU SAMPAI TOKO SELESAI BUNGKUS
+          shipping_status: isPickup ? "READY_TO_PICKUP" : "PENDING",
         })
         .eq("id", order.id);
       if (error) throw error;
       if (stopAlarm) stopAlarm();
       showToast(
-        isPickup ? "PESANAN DISIAPKAN!" : "PESANAN DITERIMA. MENCARI KURIR...",
+        isPickup
+          ? "PESANAN DISIAPKAN!"
+          : "PESANAN DITERIMA. SILAKAN KEMAS BARANG.",
         "success",
       );
       fetchOrders(true);
@@ -237,8 +239,31 @@ export const MerchantOrders: React.FC<Props> = ({
       setIsUpdating(null);
     }
   };
+
+  // 🚀 FUNGSI BARU: TOKO SELESAI BUNGKUS -> PANGGIL KURIR
+  const handleReadyForCourier = async (orderId: string) => {
+    setIsUpdating(orderId);
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          status: "READY_TO_PICKUP", // 🚀 INI YANG BIKIN RADAR KURIR BUNYI!
+          shipping_status: "SEARCHING_COURIER",
+        })
+        .eq("id", orderId);
+
+      if (error) throw error;
+      showToast("MEMANGGIL KURIR PASAR...", "success");
+      fetchOrders(true);
+    } catch (err: any) {
+      showToast("Gagal memanggil kurir", "error");
+    } finally {
+      setIsUpdating(null);
+    }
+  };
+
   const handleRejectOrder = async (order: any) => {
-    /* ... */ if (
+    if (
       !window.confirm(
         "Yakin ingin menolak pesanan ini? Saldo pembeli akan dikembalikan otomatis.",
       )
@@ -260,8 +285,9 @@ export const MerchantOrders: React.FC<Props> = ({
       setIsUpdating(null);
     }
   };
+
   const handleVerifyPIN = async () => {
-    /* ... */ if (!pinModalOrder || pinInput.length !== 4) {
+    if (!pinModalOrder || pinInput.length !== 4) {
       showToast("Masukkan 4 digit PIN dengan benar", "error");
       return;
     }
@@ -286,9 +312,11 @@ export const MerchantOrders: React.FC<Props> = ({
       setIsVerifying(false);
     }
   };
+
   const handlePrintLabel = (order: any) => {
     window.open(`/invoice/${order.id}`, "_blank");
   };
+
   const handleHideOrder = (orderId: string) => {
     if (!window.confirm("Sembunyikan pesanan ini dari daftar Anda?")) return;
     const updatedHidden = [...hiddenOrders, orderId];
@@ -307,11 +335,14 @@ export const MerchantOrders: React.FC<Props> = ({
     if (statusFilter === "pending")
       matchTab = ["PAID", "PENDING", "PROCESSING"].includes(o.status);
     else if (statusFilter === "shipping")
-      matchTab =
-        ["PACKING", "ON_DELIVERY", "SHIPPING", "DELIVERING"].includes(
-          o.status,
-        ) ||
-        ["SEARCHING_COURIER", "READY_TO_PICKUP"].includes(o.shipping_status);
+      matchTab = [
+        "PACKING",
+        "ON_DELIVERY",
+        "SHIPPING",
+        "DELIVERING",
+        "READY_TO_PICKUP",
+        "PICKING_UP",
+      ].includes(o.status);
     else if (statusFilter === "completed")
       matchTab =
         o.status === "COMPLETED" ||
@@ -327,7 +358,7 @@ export const MerchantOrders: React.FC<Props> = ({
 
   return (
     <>
-      {/* MODAL PIN TETAP SAMA */}
+      {/* MODAL PIN */}
       {pinModalOrder &&
         createPortal(
           <div className="fixed inset-0 z-[99999] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
@@ -379,7 +410,7 @@ export const MerchantOrders: React.FC<Props> = ({
         )}
 
       <div className="w-full space-y-6 animate-in fade-in duration-500 text-left font-sans pb-20 font-black uppercase tracking-tighter">
-        {/* 🚀 HEADER & SEARCH BAR & TOMBOL LAPORAN */}
+        {/* HEADER & SEARCH BAR */}
         <div className="bg-white border-2 border-slate-100 p-6 rounded-xl shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b-8 border-[#008080]">
           <div>
             <h2 className="text-2xl text-slate-900 leading-none flex items-center gap-2">
@@ -405,7 +436,6 @@ export const MerchantOrders: React.FC<Props> = ({
                 className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg pl-10 pr-4 py-3 text-[11px] font-black outline-none focus:border-[#008080] transition-all"
               />
             </div>
-            {/* 🚀 TOMBOL UNDUH LAPORAN */}
             <button
               onClick={handleExportCSV}
               className="w-full sm:w-auto px-5 py-3 bg-slate-900 hover:bg-[#008080] text-white rounded-lg flex items-center justify-center gap-2 text-[11px] tracking-widest transition-colors shadow-md active:scale-95"
@@ -436,16 +466,14 @@ export const MerchantOrders: React.FC<Props> = ({
             count={
               orders.filter(
                 (o) =>
-                  ([
+                  [
                     "PACKING",
+                    "READY_TO_PICKUP",
+                    "PICKING_UP",
                     "ON_DELIVERY",
                     "SHIPPING",
                     "DELIVERING",
-                  ].includes(o.status) ||
-                    ["SEARCHING_COURIER", "READY_TO_PICKUP"].includes(
-                      o.shipping_status,
-                    )) &&
-                  !hiddenOrders.includes(o.id),
+                  ].includes(o.status) && !hiddenOrders.includes(o.id),
               ).length
             }
           />
@@ -479,9 +507,7 @@ export const MerchantOrders: React.FC<Props> = ({
                 order.status,
               );
               const isCancelled = order.status === "CANCELLED";
-              const isCompleted =
-                order.status === "COMPLETED" ||
-                order.shipping_status === "COMPLETED";
+              const isCompleted = order.status === "COMPLETED";
 
               const orderTime = new Date(order.created_at).getTime();
               const diffInMinutes = Math.floor(
@@ -696,6 +722,20 @@ export const MerchantOrders: React.FC<Props> = ({
                             <KeyRound size={16} className="animate-pulse" />{" "}
                             INPUT PIN
                           </button>
+                        ) : order.status === "PACKING" && !isPickup ? (
+                          // 🚀 INI DIA TOMBOL BARU UNTUK MEMANGGIL KURIR
+                          <button
+                            disabled={isUpdating === order.id}
+                            onClick={() => handleReadyForCourier(order.id)}
+                            className="flex-1 md:flex-none px-6 py-3 bg-green-500 hover:bg-green-600 text-white font-black text-[11px] uppercase tracking-widest rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg active:scale-95"
+                          >
+                            {isUpdating === order.id ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              <Truck size={16} className="animate-bounce" />
+                            )}
+                            SIAP DIJEMPUT KURIR
+                          </button>
                         ) : isCompleted ? (
                           <div className="flex-1 md:flex-none px-6 py-3 font-black text-[11px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 bg-green-100 text-green-700">
                             <CheckCircle2 size={16} /> SELESAI
@@ -711,7 +751,9 @@ export const MerchantOrders: React.FC<Props> = ({
                               ? "BATAL"
                               : isPickup
                                 ? "TUNGGU DIAMBIL"
-                                : "TUNGGU KURIR"}
+                                : order.status === "READY_TO_PICKUP"
+                                  ? "MENUNGGU KURIR"
+                                  : "DIJALAN"}
                           </div>
                         )}
                       </div>

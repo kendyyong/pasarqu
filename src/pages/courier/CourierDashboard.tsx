@@ -14,8 +14,7 @@ import {
   MessageSquare,
   TrendingUp,
   MapPin,
-  ShieldCheck,
-  ShoppingBag, // 🚀 ICON BELANJA
+  ShoppingBag,
 } from "lucide-react";
 
 // --- IMPORT LOGIKA & UTILS ---
@@ -36,7 +35,7 @@ import { KurirTopUp } from "./components/KurirTopUp";
 import { WithdrawalModal } from "../../components/finance/WithdrawalModal";
 
 export const CourierDashboard: React.FC = () => {
-  const { user, profile, logout } = useAuth(); // 🚀 TAMBAHKAN PROFILE
+  const { user, profile, logout } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -47,7 +46,7 @@ export const CourierDashboard: React.FC = () => {
   const [showWDModal, setShowWDModal] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
-  // LOGIC HOOK
+  // LOGIC HOOK (🚀 acceptOrder DITAMBAHKAN DI SINI)
   const {
     courierData,
     activeOrder,
@@ -57,11 +56,12 @@ export const CourierDashboard: React.FC = () => {
     currentCoords,
     fetchInitialData,
     toggleOnlineStatus,
+    acceptOrder, // <--- INI YANG TADI KELUPAAN DITARIK DARI HOOK
   } = useCourierDashboard();
 
   const MIN_WITHDRAWAL = 20000;
 
-  // 🚀 AMBIL NAMA KURIR DARI PROFILE KTP
+  // AMBIL NAMA KURIR DARI PROFILE KTP
   const courierName =
     profile?.name || profile?.full_name || courierData?.name || "KURIR JAGOAN";
 
@@ -123,13 +123,10 @@ export const CourierDashboard: React.FC = () => {
   }
 
   return (
-    // 🚀 MASTER WRAPPER: Mengunci layar di h-[100dvh] agar tidak bisa scroll bocor keluar
     <div className="h-[100dvh] w-screen bg-slate-200 flex justify-center font-black text-left uppercase tracking-tighter not-italic text-[12px] overflow-hidden">
-      {/* 🚀 KOTAK APLIKASI: Relative dan h-full */}
       <div className="w-full max-w-[480px] bg-[#F8FAFC] h-full relative flex flex-col shadow-2xl border-x border-slate-300">
-        {/* 🚀 HEADER TOP BAR BARU (MENDUKUNG NAMA & TOMBOL BELANJA) */}
+        {/* HEADER TOP BAR */}
         <header className="shrink-0 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm z-[50]">
-          {/* INFO NAMA KURIR DI KIRI */}
           <div className="flex flex-col min-w-0 flex-1 pr-2">
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
@@ -142,9 +139,7 @@ export const CourierDashboard: React.FC = () => {
             </p>
           </div>
 
-          {/* AREA TOMBOL KANAN */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* 🚀 TOMBOL BELANJA ORANYE */}
             <button
               onClick={() => {
                 window.location.href = "/customer-dashboard";
@@ -155,7 +150,6 @@ export const CourierDashboard: React.FC = () => {
               <span className="hidden sm:inline-block">BELANJA</span>
             </button>
 
-            {/* TOMBOL CHAT */}
             <button
               onClick={() => setActiveTab("messages")}
               className={`w-9 h-9 shrink-0 rounded-xl border flex items-center justify-center transition-colors active:scale-90 ${
@@ -169,10 +163,9 @@ export const CourierDashboard: React.FC = () => {
           </div>
         </header>
 
-        {/* QUICK STATS (Hanya muncul di tab Radar) */}
+        {/* QUICK STATS */}
         {activeTab === "bid" && (
           <div className="shrink-0 bg-slate-900 pt-5 pb-6 px-4 rounded-b-2xl shadow-md z-40 relative">
-            {/* TOMBOL TOGGLE ONLINE/OFFLINE DI PINDAH KE SINI AGAR LEBIH GAGAH */}
             <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 w-[80%] max-w-[300px]">
               <button
                 onClick={handleToggleOnline}
@@ -219,7 +212,7 @@ export const CourierDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* 🚀 MAIN AREA: HANYA BAGIAN INI YANG BISA SCROLL */}
+        {/* MAIN AREA */}
         <main className="flex-1 w-full overflow-y-auto px-4 pt-6 pb-[90px] relative z-0">
           {activeTab === "bid" && (
             <CourierRadar
@@ -227,6 +220,7 @@ export const CourierDashboard: React.FC = () => {
               isOnline={isOnline}
               currentCoords={currentCoords}
               onRefresh={fetchInitialData}
+              acceptOrder={acceptOrder} // 🚀 KABELNYA DISAMBUNGKAN DI SINI!
             />
           )}
           {activeTab === "finance" && (
@@ -253,7 +247,7 @@ export const CourierDashboard: React.FC = () => {
           {activeTab === "messages" && <CourierMessages />}
         </main>
 
-        {/* 🚀 BOTTOM NAV: Dikunci absolute di bagian paling bawah kontainer */}
+        {/* BOTTOM NAV */}
         <nav className="absolute bottom-0 left-0 w-full bg-white border-t border-slate-200 flex justify-around items-center h-[70px] pb-safe z-[100] shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
           <NavButton
             active={activeTab === "bid"}
@@ -290,7 +284,7 @@ export const CourierDashboard: React.FC = () => {
           />
         </nav>
 
-        {/* --- MODALS --- */}
+        {/* MODALS */}
         {showTopUpModal && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
             <div className="relative w-full max-w-sm animate-in zoom-in-95">

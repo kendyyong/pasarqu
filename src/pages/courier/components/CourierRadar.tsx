@@ -7,6 +7,7 @@ interface Props {
   isOnline: boolean;
   currentCoords: { lat: number; lng: number } | null;
   onRefresh: () => void;
+  acceptOrder: (orderId: string) => void; // 🚀 TAMBAHKAN INI SEBAGAI JALUR
 }
 
 export const CourierRadar: React.FC<Props> = ({
@@ -14,9 +15,9 @@ export const CourierRadar: React.FC<Props> = ({
   isOnline,
   currentCoords,
   onRefresh,
+  acceptOrder, // 🚀 TERIMA FUNGSINYA DI SINI
 }) => {
   return (
-    // Dihapus <h1>Radar Driver</h1> agar tampilan atas lebih lega
     <div className="animate-in fade-in w-full space-y-4">
       {activeOrder ? (
         <CourierActiveOrder order={activeOrder} onFinished={onRefresh} />
@@ -25,6 +26,7 @@ export const CourierRadar: React.FC<Props> = ({
           isOnline={isOnline}
           currentCoords={currentCoords}
           onOrderAccepted={onRefresh}
+          acceptOrder={acceptOrder} // 🚀 LEMPAR KE TOMBOL DI BID AREA
         />
       )}
     </div>
