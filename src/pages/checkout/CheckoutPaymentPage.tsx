@@ -130,7 +130,7 @@ export const CheckoutPaymentPage = () => {
           tripCost += extraKm * Number(r.price_per_km || 0);
         }
 
-        // 4. Biaya Multi-Stop & Surge (Hujan/Peak)
+        // 4. Biaya Multi-Stop & Surge
         const multiStopFee = isPickup
           ? 0
           : extraCount * Number(r.multi_stop_fee || 0);
@@ -156,7 +156,7 @@ export const CheckoutPaymentPage = () => {
             (isPickup ? 0 : extraCount * Number(r.surge_fee || 0)),
         );
 
-        // 7. Pembagian Hasil (Revenue Share)
+        // 7. Pembagian Hasil
         const appCutOngkir = tripCost * (Number(r.app_fee_percent || 0) / 100);
         const appShareExtra = isPickup
           ? 0
@@ -189,7 +189,7 @@ export const CheckoutPaymentPage = () => {
     [selectedMarket, cart, shippingMethod, subtotalCart],
   );
 
-  // 🔥 EFEK 1: Inisialisasi Kordinat Pertama Kali (dari Profile atau Toko)
+  // 🔥 EFEK 1: Inisialisasi Kordinat
   useEffect(() => {
     if (selectedMarket && profile && deliveryCoords.lat === 0) {
       const initialLat =
@@ -204,7 +204,7 @@ export const CheckoutPaymentPage = () => {
     }
   }, [selectedMarket, profile?.id]);
 
-  // 🔥 EFEK 2: Sinkronisasi Otomatis Ongkir & Jarak Saat Kordinat Berubah
+  // 🔥 EFEK 2: Sinkronisasi Otomatis Ongkir
   useEffect(() => {
     if (deliveryCoords.lat !== 0 && deliveryCoords.lng !== 0) {
       updateLogistics(deliveryCoords.lat, deliveryCoords.lng);
@@ -261,7 +261,6 @@ export const CheckoutPaymentPage = () => {
               ? 0
               : shippingDetails.courier_earning_total,
           pickup_code: pickupPIN,
-          // Menyimpan kordinat pengiriman agar kurir tahu titik pastinya
           latitude: deliveryCoords.lat,
           longitude: deliveryCoords.lng,
         })
