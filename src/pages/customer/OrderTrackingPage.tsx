@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   useJsApiLoader,
@@ -28,7 +28,7 @@ import {
   Navigation,
   Crosshair,
   Phone,
-  Wallet, // 🚀 <--- TAMBAHKAN Wallet DI SINI
+  Wallet,
 } from "lucide-react";
 import QRCode from "react-qr-code";
 
@@ -40,18 +40,21 @@ import { ComplaintForm } from "../../components/shared/ComplaintForm";
 import { useOrderTracking } from "../../hooks/useOrderTracking";
 import { ProgressSteps } from "./components/TrackingSections";
 
-// 🚀 IKON CUSTOM SUPER PRO (Sama dengan Kurir)
+// 🚀 IKON CUSTOM LOKAL (Standar PasarQu)
 const ICONS = {
-  courier: "https://cdn-icons-png.flaticon.com/512/5696/5696184.png", // Motor Oranye
-  home: "https://cdn-icons-png.flaticon.com/512/1946/1946488.png",
-  store: "https://cdn-icons-png.flaticon.com/512/1055/1055672.png",
+  courier: "/kurir.png",
+  buyer: "/buyer.png",
+  store: "/toko.png",
 };
+
+// 🚀 KOORDINAT CADANGAN
+const DEFAULT_CENTER = { lat: -0.8327, lng: 117.2476 };
 
 const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
   ["places", "routes", "geometry", "drawing"];
 
 export const OrderTrackingPage = () => {
-  const { user, profile } = useAuth() as any;
+  const { user } = useAuth() as any;
   const { showToast } = useToast();
   const { orderId } = useParams();
   const navigate = useNavigate();
@@ -74,7 +77,7 @@ export const OrderTrackingPage = () => {
     lat: number;
     lng: number;
   } | null>(null);
-  const [autoCenter, setAutoCenter] = useState(true); // Kamera ikut motor?
+  const [autoCenter, setAutoCenter] = useState(true);
 
   // STATE MODALS
   const [showChat, setShowChat] = useState(false);
@@ -99,13 +102,54 @@ export const OrderTrackingPage = () => {
     }
   }, [courier]);
 
-  // 🚀 ENGINE 2: RADAR PENYADAP REALTIME (Mendengarkan GPS Kurir)
+  // 🚀 ENGINE 2: RADAR STATUS PESANAN (FIX ANTI-REFRESH)
+  // Engine ini menyadap jika status berubah dari PACKING -> PICKING_UP -> SHIPPING
   useEffect(() => {
-    if (!order?.courier_id || order?.status === "COMPLETED") return;
+    if (!orderId) return;
 
-    console.log("🛰️ Radar Pembeli Aktif: Melacak Kurir", order.courier_id);
-    const channel = supabase
-      .channel(`track_courier_${order.courier_id}`)
+    const orderChannel = supabase
+      .channel(`sync_order_status_${orderId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "orders",
+          filter: `id=eq.${orderId}`,
+        },
+        (payload) => {
+          const updatedOrder = payload.new;
+          setOrder((prev: any) => ({ ...prev, ...updatedOrder }));
+
+          // Notifikasi Pintar Real-time
+          if (updatedOrder.status === "PACKING")
+            showToast("Toko sedang menyiapkan pesananmu!", "success");
+          if (updatedOrder.status === "PICKING_UP")
+            showToast("Kurir sedang menuju toko!", "success");
+          if (updatedOrder.status === "SHIPPING")
+            showToast("Kurir sedang menuju lokasimu!", "success");
+          if (updatedOrder.status === "COMPLETED")
+            showToast("Pesanan Selesai!", "success");
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(orderChannel);
+    };
+  }, [orderId, setOrder, showToast]);
+
+  // 🚀 ENGINE 3: RADAR GPS KURIR (Bergerak Live)
+  useEffect(() => {
+    if (
+      !order?.courier_id ||
+      order?.status === "COMPLETED" ||
+      order?.status === "CANCELLED"
+    )
+      return;
+
+    const gpsChannel = supabase
+      .channel(`track_courier_gps_${order.courier_id}`)
       .on(
         "postgres_changes",
         {
@@ -122,7 +166,7 @@ export const OrderTrackingPage = () => {
             };
             setLiveCourierPos(newPos);
 
-            // Kamera otomatis geser ngikutin motor (Smooth Pan)
+            // Kamera mengikuti kurir
             if (autoCenter && mapInstance) {
               mapInstance.panTo(newPos);
             }
@@ -132,60 +176,52 @@ export const OrderTrackingPage = () => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(gpsChannel);
     };
   }, [order?.courier_id, order?.status, autoCenter, mapInstance]);
 
-  // 🚀 ENGINE 3: PENCARI RUTE & ETA (Estimasi Waktu Tiba)
+  // 🚀 ENGINE 4: PENCARI RUTE (Statis dari Toko ke Pembeli)
   useEffect(() => {
-    if (!isLoaded || !order?.delivery_lat) return;
-
-    // Jangan hitung rute berulang-ulang, cukup sekali dari posisi awal kurir/toko ke pembeli
-    if (directions) return;
+    if (
+      !isLoaded ||
+      !order?.delivery_lat ||
+      !order?.merchant?.latitude ||
+      directions
+    )
+      return;
 
     const directionsService = new window.google.maps.DirectionsService();
-    let origin: google.maps.LatLng | null = null;
-    let destination = new window.google.maps.LatLng(
+    const origin = new window.google.maps.LatLng(
+      order.merchant.latitude,
+      order.merchant.longitude,
+    );
+    const destination = new window.google.maps.LatLng(
       order.delivery_lat,
       order.delivery_lng,
     );
 
-    if (courier?.current_lat && courier?.current_lng) {
-      origin = new window.google.maps.LatLng(
-        courier.current_lat,
-        courier.current_lng,
-      );
-    } else if (order?.merchant?.latitude && order?.merchant?.longitude) {
-      origin = new window.google.maps.LatLng(
-        order.merchant.latitude,
-        order.merchant.longitude,
-      );
-    }
-
-    if (origin) {
-      directionsService.route(
-        {
-          origin,
-          destination,
-          travelMode: window.google.maps.TravelMode.DRIVING,
-        },
-        (res, status) => {
-          if (status === window.google.maps.DirectionsStatus.OK && res) {
-            setDirections(res);
-            // Ambil data ETA dari Google Maps
-            const leg = res.routes[0].legs[0];
-            if (leg)
-              setEtaInfo({
-                distance: leg.distance?.text || "",
-                duration: leg.duration?.text || "",
-              });
+    directionsService.route(
+      {
+        origin,
+        destination,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+      },
+      (res, status) => {
+        if (status === window.google.maps.DirectionsStatus.OK && res) {
+          setDirections(res);
+          const leg = res.routes[0].legs[0];
+          if (leg) {
+            setEtaInfo({
+              distance: leg.distance?.text || "",
+              duration: leg.duration?.text || "",
+            });
           }
-        },
-      );
-    }
-  }, [isLoaded, courier, order, directions]);
+        }
+      },
+    );
+  }, [isLoaded, order, directions]);
 
-  // --- HANDLERS (Tetap Sama) ---
+  // --- HANDLERS ---
   const handleSubmitReview = async () => {
     if (rating === 0) return showToast("PILIH JUMLAH BINTANG!", "error");
     const validMerchantId =
@@ -248,24 +284,30 @@ export const OrderTrackingPage = () => {
     return (
       <div className="h-screen flex flex-col items-center justify-center font-black bg-[#F8FAFC]">
         <Loader2 className="animate-spin text-[#008080] mb-4" size={48} />
-        <p className="tracking-widest text-slate-400">MEMUAT SATELIT...</p>
+        <p className="tracking-widest text-slate-400 uppercase">
+          Mencari Data Pesanan...
+        </p>
       </div>
     );
 
+  // 🚀 FIX LOGIKA STATUS & PROGRESS BAR
   const isPickup = order?.shipping_method === "pickup";
   const isFinished =
     order?.status === "COMPLETED" || order?.status === "CANCELLED";
-  const currentStep =
-    order?.status === "CANCELLED"
-      ? -1
-      : order?.shipping_status === "COMPLETED" || order?.status === "COMPLETED"
-        ? 3
-        : ["SHIPPING", "DELIVERING"].includes(order?.shipping_status)
-          ? 2
-          : ["PACKING", "READY_TO_PICKUP"].includes(order?.shipping_status) ||
-              order?.status === "PACKING"
-            ? 1
-            : 0;
+
+  // Motor muncul di peta saat PICKING_UP, SHIPPING, atau DELIVERING
+  const isCourierVisible = ["PICKING_UP", "SHIPPING", "DELIVERING"].includes(
+    order?.status,
+  );
+
+  // Logika Progress Bar yang benar dan konsisten
+  let currentStep = 0;
+  if (order?.status === "CANCELLED") currentStep = -1;
+  else if (order?.status === "COMPLETED") currentStep = 3;
+  else if (["SHIPPING", "DELIVERING"].includes(order?.status)) currentStep = 2;
+  else if (["PACKING", "READY_TO_PICKUP", "PICKING_UP"].includes(order?.status))
+    currentStep = 1;
+  else currentStep = 0; // PAID / PENDING / UNPAID
 
   return (
     <MobileLayout
@@ -284,7 +326,7 @@ export const OrderTrackingPage = () => {
       cartCount={0}
     >
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans text-left uppercase tracking-tighter">
-        {/* HEADER */}
+        {/* 🚀 HEADER */}
         <header
           className={`sticky top-0 z-50 h-[70px] flex items-center px-4 shadow-md text-white transition-all ${order?.status === "CANCELLED" ? "bg-red-600" : "bg-[#008080]"}`}
         >
@@ -311,7 +353,7 @@ export const OrderTrackingPage = () => {
               >
                 {order?.status === "COMPLETED"
                   ? "PESANAN SELESAI"
-                  : order?.status}
+                  : order?.status?.replace(/_/g, " ")}
                 {isFinished && (
                   <button
                     onClick={(e) => {
@@ -332,27 +374,36 @@ export const OrderTrackingPage = () => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* KIRI: PETA & PROGRESS */}
             <div className="lg:col-span-7 space-y-6">
-              {/* 🚀 MAP SECTION (SUPER PRO) */}
+              {/* 🗺️ MAP SECTION (LIVE TRACKING) */}
               {!isPickup && (
                 <div className="h-[450px] md:h-[500px] bg-slate-200 rounded-[2rem] border-4 border-white shadow-xl overflow-hidden relative">
-                  {/* PETA GOOGLE */}
                   {isLoaded ? (
                     <GoogleMap
                       mapContainerStyle={{ width: "100%", height: "100%" }}
                       center={
                         liveCourierPos || {
-                          lat: order?.delivery_lat || -0.8327,
-                          lng: order?.delivery_lng || 117.2476,
+                          lat:
+                            Number(order?.delivery_lat) || DEFAULT_CENTER.lat,
+                          lng:
+                            Number(order?.delivery_lng) || DEFAULT_CENTER.lng,
                         }
                       }
                       zoom={16}
                       onLoad={(map) => setMapInstance(map)}
-                      onDragStart={() => setAutoCenter(false)} // Matikan autocenter kalau pembeli geser peta
+                      onDragStart={() => setAutoCenter(false)} // User geser peta = matikan auto follow
                       options={{
                         disableDefaultUI: true,
                         gestureHandling: "greedy",
+                        styles: [
+                          {
+                            featureType: "poi",
+                            elementType: "labels",
+                            stylers: [{ visibility: "off" }],
+                          },
+                        ],
                       }}
                     >
+                      {/* Rute Statis: Toko -> Pembeli */}
                       {directions && (
                         <DirectionsRenderer
                           directions={directions}
@@ -367,7 +418,21 @@ export const OrderTrackingPage = () => {
                         />
                       )}
 
-                      {/* POSISI PEMBELI */}
+                      {/* Marker Toko */}
+                      {order?.merchant?.latitude && (
+                        <MarkerF
+                          position={{
+                            lat: order.merchant.latitude,
+                            lng: order.merchant.longitude,
+                          }}
+                          icon={{
+                            url: ICONS.store,
+                            scaledSize: new window.google.maps.Size(35, 35),
+                          }}
+                        />
+                      )}
+
+                      {/* Marker Rumah Pembeli */}
                       {order?.delivery_lat && (
                         <MarkerF
                           position={{
@@ -375,20 +440,20 @@ export const OrderTrackingPage = () => {
                             lng: order.delivery_lng,
                           }}
                           icon={{
-                            url: ICONS.home,
+                            url: ICONS.buyer,
                             scaledSize: new window.google.maps.Size(40, 40),
                           }}
                         />
                       )}
 
-                      {/* POSISI MOTOR KURIR (BISA BERGERAK) */}
-                      {liveCourierPos && (
+                      {/* 🛵 Marker Motor Kurir (Bergeser Live - Aktif Sejak Pickup) */}
+                      {liveCourierPos && isCourierVisible && (
                         <MarkerF
                           position={liveCourierPos}
                           icon={{
                             url: ICONS.courier,
-                            scaledSize: new window.google.maps.Size(64, 64),
-                            anchor: new window.google.maps.Point(32, 32),
+                            scaledSize: new window.google.maps.Size(54, 54),
+                            anchor: new window.google.maps.Point(27, 27),
                           }}
                           zIndex={999}
                         />
@@ -406,38 +471,41 @@ export const OrderTrackingPage = () => {
                     </div>
                   )}
 
-                  {/* 🚀 FLOATING ETA BADGE (Pojok Kiri Atas) */}
+                  {/* ETA BADGE */}
                   {!isFinished && etaInfo.duration && (
-                    <div className="absolute top-4 left-4 bg-slate-900/90 backdrop-blur-md px-4 py-3 rounded-2xl shadow-xl border border-white/10 flex flex-col gap-1 z-10 animate-in fade-in">
+                    <div className="absolute top-4 left-4 bg-slate-900/90 backdrop-blur-md px-4 py-3 rounded-2xl shadow-xl border border-white/10 flex flex-col gap-1 z-10">
                       <h3 className="text-[#008080] text-[10px] font-black tracking-widest flex items-center gap-1.5">
                         <div className="w-2 h-2 bg-teal-500 rounded-full animate-ping"></div>{" "}
                         ESTIMASI TIBA
                       </h3>
                       <p className="text-white text-[16px] font-[1000] tracking-tight leading-none">
                         {etaInfo.duration}{" "}
-                        <span className="text-slate-400 text-[11px]">
+                        <span className="text-slate-400 text-[11px] font-bold">
                           ({etaInfo.distance})
                         </span>
                       </p>
                     </div>
                   )}
 
-                  {/* 🚀 TOMBOL PUSATKAN PETA (Kanan Atas) */}
-                  {!autoCenter && !isFinished && liveCourierPos && (
-                    <button
-                      onClick={() => {
-                        setAutoCenter(true);
-                        mapInstance?.panTo(liveCourierPos);
-                      }}
-                      className="absolute top-4 right-4 bg-white text-slate-800 p-3 rounded-xl shadow-lg border border-slate-200 active:scale-90 z-10 animate-in zoom-in"
-                    >
-                      <Crosshair size={20} className="text-[#FF6600]" />
-                    </button>
-                  )}
+                  {/* TOMBOL PUSATKAN PETA */}
+                  {!autoCenter &&
+                    !isFinished &&
+                    liveCourierPos &&
+                    isCourierVisible && (
+                      <button
+                        onClick={() => {
+                          setAutoCenter(true);
+                          mapInstance?.panTo(liveCourierPos);
+                        }}
+                        className="absolute top-4 right-4 bg-white text-slate-800 p-3 rounded-xl shadow-xl border border-slate-200 active:scale-90 z-10"
+                      >
+                        <Crosshair size={24} className="text-[#FF6600]" />
+                      </button>
+                    )}
 
-                  {/* 🚀 BOTTOM SHEET DRIVER INFO (Bawah Peta) */}
+                  {/* INFO KURIR (Bottom Sheet Peta) */}
                   {order?.status === "COMPLETED" ? (
-                    <div className="absolute bottom-4 left-4 right-4 bg-gradient-to-r from-teal-600 to-[#008080] p-5 rounded-2xl shadow-2xl border border-teal-400 flex items-center gap-4 text-white animate-in slide-in-from-bottom-6 z-10">
+                    <div className="absolute bottom-4 left-4 right-4 bg-gradient-to-r from-teal-600 to-[#008080] p-5 rounded-2xl shadow-2xl border border-teal-400 flex items-center gap-4 text-white z-10">
                       <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
                         <CheckCircle2 size={32} strokeWidth={2.5} />
                       </div>
@@ -451,34 +519,34 @@ export const OrderTrackingPage = () => {
                       </div>
                     </div>
                   ) : (
-                    courier?.id && (
+                    courier?.id &&
+                    isCourierVisible && (
                       <div className="absolute bottom-4 left-4 right-4 bg-white/95 backdrop-blur-xl p-4 rounded-[1.5rem] shadow-2xl border border-slate-200 flex flex-col gap-3 z-10">
                         <div className="flex items-center gap-4">
                           <div className="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-[#FF6600] border border-orange-100 shrink-0">
                             <Bike size={28} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-[15px] font-[1000] text-slate-800 truncate leading-tight">
+                            <p className="text-[14px] font-[1000] text-slate-800 truncate leading-tight">
                               {courier.name || "KURIR PASARQU"}
                             </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="bg-slate-100 text-slate-600 text-[10px] px-2 py-0.5 rounded font-bold border border-slate-200 tracking-widest">
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <span className="bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded-md font-bold border border-slate-200 tracking-widest">
                                 {courier.vehicle_plate || "PLAT DIRAHASIAKAN"}
                               </span>
                             </div>
                           </div>
                         </div>
-                        {/* Tombol Aksi Driver */}
                         <div className="flex gap-2">
                           <button
                             onClick={() => setShowChat(true)}
-                            className="flex-1 bg-[#008080] hover:bg-teal-700 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-black text-[11px] tracking-widest active:scale-95 transition-all"
+                            className="flex-1 bg-[#008080] hover:bg-teal-700 text-white py-3 rounded-xl flex items-center justify-center gap-2 font-black text-[11px] tracking-widest active:scale-95 transition-all shadow-md"
                           >
                             <MessageCircle size={16} /> CHAT
                           </button>
                           <a
                             href={`tel:${courier.phone_number}`}
-                            className="flex-1 bg-white border-2 border-slate-200 text-slate-700 hover:bg-slate-50 py-3 rounded-xl flex items-center justify-center gap-2 font-black text-[11px] tracking-widest active:scale-95 transition-all"
+                            className="flex-1 bg-white border-2 border-slate-200 text-slate-700 hover:bg-slate-50 py-3 rounded-xl flex items-center justify-center gap-2 font-black text-[11px] tracking-widest active:scale-95 transition-all shadow-sm"
                           >
                             <Phone size={16} /> TELPON
                           </a>
@@ -489,11 +557,11 @@ export const OrderTrackingPage = () => {
                 </div>
               )}
 
-              {/* KLAIM PENGAMBILAN (PICKUP) */}
+              {/* KLAIM PICKUP */}
               {isPickup && !isFinished && (
-                <section className="bg-white p-8 rounded-2xl border-4 border-[#FF6600] shadow-xl text-center flex flex-col items-center">
-                  <QrCode size={32} className="text-[#FF6600] mb-3" />
-                  <h2 className="text-[16px] font-black tracking-widest">
+                <section className="bg-white p-8 rounded-3xl border-4 border-[#FF6600] shadow-xl text-center flex flex-col items-center">
+                  <QrCode size={36} className="text-[#FF6600] mb-3" />
+                  <h2 className="text-[18px] font-black tracking-widest">
                     KLAIM PENGAMBILAN
                   </h2>
                   <div className="bg-white p-4 rounded-2xl border-4 border-slate-900 my-5">
@@ -505,28 +573,29 @@ export const OrderTrackingPage = () => {
                 </section>
               )}
 
-              {/* PROGRESS STEPS */}
+              {/* PROGRESS STEPS - FIXED LOGIC */}
               {order?.status !== "CANCELLED" && (
-                <section className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
+                <section className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
                   <ProgressSteps currentStep={currentStep} />
                 </section>
               )}
             </div>
 
-            {/* KANAN: DETAIL BELANJA DLL */}
+            {/* KANAN: DETAIL BELANJA */}
             <div className="lg:col-span-5 space-y-6">
-              {/* RINCIAN PRODUK */}
               <section className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
-                <div className="flex items-center gap-2 border-b border-slate-100 pb-4 mb-5">
-                  <ReceiptText size={20} className="text-[#008080]" />
+                <div className="flex items-center gap-3 border-b border-slate-100 pb-4 mb-5">
+                  <div className="p-2 bg-teal-50 rounded-xl text-[#008080]">
+                    <ReceiptText size={20} />
+                  </div>
                   <h4 className="text-[14px] font-black tracking-widest text-slate-800">
                     DAFTAR BELANJA
                   </h4>
                 </div>
-                <div className="space-y-5">
+                <div className="space-y-4">
                   {orderItems.map((item: any, idx: number) => (
                     <div key={idx} className="flex gap-4 items-center">
-                      <div className="w-16 h-16 bg-slate-100 rounded-xl overflow-hidden shrink-0 border border-slate-200">
+                      <div className="w-16 h-16 bg-slate-50 rounded-xl overflow-hidden shrink-0 border border-slate-100">
                         <img
                           src={item.product?.image_url}
                           className="w-full h-full object-cover"
@@ -537,12 +606,13 @@ export const OrderTrackingPage = () => {
                         <h5 className="text-[12px] font-black text-slate-900 leading-tight mb-1 truncate">
                           {item.product?.name}
                         </h5>
-                        <p className="text-[10px] font-bold text-slate-400">
+                        <p className="text-[10px] font-bold text-slate-400 tracking-widest">
                           JUMLAH: {item.quantity}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[14px] font-black text-slate-800 font-sans tracking-tight">
+                        <p className="text-[14px] font-[1000] text-slate-800 font-sans tracking-tight">
+                          Rp{" "}
                           {(
                             item.quantity * item.price_at_purchase
                           ).toLocaleString()}
@@ -553,10 +623,11 @@ export const OrderTrackingPage = () => {
                 </div>
               </section>
 
-              {/* ALAMAT ANTAR */}
               <section className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
-                <div className="flex items-center gap-2 border-b border-slate-100 pb-4 mb-4">
-                  <MapPin size={20} className="text-[#FF6600]" />
+                <div className="flex items-center gap-3 border-b border-slate-100 pb-4 mb-4">
+                  <div className="p-2 bg-orange-50 rounded-xl text-[#FF6600]">
+                    <MapPin size={20} />
+                  </div>
                   <h4 className="text-[14px] font-black tracking-widest text-slate-800">
                     ALAMAT ANTAR
                   </h4>
@@ -566,7 +637,7 @@ export const OrderTrackingPage = () => {
                     <Bike size={20} />
                   </div>
                   <div className="flex-1 mt-1">
-                    <p className="text-[11px] font-bold text-slate-500 leading-relaxed normal-case tracking-normal">
+                    <p className="text-[12px] font-bold text-slate-600 leading-relaxed normal-case tracking-normal">
                       {order?.address || "Alamat tidak ditemukan"}
                     </p>
                   </div>
@@ -582,7 +653,9 @@ export const OrderTrackingPage = () => {
                 <div className="space-y-4 font-bold text-[12px] opacity-90 border-b border-white/20 pb-6 mb-6">
                   <div className="flex justify-between">
                     <span>METODE PEMBAYARAN</span>
-                    <span className="text-white">{order?.payment_method}</span>
+                    <span className="text-white bg-white/10 px-2 py-0.5 rounded">
+                      {order?.payment_method}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>BIAYA LAYANAN</span>
@@ -612,12 +685,12 @@ export const OrderTrackingPage = () => {
               </section>
 
               {/* ACTION BUTTONS */}
-              <div className="space-y-4">
+              <div className="space-y-3 pb-6">
                 {(order?.status === "COMPLETED" ||
                   order?.shipping_status === "COMPLETED") &&
                   (hasReviewed ? (
-                    <div className="w-full bg-teal-50 border-2 border-[#008080] text-[#008080] py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-[13px] tracking-widest shadow-sm">
-                      <CheckCircle2 size={20} strokeWidth={3} /> ULASAN TELAH
+                    <div className="w-full bg-teal-50 border border-[#008080] text-[#008080] py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-[12px] tracking-widest shadow-sm">
+                      <CheckCircle2 size={20} strokeWidth={3} /> ULASAN
                       DIBERIKAN
                     </div>
                   ) : (
@@ -626,14 +699,14 @@ export const OrderTrackingPage = () => {
                       className="w-full bg-gradient-to-r from-[#FF6600] to-orange-500 text-white py-4 rounded-2xl shadow-lg shadow-orange-500/30 flex items-center justify-center gap-3 font-black text-[13px] tracking-widest active:scale-95 transition-all"
                     >
                       <Star fill="white" size={20} className="animate-pulse" />{" "}
-                      BERI PENILAIAN SEKARANG
+                      BERI PENILAIAN
                     </button>
                   ))}
 
-                <div className="flex gap-4">
+                <div className="flex gap-3">
                   <button
                     onClick={() => setShowSupportModal(true)}
-                    className="flex-1 bg-white border-2 border-slate-200 hover:bg-slate-50 text-slate-600 py-3.5 rounded-xl flex items-center justify-center gap-2 font-black text-[12px] tracking-widest active:scale-95 transition-all shadow-sm"
+                    className="flex-1 bg-white border-2 border-slate-200 hover:bg-slate-50 text-slate-600 py-3.5 rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] tracking-widest active:scale-95 transition-all shadow-sm"
                   >
                     <HeadphonesIcon size={18} /> CS BANTUAN
                   </button>
@@ -642,26 +715,25 @@ export const OrderTrackingPage = () => {
                       onClick={() =>
                         window.open(`/invoice/${orderId}`, "_blank")
                       }
-                      className="flex-1 bg-white border-2 border-slate-900 hover:bg-slate-900 hover:text-white text-slate-900 py-3.5 rounded-xl flex items-center justify-center gap-2 font-black text-[12px] tracking-widest active:scale-95 transition-all shadow-sm"
+                      className="flex-1 bg-slate-900 hover:bg-black text-white py-3.5 rounded-2xl flex items-center justify-center gap-2 font-black text-[11px] tracking-widest active:scale-95 transition-all shadow-md"
                     >
                       <Download size={18} /> UNDUH NOTA
                     </button>
                   )}
                 </div>
 
-                {/* CANCEL BUTTON */}
                 {["PAID", "PROCESSING", "PENDING"].includes(order?.status) && (
                   <button
                     onClick={handleCancelOrder}
                     disabled={isCancelling}
-                    className="w-full mt-2 bg-red-50 text-red-600 py-4 rounded-xl flex items-center justify-center gap-2 font-black tracking-widest text-[12px] active:scale-95 transition-all shadow-sm"
+                    className="w-full mt-2 bg-red-50 text-red-600 py-4 rounded-2xl flex items-center justify-center gap-2 font-black tracking-widest text-[12px] active:scale-95 transition-all shadow-sm"
                   >
                     {isCancelling ? (
                       <Loader2 className="animate-spin" size={18} />
                     ) : (
                       <Ban size={18} strokeWidth={2.5} />
                     )}{" "}
-                    BATALKAN PESANAN INI
+                    BATALKAN PESANAN
                   </button>
                 )}
               </div>
@@ -669,7 +741,7 @@ export const OrderTrackingPage = () => {
           </div>
         </main>
 
-        {/* --- MODALS (REVIEW, COMPLAINT, CHAT) TETAP SAMA SEPERTI KODINGAN BOS SEBELUMNYA --- */}
+        {/* MODALS */}
         {showReviewModal && (
           <div className="fixed inset-0 z-[1000] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-[2rem] p-8 relative shadow-2xl animate-in zoom-in-95 border-4 border-[#008080]">
@@ -740,7 +812,7 @@ export const OrderTrackingPage = () => {
             <div className="relative w-full max-w-lg bg-white rounded-3xl p-2 animate-in zoom-in-95">
               <button
                 onClick={() => setShowSupportModal(false)}
-                className="absolute -top-12 right-0 flex items-center gap-2 text-white font-black text-[11px] tracking-widest bg-white/20 px-4 py-2 rounded-full"
+                className="absolute -top-12 right-0 flex items-center gap-2 text-white font-black text-[11px] tracking-widest bg-white/20 px-4 py-2 rounded-full hover:bg-white/30"
               >
                 <X size={16} /> TUTUP CS
               </button>
@@ -756,8 +828,8 @@ export const OrderTrackingPage = () => {
 
         {showChat && (
           <div className="fixed inset-0 z-[1000] bg-slate-900/80 backdrop-blur-sm flex items-end md:items-center justify-center p-0 md:p-4">
-            <div className="w-full max-w-md h-[90vh] md:h-[600px] bg-white rounded-t-3xl md:rounded-3xl flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom-full md:zoom-in-95">
-              <div className="p-5 bg-[#008080] text-white flex justify-between items-center shrink-0">
+            <div className="w-full max-w-md h-[90vh] md:h-[600px] bg-white rounded-t-3xl md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom-full md:zoom-in-95">
+              <div className="p-5 bg-[#008080] text-white flex justify-between items-center shrink-0 shadow-md z-10">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
                     <Bike size={20} />

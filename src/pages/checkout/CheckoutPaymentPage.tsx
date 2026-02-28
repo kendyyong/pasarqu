@@ -16,6 +16,7 @@ import { CheckoutAddress } from "./components/CheckoutAddress";
 const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
   ["places", "routes", "geometry", "drawing"];
 
+// RUMUS HAVERSINE UNTUK JARAK PRESISI
 const getDistanceKM = (
   lat1: number,
   lon1: number,
@@ -67,17 +68,18 @@ export const CheckoutPaymentPage = () => {
 
   const subtotalCart = cart.reduce((s, i) => s + i.price * i.quantity, 0);
 
+  // 🚀 UPDATE LOGISTIK: PERHITUNGAN FINAL BOS
   const updateLogistics = useCallback(
     async (currentLat: number, currentLng: number) => {
       if (!selectedMarket || !currentLat || !currentLng) return;
 
       try {
-        // 🚀 FIX: Menggunakan Number() agar TypeScript tidak error
         const marketLat = Number(selectedMarket.latitude);
         const marketLng = Number(selectedMarket.longitude);
         const buyerLat = Number(currentLat);
         const buyerLng = Number(currentLng);
 
+        // 1. Hitung Jarak
         const distance = getDistanceKM(
           buyerLat,
           buyerLng,
@@ -85,12 +87,14 @@ export const CheckoutPaymentPage = () => {
           marketLng,
         );
 
+        // 2. Ambil Aturan Tarif
         let { data: r } = await supabase
           .from("shipping_rates")
           .select("*")
           .eq("district_name", selectedMarket.district || "")
           .maybeSingle();
 
+        // Fallback jika tidak ada data di DB
         if (!r) {
           const { data: firstRate } = await supabase
             .from("shipping_rates")
@@ -103,6 +107,10 @@ export const CheckoutPaymentPage = () => {
             price_per_km: 2000,
             app_fee_percent: 20,
             buyer_service_fee: 2000,
+            multi_stop_fee: 5000,
+            multi_stop_app_share: 1000,
+            handling_fee: 0,
+            surge_fee: 0,
           };
         }
 
@@ -113,20 +121,26 @@ export const CheckoutPaymentPage = () => {
           uniqueMerchants.length > 1 ? uniqueMerchants.length - 1 : 0;
         const isPickup = shippingMethod === "pickup";
 
-        let baseFare = isPickup ? 0 : Number(r.base_fare || 0);
-        const freeDist = Number(r.base_distance_km || 3);
+        // 3. Kalkulasi Ongkir Pokok
+        let tripCost = isPickup ? 0 : Number(r.base_fare || 0);
+        const baseDist = Number(r.base_distance_km || 3);
 
-        if (!isPickup && distance > freeDist) {
-          const extraKm = distance - freeDist;
-          baseFare += Math.ceil(extraKm) * Number(r.price_per_km || 0);
+        if (!isPickup && distance > baseDist) {
+          const extraKm = Math.ceil(distance - baseDist);
+          tripCost += extraKm * Number(r.price_per_km || 0);
         }
 
-        const totalExtraFeeKurir = isPickup
+        // 4. Biaya Multi-Stop & Surge (Hujan/Peak)
+        const multiStopFee = isPickup
           ? 0
           : extraCount * Number(r.multi_stop_fee || 0);
-        const surgeCost = isPickup ? 0 : extraCount * Number(r.surge_fee || 0);
-        const realShippingCost = baseFare + totalExtraFeeKurir + surgeCost;
+        const surgeFeeTotal = isPickup
+          ? 0
+          : extraCount * Number(r.surge_fee || 0);
 
+        const realShippingCost = tripCost + multiStopFee + surgeFeeTotal;
+
+        // 5. Cek Subsidi Gratis Ongkir
         let userPayShipping = realShippingCost;
         let appSubsidy = 0;
         const minOrderFS = Number(r.free_shipping_min_order || 0);
@@ -135,23 +149,31 @@ export const CheckoutPaymentPage = () => {
           appSubsidy = realShippingCost;
         }
 
+        // 6. Biaya Layanan & Penanganan
         const totalLayanan = Math.round(
           Number(r.buyer_service_fee || 0) +
             Number(r.handling_fee || 0) +
             (isPickup ? 0 : extraCount * Number(r.surge_fee || 0)),
         );
 
-        const appCut = baseFare * (Number(r.app_fee_percent || 0) / 100);
-        const courierNet = baseFare - appCut + totalExtraFeeKurir;
+        // 7. Pembagian Hasil (Revenue Share)
+        // Bagian Aplikasi dari ongkir murni
+        const appCutOngkir = tripCost * (Number(r.app_fee_percent || 0) / 100);
         const appShareExtra = isPickup
           ? 0
           : extraCount * Number(r.multi_stop_app_share || 0);
+
+        // Jatah Bersih Kurir
+        const courierNet =
+          tripCost - appCutOngkir + (multiStopFee - appShareExtra);
+
+        // Kas Juragan (Total System Fee)
         const systemFee =
-          appCut +
+          appCutOngkir +
+          appShareExtra +
           Number(r.buyer_service_fee || 0) +
           Number(r.handling_fee || 0) +
-          appShareExtra +
-          surgeCost;
+          surgeFeeTotal;
 
         setShippingDetails({
           base_fare: Math.round(userPayShipping),
@@ -172,7 +194,6 @@ export const CheckoutPaymentPage = () => {
 
   useEffect(() => {
     if (selectedMarket && profile) {
-      // 🚀 FIX: Konversi aman untuk sync awal
       const initialLat =
         Number(profile.latitude) || Number(selectedMarket.latitude);
       const initialLng =
