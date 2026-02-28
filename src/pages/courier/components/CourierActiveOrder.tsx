@@ -22,6 +22,7 @@ import {
   Navigation,
   Crosshair,
   ExternalLink,
+  Coins,
 } from "lucide-react";
 
 import { OrderChatRoom } from "../../../features/chat/OrderChatRoom";
@@ -29,9 +30,9 @@ import { OrderChatRoom } from "../../../features/chat/OrderChatRoom";
 const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
   ["places", "routes", "geometry", "drawing"];
 
-// 🚀 IKON MOTOR OJOL SUPER GAGAH (Format PNG Transparan Resolusi Tinggi)
+const DEFAULT_CENTER = { lat: -0.8327, lng: 117.2476 };
+
 const ICONS = {
-  // Ikon Kurir Motor Oranye (Gaya Grab/Gojek)
   courier: "https://cdn-icons-png.flaticon.com/512/10484/10484347.png",
   store: "https://cdn-icons-png.flaticon.com/512/1055/1055672.png",
   home: "https://cdn-icons-png.flaticon.com/512/1946/1946488.png",
@@ -47,16 +48,18 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [showChat, setShowChat] = useState(false);
-
-  // 🚀 STATE NAVIGASI FULLSCREEN
   const [isNavigatingMode, setIsNavigatingMode] = useState(false);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
-
   const [currentPos, setCurrentPos] = useState<{
     lat: number;
     lng: number;
   } | null>(null);
   const [directions, setDirections] = useState<any>(null);
+  const [chatTarget, setChatTarget] = useState<{
+    type: string;
+    name: string;
+    receiverId: string;
+  }>({ type: "", name: "", receiverId: "" });
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
@@ -64,68 +67,59 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
     libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
-  const [chatTarget, setChatTarget] = useState<{
-    type: "courier_customer" | "courier_merchant";
-    name: string;
-    receiverId: string;
-  }>({ type: "courier_customer", name: "Pelanggan", receiverId: "" });
-
   const isCompleted = order?.status === "COMPLETED";
   const isCanceled = order?.status === "CANCELLED";
   const isPickingUp =
     order?.status === "READY_TO_PICKUP" || order?.status === "PICKING_UP";
 
-  const storeLat = order?.merchants?.latitude || order?.merchant?.latitude;
-  const storeLng = order?.merchants?.longitude || order?.merchant?.longitude;
-  const buyerLat =
-    order?.delivery_lat || order?.profiles?.latitude || order?.latitude;
-  const buyerLng =
-    order?.delivery_lng || order?.profiles?.longitude || order?.longitude;
-
+  const storeLat = Number(
+    order?.merchants?.latitude || order?.merchant?.latitude || 0,
+  );
+  const storeLng = Number(
+    order?.merchants?.longitude || order?.merchant?.longitude || 0,
+  );
+  const buyerLat = Number(
+    order?.delivery_lat || order?.profiles?.latitude || 0,
+  );
+  const buyerLng = Number(
+    order?.delivery_lng || order?.profiles?.longitude || 0,
+  );
   const destLat = isPickingUp ? storeLat : buyerLat;
   const destLng = isPickingUp ? storeLng : buyerLng;
 
-  // 1. ENGINE GPS TRACKER
   useEffect(() => {
-    const isActiveDelivery =
-      order?.status === "SHIPPING" ||
-      order?.status === "DELIVERING" ||
-      order?.status === "PICKING_UP" ||
-      order?.status === "READY_TO_PICKUP";
-
+    const isActiveDelivery = [
+      "SHIPPING",
+      "DELIVERING",
+      "PICKING_UP",
+      "READY_TO_PICKUP",
+    ].includes(order?.status);
     if (isActiveDelivery && user?.id) {
       const interval = setInterval(() => {
         if (!navigator.geolocation) return;
-
         navigator.geolocation.getCurrentPosition(
           async (position) => {
             const { latitude, longitude } = position.coords;
-            setCurrentPos({ lat: latitude, lng: longitude });
-
-            // Jika dalam mode navigasi, otomatis pusatkan peta ke motor
-            if (isNavigatingMode && mapInstance) {
-              mapInstance.panTo({ lat: latitude, lng: longitude });
-            }
-
+            const newPos = { lat: latitude, lng: longitude };
+            setCurrentPos(newPos);
+            if (isNavigatingMode && mapInstance) mapInstance.panTo(newPos);
             await supabase
               .from("profiles")
               .update({ latitude, longitude })
               .eq("id", user.id);
           },
-          (error) => console.error("GPS Error:", error),
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
+          (error) => console.error(error),
+          { enableHighAccuracy: true, timeout: 10000 },
         );
       }, 5000);
-
       return () => clearInterval(interval);
     }
   }, [order?.status, user?.id, isNavigatingMode, mapInstance]);
 
-  // 2. ENGINE PENCARI RUTE (DIRECTIONS)
   useEffect(() => {
-    if (!isLoaded || !currentPos || !destLat || !destLng) return;
+    if (!isLoaded || !currentPos || !destLat || !destLng || destLat === 0)
+      return;
     const directionsService = new window.google.maps.DirectionsService();
-
     directionsService.route(
       {
         origin: new window.google.maps.LatLng(currentPos.lat, currentPos.lng),
@@ -133,44 +127,21 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
         travelMode: window.google.maps.TravelMode.DRIVING,
       },
       (res, status) => {
-        if (status === window.google.maps.DirectionsStatus.OK) {
+        if (status === window.google.maps.DirectionsStatus.OK)
           setDirections(res);
-        }
       },
     );
   }, [isLoaded, currentPos, destLat, destLng]);
 
-  // 3. FUNGSI LEMPAR KE APLIKASI NATIVE (OPSIONAL JIKA KURIR MAU)
-  const handleOpenExternalMaps = () => {
-    if (!destLat || !destLng)
-      return showToast("Koordinat belum lengkap!", "error");
-
-    let url = `https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}&travelmode=driving`;
-    if (currentPos?.lat && currentPos?.lng) {
-      url = `https://www.google.com/maps/dir/?api=1&origin=${currentPos.lat},${currentPos.lng}&destination=${destLat},${destLng}&travelmode=driving`;
-    }
-    window.location.href = url;
-  };
-
   const handleStatusUpdate = async () => {
     if (!order?.id) return;
     setLoading(true);
-
     try {
       let nextStatus = "";
-      let toastMsg = "";
-
-      if (order.status === "PACKING") {
-        showToast("TUNGGU TOKO SELESAI BUNGKUS!", "error");
-        setLoading(false);
-        return;
-      }
-      if (order.status === "READY_TO_PICKUP" || order.status === "PICKING_UP") {
+      if (order.status === "READY_TO_PICKUP" || order.status === "PICKING_UP")
         nextStatus = "SHIPPING";
-        toastMsg = "STATUS: MENUJU LOKASI PEMBELI 🛵💨";
-      } else if (order.status === "SHIPPING" || order.status === "DELIVERING") {
+      else if (order.status === "SHIPPING" || order.status === "DELIVERING")
         nextStatus = "COMPLETED";
-      }
 
       if (nextStatus === "COMPLETED") {
         const { error: rpcError } = await supabase.rpc(
@@ -178,97 +149,46 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           { p_order_id: order.id },
         );
         if (rpcError) throw rpcError;
-        await supabase
-          .from("orders")
-          .update({ status: "COMPLETED", shipping_status: "COMPLETED" })
-          .eq("id", order.id);
-        showToast("TUGAS SELESAI! SALDO CAIR! 💰", "success");
-        setIsNavigatingMode(false);
       } else if (nextStatus !== "") {
-        const { error } = await supabase
+        await supabase
           .from("orders")
           .update({ status: nextStatus, shipping_status: nextStatus })
           .eq("id", order.id);
-        if (error) throw error;
-        showToast(toastMsg, "success");
       }
       onFinished();
     } catch (err: any) {
-      showToast(err.message || "Gagal update status", "error");
+      showToast(err.message, "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const openChat = (
-    type: "courier_customer" | "courier_merchant",
-    name: string,
-    receiverId: string,
-  ) => {
-    if (!receiverId) return showToast("ID TUJUAN TIDAK DITEMUKAN!", "error");
+  // 🚀 FUNGSI WRAPPER UNTUK FIX TYPESCRIPT VOID ERROR
+  const handleOpenChat = (type: string, name: string, receiverId: string) => {
     setChatTarget({ type, name, receiverId });
     setShowChat(true);
   };
 
-  const ActionButton = () => (
-    <>
-      {order.status === "PACKING" ? (
-        <div className="w-full py-4 bg-slate-200 text-slate-500 rounded-xl font-[1000] uppercase text-[11px] shadow-inner flex items-center justify-center gap-2">
-          <Loader2 className="animate-spin" size={16} /> MENUNGGU BUNGKUSAN
-          TOKO...
-        </div>
-      ) : (
-        <button
-          onClick={handleStatusUpdate}
-          disabled={loading}
-          className={`w-full py-3.5 text-white rounded-xl font-[1000] uppercase text-[12px] shadow-md active:scale-95 flex items-center justify-center gap-2 transition-all ${
-            order.status === "SHIPPING" || order.status === "DELIVERING"
-              ? "bg-[#008080] hover:bg-teal-700 shadow-teal-900/30"
-              : "bg-[#FF6600] hover:bg-orange-600 shadow-orange-900/30"
-          }`}
-        >
-          {loading ? (
-            <Loader2 className="animate-spin" size={16} />
-          ) : (
-            <CheckCircle size={16} strokeWidth={3} />
-          )}
-          {order.status === "SHIPPING" || order.status === "DELIVERING"
-            ? "KONFIRMASI TIBA!"
-            : "SAYA SUDAH AMBIL BARANG"}
-        </button>
-      )}
-    </>
-  );
-
   return (
     <>
-      {/* RUANG CHAT POPUP */}
       {showChat &&
         createPortal(
-          <div className="fixed inset-0 z-[999999] bg-white md:bg-slate-900/80 backdrop-blur-sm flex justify-center">
-            <div className="w-full max-w-[480px] flex flex-col h-[100dvh] bg-white overflow-hidden shadow-2xl animate-in slide-in-from-bottom-8">
-              <div className="p-4 flex justify-between items-center bg-[#008080] text-white shrink-0 shadow-sm">
-                <div className="flex items-center gap-3 ml-2">
-                  <div className="w-2 h-2 rounded-full bg-teal-300 animate-pulse"></div>
-                  <div>
-                    <h3 className="text-[14px] leading-none font-black uppercase">
-                      {chatTarget.name}
-                    </h3>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowChat(false)}
-                  className="w-10 h-10 hover:bg-teal-700 rounded-full flex items-center justify-center transition-all"
-                >
-                  <X size={24} strokeWidth={3} />
+          <div className="fixed inset-0 z-[999999] bg-white flex justify-center">
+            <div className="w-full max-w-[480px] flex flex-col h-full">
+              <div className="p-4 flex justify-between items-center bg-[#008080] text-white shrink-0">
+                <h3 className="text-[14px] font-black uppercase">
+                  {chatTarget.name}
+                </h3>
+                <button onClick={() => setShowChat(false)}>
+                  <X size={24} />
                 </button>
               </div>
-              <div className="flex-1 w-full bg-slate-50 relative overflow-hidden flex flex-col">
+              <div className="flex-1 relative overflow-hidden bg-slate-50">
                 <OrderChatRoom
                   orderId={order.id}
                   receiverId={chatTarget.receiverId}
                   receiverName={chatTarget.name}
-                  chatType={chatTarget.type}
+                  chatType={chatTarget.type as any}
                 />
               </div>
             </div>
@@ -276,53 +196,48 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           document.body,
         )}
 
-      <div className="space-y-4 animate-in slide-in-from-bottom-4 text-left font-sans uppercase tracking-tighter pb-4">
-        {/* 🗺️ VISUAL PETA (Desain Lebih Clean) */}
-        <div
-          className={
-            isNavigatingMode
-              ? "fixed inset-0 z-[9999] bg-slate-100 flex flex-col animate-in zoom-in-95 duration-300"
-              : "h-[220px] w-full bg-slate-200 rounded-2xl overflow-hidden relative shadow-sm border border-slate-300 transition-all duration-300"
-          }
-        >
-          {isNavigatingMode && (
-            <div className="absolute top-0 left-0 w-full p-4 z-10 pointer-events-none flex justify-between items-start pt-safe-top">
-              <div className="bg-slate-900/90 backdrop-blur-md px-4 py-2.5 rounded-2xl pointer-events-auto border border-white/10 shadow-2xl flex flex-col gap-1">
-                <h3 className="text-[#008080] text-[10px] font-black tracking-widest flex items-center gap-1">
-                  <div className="w-2 h-2 bg-teal-500 rounded-full animate-ping"></div>{" "}
-                  NAVIGASI AKTIF
-                </h3>
-                <p className="text-white text-[13px] font-bold">
-                  Menuju:{" "}
-                  {isPickingUp
-                    ? order.merchants?.shop_name || "Toko"
-                    : order.profiles?.full_name || "Pembeli"}
-                </p>
-              </div>
-              <button
-                onClick={() => setIsNavigatingMode(false)}
-                className="bg-red-500 text-white p-3 rounded-full pointer-events-auto shadow-lg active:scale-90 border-2 border-white"
-              >
-                <X size={20} strokeWidth={4} />
-              </button>
+      <div className="flex flex-col h-full overflow-y-auto no-scrollbar font-sans font-black uppercase tracking-tighter text-left bg-slate-50">
+        {!isNavigatingMode && (
+          <div className="shrink-0 bg-[#0F172A] p-4 flex items-center justify-between border-b border-white/5">
+            <div>
+              <p className="text-[9px] text-[#FF6600] font-bold tracking-[0.2em] mb-1">
+                UPAH ANTAR
+              </p>
+              <h2 className="text-xl text-white font-[1000] flex items-center gap-2">
+                <Coins size={18} className="text-[#FF6600]" />
+                RP {(order?.shipping_cost || 0).toLocaleString()}
+              </h2>
             </div>
-          )}
+            <div className="text-right">
+              <p className="text-[9px] text-slate-400 font-bold tracking-[0.2em] mb-1">
+                JARAK
+              </p>
+              <p className="text-white text-sm font-bold">
+                {directions?.routes[0]?.legs[0]?.distance?.text || "..."}
+              </p>
+            </div>
+          </div>
+        )}
 
+        <div
+          className={`relative shrink-0 w-full transition-all duration-500 ${isNavigatingMode ? "fixed inset-0 z-[999] h-full" : "h-[450px] border-b-2 border-slate-200"}`}
+        >
           {isLoaded ? (
             <GoogleMap
               mapContainerStyle={{ width: "100%", height: "100%" }}
-              center={
-                currentPos || {
-                  lat: destLat || -0.8327,
-                  lng: destLng || 117.2476,
-                }
-              }
+              center={currentPos || { lat: destLat, lng: destLng }}
               zoom={isNavigatingMode ? 18 : 16}
-              onLoad={(map) => setMapInstance(map)}
+              onLoad={(m) => setMapInstance(m)}
               options={{
                 disableDefaultUI: true,
                 gestureHandling: "greedy",
-                zoomControl: isNavigatingMode,
+                styles: [
+                  {
+                    featureType: "poi",
+                    elementType: "labels",
+                    stylers: [{ visibility: "off" }],
+                  },
+                ],
               }}
             >
               {directions && (
@@ -332,201 +247,226 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                     suppressMarkers: true,
                     polylineOptions: {
                       strokeColor: "#008080",
-                      strokeWeight: 5,
+                      strokeWeight: 6,
                       strokeOpacity: 0.8,
                     },
                   }}
                 />
               )}
-
-              {/* 🚀 MOTOR OJOL GAGAH - UKURAN PROPORSIONAL (48x48) */}
               {currentPos && (
                 <MarkerF
                   position={currentPos}
                   icon={{
                     url: ICONS.courier,
-                    scaledSize: new window.google.maps.Size(48, 48),
-                    anchor: new window.google.maps.Point(24, 24),
+                    scaledSize: new window.google.maps.Size(54, 54),
+                    anchor: new window.google.maps.Point(27, 27),
                   }}
-                  zIndex={999}
+                  zIndex={99}
                 />
               )}
-
-              {/* 🚀 TARGET LOKASI */}
-              {destLat && (
+              {destLat !== 0 && (
                 <MarkerF
                   position={{ lat: destLat, lng: destLng }}
                   icon={{
                     url: isPickingUp ? ICONS.store : ICONS.home,
-                    scaledSize: new window.google.maps.Size(32, 32),
+                    scaledSize: new window.google.maps.Size(38, 38),
+                    anchor: new window.google.maps.Point(19, 19),
                   }}
                 />
               )}
             </GoogleMap>
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100">
-              <Loader2 className="animate-spin text-[#008080] mb-2" size={24} />
+            <div className="h-full w-full bg-slate-100 flex items-center justify-center animate-pulse">
+              <Loader2 className="animate-spin text-[#008080]" />
             </div>
           )}
 
-          {/* TOMBOL OVERLAY PETA */}
-          {!isNavigatingMode ? (
+          {isNavigatingMode ? (
+            <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 pt-12 pb-10">
+              <div className="w-full flex justify-between items-start pointer-events-auto">
+                <div className="bg-slate-900/90 backdrop-blur-xl px-4 py-2.5 rounded-2xl border border-white/10 shadow-2xl flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-teal-500/20 flex items-center justify-center">
+                    <Navigation
+                      size={16}
+                      className="text-teal-400 fill-teal-400 animate-pulse"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[#008080] text-[8px] font-black tracking-widest leading-none mb-1">
+                      NAVIGASI AKTIF
+                    </p>
+                    <p className="text-white text-[12px] font-black">
+                      {isPickingUp ? "MENUJU TOKO" : "MENUJU PEMBELI"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsNavigatingMode(false)}
+                  className="bg-red-500 text-white p-2.5 rounded-full border-2 border-white shadow-xl active:scale-90"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="w-full flex flex-col gap-3 pointer-events-auto">
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => mapInstance?.panTo(currentPos!)}
+                    className="bg-white text-[#008080] p-3.5 rounded-full shadow-2xl active:scale-90 border border-slate-200"
+                  >
+                    <Crosshair size={22} />
+                  </button>
+                </div>
+                <div className="bg-white/95 backdrop-blur-md p-3 rounded-[2rem] shadow-2xl border border-slate-200">
+                  <ActionButton
+                    onClick={handleStatusUpdate}
+                    loading={loading}
+                    status={order.status}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
             <button
               onClick={() => setIsNavigatingMode(true)}
-              className="absolute bottom-3 right-3 bg-white text-slate-800 p-2.5 rounded-xl shadow-lg flex items-center justify-center active:scale-90 transition-all border border-slate-200"
+              className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-[#008080] text-white px-8 py-3 rounded-full text-[11px] shadow-2xl border-2 border-white flex items-center gap-2 active:scale-90 transition-all z-20"
             >
-              <Navigation size={18} className="text-[#008080]" />
+              <Navigation size={16} fill="white" /> MULAI NAVIGASI
             </button>
-          ) : (
-            <>
-              <button
-                onClick={() =>
-                  mapInstance?.panTo(
-                    currentPos || { lat: destLat, lng: destLng },
-                  )
-                }
-                className="absolute right-4 bottom-32 bg-white text-slate-800 p-3 rounded-full shadow-2xl border border-slate-200 active:scale-90"
-              >
-                <Crosshair size={24} className="text-[#008080]" />
-              </button>
-
-              <button
-                onClick={handleOpenExternalMaps}
-                className="absolute left-4 bottom-32 bg-slate-900 text-white p-3 rounded-full shadow-2xl border border-slate-700 active:scale-90"
-              >
-                <ExternalLink size={20} className="text-slate-300" />
-              </button>
-
-              <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-slate-900/90 to-transparent pb-8 pt-10">
-                <ActionButton />
-              </div>
-            </>
           )}
         </div>
 
-        {/* INFO PESANAN - DESAIN COMPACT */}
         {!isNavigatingMode && (
-          <div className="space-y-3">
-            {/* Header Status Order */}
-            <div
-              className={`p-3.5 rounded-xl flex justify-between items-center shadow-sm border-l-4 ${isCompleted ? "bg-slate-200 border-slate-400" : isCanceled ? "bg-red-50 border-red-500" : "bg-white border-[#008080]"}`}
-            >
+          <div className="flex-1 p-4 space-y-4 bg-slate-50 pb-32">
+            <div className="bg-white p-4 rounded-[1.5rem] border border-slate-200 shadow-sm flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center shadow-inner bg-teal-50 text-[#008080]">
-                  {loading ? (
-                    <Loader2 className="animate-spin" size={18} />
-                  ) : (
-                    <Truck size={18} />
-                  )}
+                <div className="bg-teal-50 p-2.5 rounded-xl text-[#008080]">
+                  <Truck size={22} />
                 </div>
                 <div>
-                  <h2 className="text-[13px] font-[1000] leading-none text-slate-800">
-                    {isCompleted
-                      ? "SELESAI"
-                      : isCanceled
-                        ? "DIBATALKAN"
-                        : order.status?.replace(/_/g, " ")}
-                  </h2>
-                  <p className="text-[9px] font-bold text-slate-400 mt-1">
-                    ORDER ID: #{order.id?.slice(0, 8)}
+                  <h3 className="text-[14px] font-black text-slate-800 leading-none">
+                    {order.status?.replace(/_/g, " ")}
+                  </h3>
+                  <p className="text-[9px] text-slate-400 mt-1 font-bold">
+                    ID: #{order.id?.slice(0, 8)}
                   </p>
                 </div>
               </div>
+              {/* 🚀 FIX TYPESCRIPT ERROR DI SINI */}
               <button
                 onClick={() =>
-                  openChat(
+                  handleOpenChat(
                     "courier_customer",
                     order.profiles?.full_name || "Pelanggan",
                     order.customer_id,
                   )
                 }
-                className="w-10 h-10 rounded-xl bg-[#008080] text-white shadow-sm flex items-center justify-center active:scale-90 transition-all"
+                className="w-11 h-11 bg-[#008080] text-white rounded-full flex items-center justify-center shadow-lg"
               >
-                <MessageCircle size={18} />
+                <MessageCircle size={20} />
               </button>
             </div>
 
-            {/* Kartu Detail Penjemputan & Pengantaran */}
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
-              {/* TOKO */}
+            <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
               <div
-                className={`flex gap-3 p-3 rounded-xl border ${isPickingUp ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-100"}`}
+                className={`p-5 flex gap-4 ${isPickingUp ? "bg-orange-50/40" : ""}`}
               >
-                <div className="w-8 h-8 bg-white text-[#FF6600] rounded-lg flex items-center justify-center shrink-0 border border-slate-200 shadow-sm">
-                  <Store size={14} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[8px] font-black tracking-widest text-orange-500">
+                <Store size={20} className="text-[#FF6600]" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[8px] font-black text-orange-500">
                     TITIK JEMPUT (TOKO)
                   </p>
-                  <h4 className="font-[1000] text-slate-800 text-[11px] truncate mt-0.5">
-                    {order.merchants?.shop_name ||
-                      order.merchant?.shop_name ||
-                      "TOKO MITRA"}
+                  <h4 className="text-[13px] font-black text-slate-800 mt-1">
+                    {order.merchants?.shop_name || "TOKO MITRA"}
                   </h4>
+                  {/* 🚀 FIX TYPESCRIPT ERROR DI SINI */}
                   <button
                     onClick={() =>
-                      openChat(
+                      handleOpenChat(
                         "courier_merchant",
-                        order.merchants?.shop_name ||
-                          order.merchant?.shop_name ||
-                          "Toko",
-                        order.merchants?.user_id ||
-                          order.merchant?.user_id ||
-                          order.merchant_id,
+                        order.merchants?.shop_name || "Toko",
+                        order.merchants?.user_id || order.merchant_id,
                       )
                     }
-                    className="mt-2 flex items-center justify-center w-full gap-1.5 py-1.5 bg-white border border-orange-200 text-[#FF6600] rounded-lg text-[9px] font-black hover:bg-orange-100 transition-all"
+                    className="mt-3 text-[10px] text-[#FF6600] flex items-center gap-1 font-black"
                   >
-                    <MessageSquare size={12} /> CHAT TOKO
+                    <MessageSquare size={12} /> HUBUNGI TOKO
                   </button>
                 </div>
               </div>
-
-              {/* PEMBELI */}
               <div
-                className={`flex gap-3 p-3 rounded-xl border ${!isPickingUp && !isCompleted ? "bg-teal-50 border-teal-200" : "bg-slate-50 border-slate-100"}`}
+                className={`p-5 flex gap-4 ${!isPickingUp ? "bg-teal-50/40" : ""}`}
               >
-                <div className="w-8 h-8 bg-white text-[#008080] rounded-lg flex items-center justify-center shrink-0 border border-slate-200 shadow-sm">
-                  <MapPin size={14} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[8px] font-black tracking-widest text-teal-600">
+                <MapPin size={20} className="text-[#008080]" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[8px] font-black text-teal-600">
                     TITIK ANTAR (PEMBELI)
                   </p>
-                  <h4 className="font-[1000] text-slate-900 text-[11px] truncate mt-0.5">
+                  <h4 className="text-[13px] font-black text-slate-800 mt-1">
                     {order.profiles?.full_name || "PEMBELI PASARQU"}
                   </h4>
-                  <div className="flex gap-2 mt-2">
+                  <div className="flex gap-2 mt-3">
+                    {/* 🚀 FIX TYPESCRIPT ERROR DI SINI */}
                     <button
                       onClick={() =>
-                        openChat(
+                        handleOpenChat(
                           "courier_customer",
                           order.profiles?.full_name || "Pelanggan",
                           order.customer_id,
                         )
                       }
-                      className="flex-1 py-1.5 bg-[#008080] text-white rounded-lg text-[9px] font-black flex items-center justify-center gap-1.5 active:scale-95"
+                      className="flex-1 bg-[#008080] text-white py-2.5 rounded-xl text-[10px] font-black"
                     >
-                      <MessageSquare size={12} /> CHAT
+                      CHAT
                     </button>
                     <a
                       href={`tel:${order.profiles?.phone_number}`}
-                      className="w-10 bg-white border border-slate-200 text-slate-600 rounded-lg flex items-center justify-center active:scale-95 shadow-sm"
+                      className="w-12 bg-white border-2 border-slate-200 text-slate-600 rounded-xl flex items-center justify-center shadow-sm"
                     >
-                      <Phone size={12} />
+                      <Phone size={16} />
                     </a>
                   </div>
                 </div>
               </div>
             </div>
 
-            {!isCompleted && !isCanceled && <ActionButton />}
+            {!isCompleted && !isCanceled && (
+              <div className="pt-2">
+                {order.status === "PACKING" ? (
+                  <div className="w-full py-5 bg-slate-200 text-slate-500 rounded-[1.5rem] text-center text-[11px] border-2 border-dashed border-slate-300">
+                    TOKO SEDANG MENGEMAS...
+                  </div>
+                ) : (
+                  <ActionButton
+                    onClick={handleStatusUpdate}
+                    loading={loading}
+                    status={order.status}
+                  />
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
     </>
   );
 };
+
+const ActionButton = ({ onClick, loading, status }: any) => (
+  <button
+    onClick={onClick}
+    disabled={loading}
+    className={`w-full py-5 rounded-[1.5rem] text-white font-[1000] text-[13px] tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all ${status === "SHIPPING" || status === "DELIVERING" ? "bg-[#008080]" : "bg-[#FF6600]"}`}
+  >
+    {loading ? (
+      <Loader2 className="animate-spin" />
+    ) : (
+      <CheckCircle size={22} strokeWidth={3} />
+    )}
+    {status === "SHIPPING" || status === "DELIVERING"
+      ? "KONFIRMASI TIBA!"
+      : "SAYA SUDAH AMBIL BARANG"}
+  </button>
+);
 
 export default CourierActiveOrder;
