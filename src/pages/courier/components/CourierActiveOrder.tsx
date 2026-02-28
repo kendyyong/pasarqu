@@ -29,10 +29,10 @@ import { OrderChatRoom } from "../../../features/chat/OrderChatRoom";
 const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
   ["places", "routes", "geometry", "drawing"];
 
-// 🚀 IKON MOTOR ORANYE SUPER JELAS (Diupdate!)
+// 🚀 IKON MOTOR OJOL SUPER GAGAH (Format PNG Transparan Resolusi Tinggi)
 const ICONS = {
-  // Ikon kurir motor warna Oranye dengan kotak Box di belakang
-  courier: "https://cdn-icons-png.flaticon.com/512/5696/5696184.png",
+  // Ikon Kurir Motor Oranye (Gaya Grab/Gojek)
+  courier: "https://cdn-icons-png.flaticon.com/512/10484/10484347.png",
   store: "https://cdn-icons-png.flaticon.com/512/1055/1055672.png",
   home: "https://cdn-icons-png.flaticon.com/512/1946/1946488.png",
 };
@@ -183,7 +183,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           .update({ status: "COMPLETED", shipping_status: "COMPLETED" })
           .eq("id", order.id);
         showToast("TUGAS SELESAI! SALDO CAIR! 💰", "success");
-        setIsNavigatingMode(false); // Keluar navigasi saat selesai
+        setIsNavigatingMode(false);
       } else if (nextStatus !== "") {
         const { error } = await supabase
           .from("orders")
@@ -210,7 +210,6 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
     setShowChat(true);
   };
 
-  // KOMPONEN TOMBOL AKSI (Bisa dipanggil di 2 tempat berbeda)
   const ActionButton = () => (
     <>
       {order.status === "PACKING" ? (
@@ -222,16 +221,16 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
         <button
           onClick={handleStatusUpdate}
           disabled={loading}
-          className={`w-full py-4 text-white rounded-xl font-[1000] uppercase text-[13px] shadow-xl active:scale-95 flex items-center justify-center gap-2 transition-all ${
+          className={`w-full py-3.5 text-white rounded-xl font-[1000] uppercase text-[12px] shadow-md active:scale-95 flex items-center justify-center gap-2 transition-all ${
             order.status === "SHIPPING" || order.status === "DELIVERING"
               ? "bg-[#008080] hover:bg-teal-700 shadow-teal-900/30"
               : "bg-[#FF6600] hover:bg-orange-600 shadow-orange-900/30"
           }`}
         >
           {loading ? (
-            <Loader2 className="animate-spin" size={18} />
+            <Loader2 className="animate-spin" size={16} />
           ) : (
-            <CheckCircle size={18} strokeWidth={3} />
+            <CheckCircle size={16} strokeWidth={3} />
           )}
           {order.status === "SHIPPING" || order.status === "DELIVERING"
             ? "KONFIRMASI TIBA!"
@@ -243,6 +242,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
 
   return (
     <>
+      {/* RUANG CHAT POPUP */}
       {showChat &&
         createPortal(
           <div className="fixed inset-0 z-[999999] bg-white md:bg-slate-900/80 backdrop-blur-sm flex justify-center">
@@ -276,16 +276,15 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           document.body,
         )}
 
-      <div className="space-y-4 animate-in slide-in-from-bottom-4 text-left font-black uppercase tracking-tighter pb-4">
-        {/* 🗺️ VISUAL PETA (Bisa Mode Mini atau Mode Fullscreen) */}
+      <div className="space-y-4 animate-in slide-in-from-bottom-4 text-left font-sans uppercase tracking-tighter pb-4">
+        {/* 🗺️ VISUAL PETA (Desain Lebih Clean) */}
         <div
           className={
             isNavigatingMode
               ? "fixed inset-0 z-[9999] bg-slate-100 flex flex-col animate-in zoom-in-95 duration-300"
-              : "h-[250px] w-full bg-slate-200 rounded-xl overflow-hidden relative shadow-md border-2 border-white transition-all duration-300"
+              : "h-[220px] w-full bg-slate-200 rounded-2xl overflow-hidden relative shadow-sm border border-slate-300 transition-all duration-300"
           }
         >
-          {/* HEADER OVERLAY SAAT NAVIGASI FULLSCREEN */}
           {isNavigatingMode && (
             <div className="absolute top-0 left-0 w-full p-4 z-10 pointer-events-none flex justify-between items-start pt-safe-top">
               <div className="bg-slate-900/90 backdrop-blur-md px-4 py-2.5 rounded-2xl pointer-events-auto border border-white/10 shadow-2xl flex flex-col gap-1">
@@ -318,7 +317,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                   lng: destLng || 117.2476,
                 }
               }
-              zoom={isNavigatingMode ? 18 : 15}
+              zoom={isNavigatingMode ? 18 : 16}
               onLoad={(map) => setMapInstance(map)}
               options={{
                 disableDefaultUI: true,
@@ -333,32 +332,33 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                     suppressMarkers: true,
                     polylineOptions: {
                       strokeColor: "#008080",
-                      strokeWeight: 6,
+                      strokeWeight: 5,
                       strokeOpacity: 0.8,
                     },
                   }}
                 />
               )}
 
-              {/* 🚀 MOTOR ORANYE (DIPERBESAR JADI 64x64 BIAR GAGAH!) */}
+              {/* 🚀 MOTOR OJOL GAGAH - UKURAN PROPORSIONAL (48x48) */}
               {currentPos && (
                 <MarkerF
                   position={currentPos}
                   icon={{
                     url: ICONS.courier,
-                    scaledSize: new window.google.maps.Size(64, 64),
-                    anchor: new window.google.maps.Point(32, 32),
+                    scaledSize: new window.google.maps.Size(48, 48),
+                    anchor: new window.google.maps.Point(24, 24),
                   }}
                   zIndex={999}
                 />
               )}
 
+              {/* 🚀 TARGET LOKASI */}
               {destLat && (
                 <MarkerF
                   position={{ lat: destLat, lng: destLng }}
                   icon={{
                     url: isPickingUp ? ICONS.store : ICONS.home,
-                    scaledSize: new window.google.maps.Size(35, 35),
+                    scaledSize: new window.google.maps.Size(32, 32),
                   }}
                 />
               )}
@@ -369,13 +369,13 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
             </div>
           )}
 
-          {/* TOMBOL OVERLAY BAWAH PETA */}
+          {/* TOMBOL OVERLAY PETA */}
           {!isNavigatingMode ? (
             <button
               onClick={() => setIsNavigatingMode(true)}
-              className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-5 py-2.5 rounded-full text-[10px] font-[1000] tracking-widest shadow-xl flex items-center gap-2 active:scale-95 transition-all border-2 border-slate-700 hover:bg-slate-800"
+              className="absolute bottom-3 right-3 bg-white text-slate-800 p-2.5 rounded-xl shadow-lg flex items-center justify-center active:scale-90 transition-all border border-slate-200"
             >
-              <Navigation size={14} className="text-[#008080]" /> MULAI NAVIGASI
+              <Navigation size={18} className="text-[#008080]" />
             </button>
           ) : (
             <>
@@ -404,30 +404,31 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           )}
         </div>
 
-        {/* BAGIAN BAWAH SEMBUNYI SAAT FULLSCREEN */}
+        {/* INFO PESANAN - DESAIN COMPACT */}
         {!isNavigatingMode && (
-          <>
+          <div className="space-y-3">
+            {/* Header Status Order */}
             <div
-              className={`p-4 rounded-xl flex justify-between items-center shadow-sm transition-all border-l-4 ${isCompleted ? "bg-slate-200 border-slate-400" : isCanceled ? "bg-red-50 border-red-500" : "bg-white border-[#008080]"}`}
+              className={`p-3.5 rounded-xl flex justify-between items-center shadow-sm border-l-4 ${isCompleted ? "bg-slate-200 border-slate-400" : isCanceled ? "bg-red-50 border-red-500" : "bg-white border-[#008080]"}`}
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-md flex items-center justify-center shadow-inner bg-teal-50 text-[#008080]">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center shadow-inner bg-teal-50 text-[#008080]">
                   {loading ? (
-                    <Loader2 className="animate-spin" size={20} />
+                    <Loader2 className="animate-spin" size={18} />
                   ) : (
-                    <Truck size={20} />
+                    <Truck size={18} />
                   )}
                 </div>
                 <div>
-                  <h2 className="text-[14px] leading-none text-slate-800">
+                  <h2 className="text-[13px] font-[1000] leading-none text-slate-800">
                     {isCompleted
                       ? "SELESAI"
                       : isCanceled
                         ? "DIBATALKAN"
                         : order.status?.replace(/_/g, " ")}
                   </h2>
-                  <p className="text-[9px] text-slate-400 mt-1">
-                    ID: #{order.id?.slice(0, 8)}
+                  <p className="text-[9px] font-bold text-slate-400 mt-1">
+                    ORDER ID: #{order.id?.slice(0, 8)}
                   </p>
                 </div>
               </div>
@@ -439,24 +440,26 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                     order.customer_id,
                   )
                 }
-                className="w-10 h-10 rounded-full bg-[#008080] text-white shadow-md flex items-center justify-center active:scale-95"
+                className="w-10 h-10 rounded-xl bg-[#008080] text-white shadow-sm flex items-center justify-center active:scale-90 transition-all"
               >
                 <MessageCircle size={18} />
               </button>
             </div>
 
+            {/* Kartu Detail Penjemputan & Pengantaran */}
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
+              {/* TOKO */}
               <div
-                className={`flex gap-3 p-3 rounded-lg border ${isPickingUp ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-100"}`}
+                className={`flex gap-3 p-3 rounded-xl border ${isPickingUp ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-100"}`}
               >
-                <div className="w-8 h-8 bg-white text-[#FF6600] rounded-md flex items-center justify-center shrink-0 border border-slate-200 shadow-sm">
-                  <Store size={16} />
+                <div className="w-8 h-8 bg-white text-[#FF6600] rounded-lg flex items-center justify-center shrink-0 border border-slate-200 shadow-sm">
+                  <Store size={14} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[8px] text-orange-500">
+                  <p className="text-[8px] font-black tracking-widest text-orange-500">
                     TITIK JEMPUT (TOKO)
                   </p>
-                  <h4 className="font-[1000] text-slate-800 text-[11px] truncate mt-1">
+                  <h4 className="font-[1000] text-slate-800 text-[11px] truncate mt-0.5">
                     {order.merchants?.shop_name ||
                       order.merchant?.shop_name ||
                       "TOKO MITRA"}
@@ -473,24 +476,25 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                           order.merchant_id,
                       )
                     }
-                    className="mt-2 flex items-center justify-center w-full gap-2 py-2 bg-white border border-orange-200 text-[#FF6600] rounded-md text-[9px] font-black hover:bg-orange-100 transition-all"
+                    className="mt-2 flex items-center justify-center w-full gap-1.5 py-1.5 bg-white border border-orange-200 text-[#FF6600] rounded-lg text-[9px] font-black hover:bg-orange-100 transition-all"
                   >
-                    <MessageSquare size={12} /> CHAT MERCHANT
+                    <MessageSquare size={12} /> CHAT TOKO
                   </button>
                 </div>
               </div>
 
+              {/* PEMBELI */}
               <div
-                className={`flex gap-3 p-3 rounded-lg border ${!isPickingUp && !isCompleted ? "bg-teal-50 border-teal-200" : "bg-slate-50 border-slate-100"}`}
+                className={`flex gap-3 p-3 rounded-xl border ${!isPickingUp && !isCompleted ? "bg-teal-50 border-teal-200" : "bg-slate-50 border-slate-100"}`}
               >
-                <div className="w-8 h-8 bg-white text-[#008080] rounded-md flex items-center justify-center shrink-0 border border-slate-200 shadow-sm">
-                  <MapPin size={16} />
+                <div className="w-8 h-8 bg-white text-[#008080] rounded-lg flex items-center justify-center shrink-0 border border-slate-200 shadow-sm">
+                  <MapPin size={14} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[8px] text-teal-600">
+                  <p className="text-[8px] font-black tracking-widest text-teal-600">
                     TITIK ANTAR (PEMBELI)
                   </p>
-                  <h4 className="font-[1000] text-slate-900 text-[11px] truncate mt-1">
+                  <h4 className="font-[1000] text-slate-900 text-[11px] truncate mt-0.5">
                     {order.profiles?.full_name || "PEMBELI PASARQU"}
                   </h4>
                   <div className="flex gap-2 mt-2">
@@ -502,15 +506,15 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                           order.customer_id,
                         )
                       }
-                      className="flex-1 py-2 bg-[#008080] text-white rounded-md text-[9px] flex items-center justify-center gap-2 active:scale-95"
+                      className="flex-1 py-1.5 bg-[#008080] text-white rounded-lg text-[9px] font-black flex items-center justify-center gap-1.5 active:scale-95"
                     >
                       <MessageSquare size={12} /> CHAT
                     </button>
                     <a
                       href={`tel:${order.profiles?.phone_number}`}
-                      className="w-10 bg-white border border-slate-200 text-slate-600 rounded-md flex items-center justify-center active:scale-95 shadow-sm"
+                      className="w-10 bg-white border border-slate-200 text-slate-600 rounded-lg flex items-center justify-center active:scale-95 shadow-sm"
                     >
-                      <Phone size={14} />
+                      <Phone size={12} />
                     </a>
                   </div>
                 </div>
@@ -518,7 +522,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
             </div>
 
             {!isCompleted && !isCanceled && <ActionButton />}
-          </>
+          </div>
         )}
       </div>
     </>
