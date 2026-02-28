@@ -12,8 +12,8 @@ interface Props {
   updateLogistics: (lat: number, lng: number) => void;
 }
 
-// 🚀 IKON CUSTOM RUMAH PEMBELI
-const BUYER_ICON = "https://cdn-icons-png.flaticon.com/512/1946/1946488.png";
+// 🚀 MENGGUNAKAN FILE LOKAL DARI FOLDER PUBLIC
+const BUYER_ICON = "/buyer.png";
 
 export const CheckoutAddress: React.FC<Props> = ({
   isLoaded,
@@ -31,30 +31,30 @@ export const CheckoutAddress: React.FC<Props> = ({
     mapRef.current = map;
   }, []);
 
+  // Fungsi internal untuk sinkronisasi kordinat dan ongkir
+  const handlePositionChange = (lat: number, lng: number) => {
+    setDeliveryCoords({ lat, lng });
+    updateLogistics(lat, lng);
+  };
+
   // Saat peta diklik
   const handleMapClick = (e: google.maps.MapMouseEvent) => {
     if (e.latLng) {
-      const lat = e.latLng.lat();
-      const lng = e.latLng.lng();
-      setDeliveryCoords({ lat, lng });
-      updateLogistics(lat, lng);
+      handlePositionChange(e.latLng.lat(), e.latLng.lng());
     }
   };
 
   // Saat pin/marker selesai digeser
   const handleMarkerDragEnd = (e: google.maps.MapMouseEvent) => {
     if (e.latLng) {
-      const lat = e.latLng.lat();
-      const lng = e.latLng.lng();
-      setDeliveryCoords({ lat, lng });
-      updateLogistics(lat, lng);
+      handlePositionChange(e.latLng.lat(), e.latLng.lng());
     }
   };
 
-  // 🚀 FITUR PRO: AMBIL GPS LOKASI SAAT INI
+  // 🚀 AMBIL GPS LOKASI SAAT INI
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
-      showToast("GPS tidak didukung di perangkat ini.", "error");
+      showToast("GPS TIDAK DIDUKUNG DI PERANGKAT INI.", "error");
       return;
     }
 
@@ -64,22 +64,19 @@ export const CheckoutAddress: React.FC<Props> = ({
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
 
-        setDeliveryCoords({ lat, lng });
+        handlePositionChange(lat, lng);
 
-        // Pusatkan peta ke lokasi baru
         if (mapRef.current) {
           mapRef.current.panTo({ lat, lng });
           mapRef.current.setZoom(17);
         }
 
-        // Hitung ulang ongkir berdasarkan lokasi GPS asli
-        updateLogistics(lat, lng);
         setIsLocating(false);
-        showToast("Lokasi akurat ditemukan!", "success");
+        showToast("LOKASI AKURAT DITEMUKAN!", "success");
       },
       (error) => {
         setIsLocating(false);
-        showToast("Gagal mengambil GPS. Pastikan Izin Lokasi aktif.", "error");
+        showToast("GAGAL MENGAMBIL GPS. PASTIKAN IZIN LOKASI AKTIF.", "error");
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
@@ -95,8 +92,8 @@ export const CheckoutAddress: React.FC<Props> = ({
           </h2>
         </div>
 
-        {/* 🚀 TOMBOL SAKTI GPS */}
         <button
+          type="button"
           onClick={handleUseCurrentLocation}
           disabled={isLocating}
           className="flex items-center gap-2 bg-teal-50 text-[#008080] border border-teal-200 px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest hover:bg-[#008080] hover:text-white transition-all active:scale-95 disabled:opacity-50"
@@ -106,7 +103,7 @@ export const CheckoutAddress: React.FC<Props> = ({
           ) : (
             <LocateFixed size={12} />
           )}
-          {isLocating ? "Melacak..." : "Gunakan GPS Saat Ini"}
+          {isLocating ? "MELACAK..." : "GUNAKAN GPS SAAT INI"}
         </button>
       </div>
 
@@ -118,12 +115,11 @@ export const CheckoutAddress: React.FC<Props> = ({
         </p>
       </div>
 
-      {/* PETA GOOGLE MAPS */}
       <div className="relative w-full h-[280px] rounded-md overflow-hidden border-2 border-slate-200 shadow-inner">
         {!isLoaded ? (
           <div className="w-full h-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-400 uppercase tracking-widest gap-2">
-            <Loader2 size={16} className="animate-spin text-[#008080]" /> Memuat
-            Peta...
+            <Loader2 size={16} className="animate-spin text-[#008080]" /> MEMUAT
+            PETA...
           </div>
         ) : (
           <GoogleMap
@@ -135,25 +131,27 @@ export const CheckoutAddress: React.FC<Props> = ({
             options={{
               disableDefaultUI: true,
               zoomControl: true,
-              gestureHandling: "greedy", // Memudahkan scroll di mobile
+              gestureHandling: "greedy",
             }}
           >
             <MarkerF
               position={deliveryCoords}
               draggable={true}
               onDragEnd={handleMarkerDragEnd}
-              // 🚀 IKON CUSTOM DIPASANG DI SINI
-              icon={{
-                url: BUYER_ICON,
-                scaledSize: new window.google.maps.Size(40, 40),
-                anchor: new window.google.maps.Point(20, 40),
-              }}
+              icon={
+                window.google
+                  ? {
+                      url: BUYER_ICON,
+                      scaledSize: new window.google.maps.Size(40, 40),
+                      anchor: new window.google.maps.Point(20, 40),
+                    }
+                  : undefined
+              }
             />
           </GoogleMap>
         )}
       </div>
 
-      {/* INPUT ALAMAT MANUAL */}
       <div>
         <label className="text-[9px] text-slate-400 font-black mb-2 block tracking-widest">
           DETAIL ALAMAT LENGKAP & PATOKAN (WAJIB)
@@ -161,10 +159,12 @@ export const CheckoutAddress: React.FC<Props> = ({
         <textarea
           value={manualAddress}
           onChange={(e) => setManualAddress(e.target.value)}
-          placeholder="Cth: Jl. Sudirman No 10, Pagar Biru, Dekat Masjid..."
+          placeholder="CTH: JL. SUDIRMAN NO 10, PAGAR BIRU, DEKAT MASJID..."
           className="w-full p-4 border-2 border-slate-200 rounded-md focus:border-[#008080] outline-none text-[12px] font-black uppercase text-slate-800 h-24 shadow-sm"
         />
       </div>
     </section>
   );
 };
+
+export default CheckoutAddress;

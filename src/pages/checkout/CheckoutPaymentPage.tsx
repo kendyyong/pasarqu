@@ -68,7 +68,7 @@ export const CheckoutPaymentPage = () => {
 
   const subtotalCart = cart.reduce((s, i) => s + i.price * i.quantity, 0);
 
-  // 🚀 UPDATE LOGISTIK: PERHITUNGAN FINAL BOS
+  // 🚀 UPDATE LOGISTIK: PERHITUNGAN FINAL
   const updateLogistics = useCallback(
     async (currentLat: number, currentLng: number) => {
       if (!selectedMarket || !currentLat || !currentLng) return;
@@ -157,17 +157,14 @@ export const CheckoutPaymentPage = () => {
         );
 
         // 7. Pembagian Hasil (Revenue Share)
-        // Bagian Aplikasi dari ongkir murni
         const appCutOngkir = tripCost * (Number(r.app_fee_percent || 0) / 100);
         const appShareExtra = isPickup
           ? 0
           : extraCount * Number(r.multi_stop_app_share || 0);
 
-        // Jatah Bersih Kurir
         const courierNet =
           tripCost - appCutOngkir + (multiStopFee - appShareExtra);
 
-        // Kas Juragan (Total System Fee)
         const systemFee =
           appCutOngkir +
           appShareExtra +
@@ -192,8 +189,9 @@ export const CheckoutPaymentPage = () => {
     [selectedMarket, cart, shippingMethod, subtotalCart],
   );
 
+  // 🔥 EFEK 1: Inisialisasi Kordinat Pertama Kali (dari Profile atau Toko)
   useEffect(() => {
-    if (selectedMarket && profile) {
+    if (selectedMarket && profile && deliveryCoords.lat === 0) {
       const initialLat =
         Number(profile.latitude) || Number(selectedMarket.latitude);
       const initialLng =
@@ -203,9 +201,15 @@ export const CheckoutPaymentPage = () => {
       setManualAddress(
         (profile.address_street || profile.address || "").toUpperCase(),
       );
-      updateLogistics(initialLat, initialLng);
     }
-  }, [selectedMarket, profile?.id, updateLogistics]);
+  }, [selectedMarket, profile?.id]);
+
+  // 🔥 EFEK 2: Sinkronisasi Otomatis Ongkir & Jarak Saat Kordinat Berubah
+  useEffect(() => {
+    if (deliveryCoords.lat !== 0 && deliveryCoords.lng !== 0) {
+      updateLogistics(deliveryCoords.lat, deliveryCoords.lng);
+    }
+  }, [deliveryCoords.lat, deliveryCoords.lng, updateLogistics]);
 
   const totalSebelumSaldo = Math.max(
     0,
@@ -257,6 +261,9 @@ export const CheckoutPaymentPage = () => {
               ? 0
               : shippingDetails.courier_earning_total,
           pickup_code: pickupPIN,
+          // Menyimpan kordinat pengiriman agar kurir tahu titik pastinya
+          latitude: deliveryCoords.lat,
+          longitude: deliveryCoords.lng,
         })
         .select()
         .single();
