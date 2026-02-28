@@ -64,7 +64,7 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
               price_per_km: 2000,
               app_fee_percent: 20,
               buyer_service_fee: 2000,
-              handling_fee: 1000, // Biaya Penanganan
+              handling_fee: 1000,
               seller_admin_fee_percent: 5,
               sembako_admin_fee_percent: 2,
               qris_threshold: 500000,
@@ -72,8 +72,9 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
               multi_stop_fee: 2000,
               multi_stop_app_share: 1000,
               surge_fee: 0,
-              free_shipping_min_order: 150000, // Batas Gratis Ongkir
-              tax_percent: 0, // PPN
+              free_shipping_min_order: 150000,
+              max_free_shipping_subsidy: 10000, // Default Baru
+              tax_percent: 0,
               is_new: true,
             }
           );
@@ -124,10 +125,10 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
         qris_threshold: Number(rate.qris_threshold || 500000),
         qris_fee_percent: Number(rate.qris_fee_percent || 0.7),
         multi_stop_fee: Number(rate.multi_stop_fee),
-        multi_stop_courier_share: Number(rate.multi_stop_courier_share || 0),
         multi_stop_app_share: Number(rate.multi_stop_app_share),
         surge_fee: Number(rate.surge_fee),
         free_shipping_min_order: Number(rate.free_shipping_min_order || 0),
+        max_free_shipping_subsidy: Number(rate.max_free_shipping_subsidy || 0), // Simpan kolom baru
         tax_percent: Number(rate.tax_percent || 0),
       };
 
@@ -200,16 +201,29 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
 
     const courierNet = distCost - appCutFromBase + totalExtraFeeKurir;
 
-    // --- 2. LOGIKA SUBSIDI GRATIS ONGKIR ---
+    // --- 2. LOGIKA SUBSIDI GRATIS ONGKIR (DENGAN CAPPING) ---
     let userPayShipping = realShippingCost;
     let appSubsidy = 0;
+    const maxSubsidyFromDb = Number(r.max_free_shipping_subsidy || 0);
 
     if (
       Number(r.free_shipping_min_order) > 0 &&
       belanja >= Number(r.free_shipping_min_order)
     ) {
-      userPayShipping = 0;
-      appSubsidy = realShippingCost;
+      // Jika subsidi diset (lebih dari 0), gunakan capping
+      if (maxSubsidyFromDb > 0) {
+        if (realShippingCost <= maxSubsidyFromDb) {
+          userPayShipping = 0;
+          appSubsidy = realShippingCost;
+        } else {
+          userPayShipping = realShippingCost - maxSubsidyFromDb;
+          appSubsidy = maxSubsidyFromDb;
+        }
+      } else {
+        // Jika max_subsidy adalah 0, anggap gratis total (logika lama)
+        userPayShipping = 0;
+        appSubsidy = realShippingCost;
+      }
     }
 
     // --- 3. LOGIKA ADMIN TOKO VS QRIS ---
@@ -421,10 +435,10 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                 </div>
 
                 {/* 🚀 LAYER 4: PAJAK DAN GRATIS ONGKIR */}
-                <div className="col-span-2 md:col-span-4 bg-slate-900 p-4 rounded-md border border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                <div className="col-span-2 md:col-span-4 bg-slate-900 p-4 rounded-md border border-slate-700 grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
                   <div className="bg-slate-800 p-3 rounded-md">
                     <InputGroup
-                      label="BATAS GRATIS ONGKIR (SUBSIDI)"
+                      label="MIN. BELANJA GRATIS ONGKIR"
                       value={rate.free_shipping_min_order}
                       onChange={(v: any) =>
                         handleUpdate(
@@ -438,9 +452,31 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                     />
                     <p className="text-[9px] text-teal-400 mt-2 tracking-widest">
                       <TicketPercent size={10} className="inline mr-1" /> Isi 0
-                      untuk mematikan fitur subsidi ongkir.
+                      untuk mematikan fitur.
                     </p>
                   </div>
+
+                  {/* INPUT BARU: MAX SUBSIDY */}
+                  <div className="bg-slate-800 p-3 rounded-md">
+                    <InputGroup
+                      label="MAKSIMAL SUBSIDI (CAPPING)"
+                      value={rate.max_free_shipping_subsidy}
+                      onChange={(v: any) =>
+                        handleUpdate(
+                          rate.district_name,
+                          "max_free_shipping_subsidy",
+                          v,
+                        )
+                      }
+                      icon="RP"
+                      theme="dark"
+                    />
+                    <p className="text-[9px] text-orange-400 mt-2 tracking-widest">
+                      <Zap size={10} className="inline mr-1" /> Batas subsidi
+                      per transaksi.
+                    </p>
+                  </div>
+
                   <div className="bg-slate-800 p-3 rounded-md">
                     <InputGroup
                       label="PAJAK PPN JASA APP (%)"
@@ -455,7 +491,7 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                     />
                     <p className="text-[9px] text-red-400 mt-2 tracking-widest">
                       <Landmark size={10} className="inline mr-1" /> Isi 11%
-                      jika omset App {">"} Rp 4,8 Miliar.
+                      jika omset gede.
                     </p>
                   </div>
                 </div>
@@ -480,7 +516,7 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                   />
                 </div>
 
-                {/* EXTRA & SURGE FEE DENGAN WARNING */}
+                {/* EXTRA & SURGE FEE */}
                 <div className="col-span-2 md:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-5 bg-white p-5 rounded-md border border-slate-200 mt-2 shadow-inner">
                   <InputGroup
                     label="EXTRA TOKO (HAK KURIR)"
@@ -531,7 +567,6 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
 
             {selectedRate ? (
               <div className="space-y-6">
-                {/* SIMULATOR TOTAL BELANJA & TIPE TOKO */}
                 <div className="bg-white/5 p-4 rounded-md border border-white/10">
                   <div className="flex justify-between items-center mb-4">
                     <label className="text-[11px] text-orange-400 tracking-widest flex items-center gap-2">
@@ -549,7 +584,6 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                     className="w-full accent-[#FF6600] h-2 bg-slate-700 rounded-md appearance-none cursor-pointer mb-5"
                   />
 
-                  {/* TOGGLE TIPE TOKO */}
                   <div className="flex bg-slate-800 p-1 rounded-md mb-4 border border-slate-700">
                     <button
                       onClick={() => setSimTipeToko("REGULER")}
@@ -565,24 +599,12 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                     </button>
                   </div>
 
-                  {/* DETAIL SPLIT QRIS */}
                   <div className="mt-4 text-[10px] space-y-2 font-bold tracking-widest">
                     <div className="flex justify-between text-slate-400">
-                      <span>
-                        POTONGAN {simTipeToko} ({sim.persen_toko_aktif}%)
-                      </span>
+                      <span>POTONGAN {simTipeToko}</span>
                       <span className="text-white">
                         RP {sim.total_potongan_toko.toLocaleString()}
                       </span>
-                    </div>
-                    <div className="flex justify-between text-red-400">
-                      <span>
-                        BIAYA QRIS{" "}
-                        {simBelanja >= selectedRate.qris_threshold
-                          ? `(${selectedRate.qris_fee_percent}%)`
-                          : "(0%)"}
-                      </span>
-                      <span>- RP {sim.qris_fee.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-teal-400 border-t border-white/10 pt-2">
                       <span>NET PASARQU (DARI TOKO)</span>
@@ -624,30 +646,36 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                   onClick={() => setSimSurge(!simSurge)}
                   className={`w-full py-2 rounded-md text-[10px] font-black tracking-widest border transition-all ${simSurge ? "bg-red-500/20 border-red-500 text-red-400" : "bg-slate-800 border-slate-700 text-slate-500"}`}
                 >
-                  {simSurge
-                    ? "🔥 MODE SIBUK/HUJAN AKTIF"
-                    : "AKTIFKAN MODE SIBUK"}
+                  {simSurge ? "🔥 MODE SIBUK AKTIF" : "AKTIFKAN MODE SIBUK"}
                 </button>
 
-                {/* 🚀 HASIL AKHIR SIMULATOR PRO */}
                 <div className="space-y-3 pt-4 border-t border-white/10">
-                  {/* ONGKIR PEMBELI & SUBSIDI */}
                   <div className="bg-slate-800 p-3 rounded-md border border-slate-700">
                     <p className="text-[9px] text-slate-400 tracking-widest mb-1 flex justify-between">
-                      <span>TOTAL ONGKIR (ASLI)</span>{" "}
+                      <span>TOTAL ONGKIR (ASLI)</span>
                       <span>Rp {sim.total_ongkir.toLocaleString()}</span>
                     </p>
                     {sim.app_subsidy > 0 && (
                       <p className="text-[9px] text-teal-400 tracking-widest mb-1 flex justify-between font-black">
-                        <span>PROMO GRATIS ONGKIR</span>{" "}
+                        <span>
+                          SUBSIDI (MAX RP{" "}
+                          {Number(
+                            selectedRate.max_free_shipping_subsidy,
+                          ).toLocaleString()}
+                          )
+                        </span>
                         <span>- Rp {sim.app_subsidy.toLocaleString()}</span>
                       </p>
                     )}
                     <p className="text-[12px] text-white tracking-widest mt-2 border-t border-slate-700 pt-2 flex justify-between font-[1000]">
-                      <span>ONGKIR DIBAYAR USER</span>{" "}
+                      <span>ONGKIR DIBAYAR USER</span>
                       <span
                         className={
-                          sim.app_subsidy > 0 ? "text-teal-400" : "text-white"
+                          sim.user_pay_shipping > 0 && sim.app_subsidy > 0
+                            ? "text-orange-400"
+                            : sim.app_subsidy > 0
+                              ? "text-teal-400"
+                              : "text-white"
                         }
                       >
                         Rp {sim.user_pay_shipping.toLocaleString()}
@@ -655,11 +683,10 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                     </p>
                   </div>
 
-                  {/* PENDAPATAN KURIR */}
                   <div className="flex justify-between items-center bg-[#008080]/20 p-3 rounded-md border border-[#008080]/50">
                     <div>
                       <p className="text-[9px] text-teal-200 tracking-widest mb-1">
-                        HAK KURIR (TDK DIPOTONG)
+                        HAK KURIR
                       </p>
                       <p className="text-[16px] font-[1000] font-sans text-white">
                         RP {sim.courier_net.toLocaleString()}
@@ -668,19 +695,6 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                     <Truck className="text-[#008080]" size={24} />
                   </div>
 
-                  {/* PAJAK */}
-                  {sim.tax_amount > 0 && (
-                    <div className="flex justify-between items-center bg-red-900/30 p-3 rounded-md border border-red-500/50 text-red-400">
-                      <span className="text-[9px] font-bold tracking-widest">
-                        TITIPAN PAJAK PPN ({selectedRate.tax_percent}%)
-                      </span>
-                      <span className="text-[12px] font-[1000] font-sans">
-                        - RP {sim.tax_amount.toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* NET REVENUE APP */}
                   <div
                     className={`bg-white p-4 rounded-md mt-4 shadow-xl border-b-4 ${sim.app_profit < 0 ? "border-red-500" : "border-[#FF6600]"}`}
                   >
@@ -688,7 +702,7 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
                       <span>NET PROFIT PASARQU</span>
                       {sim.app_profit < 0 && (
                         <span className="text-red-500 animate-pulse flex items-center gap-1">
-                          <AlertTriangle size={12} /> RUGI (SUBSIDI KEBESARAN)
+                          <AlertTriangle size={12} /> RUGI
                         </span>
                       )}
                     </p>
@@ -702,7 +716,7 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
               </div>
             ) : (
               <div className="py-20 text-center text-slate-500 text-[10px] tracking-widest">
-                PILIH DISTRIK PASAR DI SAMPING...
+                PILIH DISTRIK PASAR...
               </div>
             )}
           </div>
@@ -712,7 +726,6 @@ export const ShippingConfig: React.FC<any> = ({ theme }) => {
   );
 };
 
-// --- KOMPONEN INPUT KECIL (DENGAN WARNING) ---
 const InputGroup = ({
   label,
   value,
@@ -734,14 +747,12 @@ const InputGroup = ({
       >
         {warningCondition && (
           <AlertTriangle size={12} className="text-red-500 animate-pulse" />
-        )}{" "}
+        )}
         {label}
       </label>
       <div className="relative group">
         {icon && (
-          <span
-            className={`absolute left-3 top-1/2 -translate-y-1/2 text-[12px] font-black ${isDark ? "text-slate-400" : "text-slate-400"}`}
-          >
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[12px] font-black text-slate-400">
             {icon}
           </span>
         )}
@@ -752,9 +763,7 @@ const InputGroup = ({
           className={`w-full py-3 ${icon ? "pl-9" : "pl-3"} pr-8 rounded-md border-2 outline-none font-[1000] text-[14px] font-sans transition-all ${isDark ? "bg-slate-900 border-slate-700 text-white focus:border-teal-500" : "bg-white focus:border-[#008080] border-slate-200 text-slate-900 shadow-sm"} ${warningCondition ? "border-red-400 focus:border-red-500 bg-red-50 text-red-700" : ""}`}
         />
         {unit && (
-          <span
-            className={`absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-black ${isDark ? "text-slate-400" : "text-slate-400"}`}
-          >
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-black text-slate-400">
             {unit}
           </span>
         )}
