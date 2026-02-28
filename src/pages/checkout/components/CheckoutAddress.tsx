@@ -12,7 +12,7 @@ interface Props {
   updateLogistics: (lat: number, lng: number) => void;
 }
 
-// 🚀 MENGGUNAKAN FILE LOKAL DARI FOLDER PUBLIC
+// MENGGUNAKAN FILE LOKAL DARI FOLDER PUBLIC
 const BUYER_ICON = "/buyer.png";
 
 export const CheckoutAddress: React.FC<Props> = ({
@@ -31,27 +31,24 @@ export const CheckoutAddress: React.FC<Props> = ({
     mapRef.current = map;
   }, []);
 
-  // Fungsi internal untuk sinkronisasi kordinat dan ongkir
+  // Fungsi internal untuk sinkronisasi kordinat dan ongkir secara real-time
   const handlePositionChange = (lat: number, lng: number) => {
     setDeliveryCoords({ lat, lng });
-    updateLogistics(lat, lng);
+    updateLogistics(lat, lng); // 🚀 Langsung panggil hitung ongkir
   };
 
-  // Saat peta diklik
   const handleMapClick = (e: google.maps.MapMouseEvent) => {
     if (e.latLng) {
       handlePositionChange(e.latLng.lat(), e.latLng.lng());
     }
   };
 
-  // Saat pin/marker selesai digeser
   const handleMarkerDragEnd = (e: google.maps.MapMouseEvent) => {
     if (e.latLng) {
       handlePositionChange(e.latLng.lat(), e.latLng.lng());
     }
   };
 
-  // 🚀 AMBIL GPS LOKASI SAAT INI
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
       showToast("GPS TIDAK DIDUKUNG DI PERANGKAT INI.", "error");
@@ -110,8 +107,8 @@ export const CheckoutAddress: React.FC<Props> = ({
       <div className="bg-orange-50 p-3 rounded-md border border-orange-200 flex items-start gap-3">
         <Info size={16} className="text-[#FF6600] shrink-0 mt-0.5" />
         <p className="text-[9px] font-black text-slate-600 uppercase leading-relaxed">
-          Geser Pin di peta atau gunakan GPS untuk menentukan titik akurat rumah
-          Anda. Ongkir akan otomatis menyesuaikan.
+          Geser Pin di peta atau klik area peta untuk menentukan titik akurat
+          rumah Anda. Ongkir akan otomatis menyesuaikan.
         </p>
       </div>
 
