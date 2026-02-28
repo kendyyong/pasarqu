@@ -30,13 +30,14 @@ import { OrderChatRoom } from "../../../features/chat/OrderChatRoom";
 const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
   ["places", "routes", "geometry", "drawing"];
 
-// 🚀 KOORDINAT CADANGAN (Mencegah Blank)
+// 🚀 KOORDINAT CADANGAN
 const DEFAULT_CENTER = { lat: -0.8327, lng: 117.2476 };
 
 const ICONS = {
-  courier: "/kurir.png", // 🚀 IKON MOTOR DARI FOLDER PUBLIC BOS
-  store: "https://cdn-icons-png.flaticon.com/512/1055/1055672.png",
-  home: "https://cdn-icons-png.flaticon.com/512/1946/1946488.png",
+  // 🚀 MENGGUNAKAN IKON CUSTOM DARI FOLDER PUBLIC BOS SECARA MENYELURUH
+  courier: "/kurir.png",
+  store: "/toko.png",
+  home: "/buyer.png",
 };
 
 interface Props {
@@ -58,6 +59,9 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
   } | null>(null);
   const [directions, setDirections] = useState<any>(null);
   const [isTracking, setIsTracking] = useState(false);
+
+  // 🚀 STATE PENGUNCI RUTE (Agar tidak menghitung ulang setiap detik)
+  const [calculatedDest, setCalculatedDest] = useState<string>("");
 
   const [chatTarget, setChatTarget] = useState<{
     type: string;
@@ -100,8 +104,8 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
       return;
     }
 
-    setIsTracking(true);
-    showToast("Mengaktifkan Radar Satelit...", "success");
+    setIsNavigatingMode(true);
+    showToast("Mencari Sinyal Satelit...", "success");
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -127,16 +131,17 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
   }, [
     user?.id,
     mapInstance,
-    isNavigatingMode,
     destLat,
     destLng,
     currentPos,
     showToast,
+    isNavigatingMode,
   ]);
 
+  // INTERVAL GPS (Hanya menyala saat Navigasi Aktif)
   useEffect(() => {
     let interval: any;
-    if (isTracking) {
+    if (isNavigatingMode) {
       interval = setInterval(() => {
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
@@ -152,7 +157,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                 .eq("id", user.id)
                 .then();
           },
-          () => setIsTracking(false),
+          () => setIsNavigatingMode(false),
           { enableHighAccuracy: true },
         );
       }, 5000);
@@ -160,10 +165,18 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isTracking, user?.id]);
+  }, [isNavigatingMode, user?.id]);
 
+  // 🚀 ENGINE RUTE ANTI-SPAM (Hanya Hitung Sekali per Tujuan)
   useEffect(() => {
     if (!isLoaded || !currentPos || destLat === 0) return;
+
+    // Kunci string tujuan (Misal: "-0.832,117.247")
+    const destString = `${destLat},${destLng}`;
+
+    // Jika rute tujuan ini sudah dihitung sebelumnya, HENTIKAN proses agar peta tidak lompat/bergeser
+    if (calculatedDest === destString) return;
+
     const directionsService = new window.google.maps.DirectionsService();
     directionsService.route(
       {
@@ -172,11 +185,15 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
         travelMode: window.google.maps.TravelMode.DRIVING,
       },
       (res, status) => {
-        if (status === "OK") setDirections(res);
+        if (status === "OK") {
+          setDirections(res);
+          setCalculatedDest(destString); // Kunci tujuan ini!
+        }
       },
     );
-  }, [isLoaded, currentPos, destLat, destLng, destinationPos]);
+  }, [isLoaded, currentPos, destLat, destLng, destinationPos, calculatedDest]);
 
+  // BUKA GOOGLE MAPS EKSTERNAL
   const handleOpenExternalMaps = () => {
     if (destLat === 0)
       return showToast("Koordinat tujuan tidak valid!", "error");
@@ -263,9 +280,9 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           document.body,
         )}
 
-      {/* 🚀 WADAH UTAMA (Relative, memenuhi layar) */}
+      {/* WADAH UTAMA */}
       <div className="relative w-full h-full flex flex-col font-sans font-black uppercase tracking-tighter text-left bg-slate-50 overflow-hidden">
-        {/* PANEL PENDAPATAN (Hilang Saat Navigasi) */}
+        {/* PANEL PENDAPATAN */}
         {!isNavigatingMode && (
           <div className="shrink-0 bg-[#0F172A] px-4 py-3 flex items-center justify-between shadow-md z-10">
             <div>
@@ -288,8 +305,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           </div>
         )}
 
-        {/* 🗺️ AREA PETA (SOLUSI ANTI BLANK) */}
-        {/* Jika Navigasi: Peta absolute fullscreen. Jika Standar: Peta tinggi fix 380px */}
+        {/* 🗺️ AREA PETA */}
         <div
           className={
             isNavigatingMode
@@ -299,7 +315,13 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
         >
           {isLoaded ? (
             <GoogleMap
-              mapContainerStyle={{ width: "100%", height: "100%" }}
+              mapContainerStyle={{
+                width: "100%",
+                height: "100%",
+                position: "absolute",
+                top: 0,
+                left: 0,
+              }}
               center={mapCenter}
               zoom={isNavigatingMode ? 18 : 15}
               onLoad={(m) => {
@@ -323,6 +345,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                   directions={directions}
                   options={{
                     suppressMarkers: true,
+                    preserveViewport: true,
                     polylineOptions: {
                       strokeColor: "#008080",
                       strokeWeight: 6,
@@ -331,6 +354,8 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                   }}
                 />
               )}
+
+              {/* MARKER KURIR CUSTOM */}
               {currentPos && (
                 <MarkerF
                   position={currentPos}
@@ -342,6 +367,8 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
                   zIndex={999}
                 />
               )}
+
+              {/* MARKER TUJUAN CUSTOM (Toko/Pembeli) */}
               {destLat !== 0 && (
                 <MarkerF
                   position={destinationPos}
@@ -362,7 +389,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
             </div>
           )}
 
-          {/* TOMBOL "MULAI NAVIGASI" (Mode Standar) */}
+          {/* TOMBOL "MULAI NAVIGASI" */}
           {!isNavigatingMode && (
             <button
               onClick={() => {
@@ -375,7 +402,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
             </button>
           )}
 
-          {/* KONTROL PETA (Pintasan di Kanan) */}
+          {/* KONTROL PETA KANAN BAWAH */}
           <div
             className={`absolute right-3 z-10 flex flex-col gap-3 pointer-events-none transition-all ${isNavigatingMode ? "bottom-[180px]" : "bottom-6"}`}
           >
@@ -387,19 +414,19 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
             </button>
             <button
               onClick={() => {
-                if (!isTracking) startTracking();
+                if (!isNavigatingMode) startTracking();
                 else mapInstance?.panTo(currentPos || destinationPos);
               }}
               className={`w-11 h-11 rounded-full shadow-[0_5px_15px_rgba(0,0,0,0.2)] flex items-center justify-center pointer-events-auto active:scale-90 border-2 ${isNavigatingMode || isTracking ? "bg-[#008080] text-white border-[#008080]" : "bg-white text-slate-600 border-slate-200"}`}
             >
               <Crosshair
                 size={22}
-                className={isTracking ? "animate-pulse" : ""}
+                className={isNavigatingMode ? "animate-pulse" : ""}
               />
             </button>
           </div>
 
-          {/* HEADER NAVIGASI AKTIF (Kiri Atas) */}
+          {/* HEADER NAVIGASI AKTIF */}
           {isNavigatingMode && (
             <div className="absolute top-6 left-4 right-4 z-10 flex justify-between items-start pointer-events-none">
               <div className="bg-slate-900/95 backdrop-blur-md px-5 py-3 rounded-[1.2rem] border border-white/10 shadow-2xl flex items-center gap-3 pointer-events-auto">
@@ -422,7 +449,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           )}
         </div>
 
-        {/* 🚀 PANEL AKSI NAVIGASI AKTIF (Solusi Anti-Tertumpuk Bottom Nav) */}
+        {/* 🚀 PANEL AKSI NAVIGASI AKTIF */}
         {isNavigatingMode && (
           <div className="fixed bottom-[85px] left-4 right-4 z-[210] pointer-events-none">
             <div className="bg-white/95 backdrop-blur-xl p-3 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-slate-100 flex items-center gap-3 pointer-events-auto">
@@ -445,7 +472,7 @@ export const CourierActiveOrder: React.FC<Props> = ({ order, onFinished }) => {
           </div>
         )}
 
-        {/* 📜 PANEL DETAIL STANDAR (Saat Navigasi Mati) */}
+        {/* 📜 PANEL DETAIL STANDAR */}
         {!isNavigatingMode && (
           <div className="flex-1 overflow-y-auto no-scrollbar bg-white rounded-t-3xl shadow-[0_-10px_30px_rgba(0,0,0,0.1)] relative z-20 -mt-5 p-4 pt-6 pb-[100px]">
             <div className="flex items-center justify-between mb-5">
