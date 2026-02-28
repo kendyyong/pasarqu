@@ -98,6 +98,7 @@ export const RegisterPage = () => {
       cleanPhoneForDb = "62" + cleanPhoneForDb;
 
       try {
+        // 🚀 FIX: SUNTIK NAMA KE METADATA AUTH
         const { data, error } = await supabase.auth.signUp({
           email: dummyEmail,
           password: password,
@@ -113,15 +114,14 @@ export const RegisterPage = () => {
 
         if (data.user) {
           setTimeout(async () => {
-            await supabase
-              .from("profiles")
-              .update({
-                full_name: fullName,
-                phone_number: cleanPhoneForDb,
-                role: "USER",
-                status: "APPROVED",
-              })
-              .eq("id", data.user?.id);
+            // 🚀 FIX: GUNAKAN UPSERT AGAR LEBIH AMAN
+            await supabase.from("profiles").upsert({
+              id: data.user?.id,
+              full_name: fullName,
+              phone_number: cleanPhoneForDb,
+              role: "USER",
+              status: "APPROVED",
+            });
           }, 1000);
         }
 
@@ -218,7 +218,6 @@ export const RegisterPage = () => {
 
       {/* --- MAIN CONTAINER --- */}
       <div className="flex-1 flex flex-col items-center justify-end md:justify-center relative z-10 w-full max-w-[420px] mx-auto pt-20 pb-0 md:pb-12">
-        {/* TEKS SAMBUTAN RATA TENGAH */}
         <div className="w-full px-6 mb-6 text-center">
           <h1 className="text-3xl font-[1000] text-slate-800 uppercase tracking-tighter leading-tight mb-3">
             Buat Akun <br />
@@ -230,13 +229,11 @@ export const RegisterPage = () => {
           </p>
         </div>
 
-        {/* FORM BOX */}
         <div className="w-full bg-white/95 backdrop-blur-xl rounded-t-[2rem] md:rounded-[1.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.04)] md:shadow-xl border-t md:border border-white/50 p-6 md:p-8 animate-in slide-in-from-bottom-8 duration-700">
           <form
             onSubmit={(e) => triggerConsent("PHONE", e)}
             className="space-y-3.5"
           >
-            {/* FIELD NAMA LENGKAP */}
             <div className="relative group">
               <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 border-r pr-2.5 border-slate-200 group-focus-within:border-[#008080] transition-colors">
                 <User
@@ -255,7 +252,6 @@ export const RegisterPage = () => {
               />
             </div>
 
-            {/* FIELD NOMOR HP */}
             <div className="relative group">
               <div
                 className={`absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 border-r pr-2.5 transition-colors ${isInvalid ? "border-red-200" : "border-slate-200 group-focus-within:border-[#008080]"}`}
@@ -294,7 +290,6 @@ export const RegisterPage = () => {
               </div>
             </div>
 
-            {/* FIELD PASSWORD BARU */}
             <div className="relative group">
               <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2 border-r pr-2.5 border-slate-200 group-focus-within:border-[#008080] transition-colors">
                 <Lock

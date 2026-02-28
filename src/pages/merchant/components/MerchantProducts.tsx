@@ -17,16 +17,22 @@ import {
   ToggleRight,
   ToggleLeft,
   AlertCircle,
+  Tag,
+  Save,
+  X,
+  Megaphone,
 } from "lucide-react";
 
 interface Props {
   autoOpenTrigger?: number;
   merchantProfile: any;
+  isPromoMode?: boolean;
 }
 
 export const MerchantProducts: React.FC<Props> = ({
   autoOpenTrigger = 0,
   merchantProfile,
+  isPromoMode = false,
 }) => {
   const { user } = useAuth() as any;
   const { showToast } = useToast();
@@ -38,18 +44,20 @@ export const MerchantProducts: React.FC<Props> = ({
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 🚀 STATE BARU UNTUK FILTER & LOADING AKSI
   const [activeFilter, setActiveFilter] = useState("ALL");
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
+  const [promoProduct, setPromoProduct] = useState<any>(null);
+  const [newPrice, setNewPrice] = useState("");
+
   useEffect(() => {
-    if (autoOpenTrigger > 0) {
+    if (autoOpenTrigger > 0 && !isPromoMode) {
       setSelectedProduct(null);
       setView("form");
     } else {
       setView("list");
     }
-  }, [autoOpenTrigger]);
+  }, [autoOpenTrigger, isPromoMode]);
 
   const fetchData = useCallback(
     async (isSilent = false) => {
@@ -81,8 +89,6 @@ export const MerchantProducts: React.FC<Props> = ({
 
   useEffect(() => {
     fetchData();
-
-    // 🔌 KABEL REAL-TIME: Otomatis sinkronisasi kalau ada perubahan stok / harga
     const channel = supabase
       .channel(`merchant_products_sync_${merchantProfile?.id}`)
       .on(
@@ -93,10 +99,9 @@ export const MerchantProducts: React.FC<Props> = ({
           table: "products",
           filter: `merchant_id=eq.${merchantProfile?.id}`,
         },
-        () => fetchData(true), // Silent refresh
+        () => fetchData(true),
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(channel);
     };
@@ -117,13 +122,11 @@ export const MerchantProducts: React.FC<Props> = ({
     }
   };
 
-  // 🚀 FUNGSI QUICK TOGGLE (ON/OFF)
   const toggleProductStatus = async (product: any) => {
     if (!product.is_verified) {
       showToast("Produk masih ditinjau Admin. Belum bisa diaktifkan.", "error");
       return;
     }
-
     setIsProcessing(product.id);
     const newStatus = !product.is_active;
     try {
@@ -131,7 +134,6 @@ export const MerchantProducts: React.FC<Props> = ({
         .from("products")
         .update({ is_active: newStatus })
         .eq("id", product.id);
-
       if (error) throw error;
       showToast(
         newStatus ? "PRODUK DIAKTIFKAN" : "PRODUK DISEMBUNYIKAN",
@@ -149,7 +151,50 @@ export const MerchantProducts: React.FC<Props> = ({
     }
   };
 
-  // 🚀 LOGIKA FILTERING
+  // 🚀 FUNGSI SIMPAN PROMO CERDAS
+  const handleSavePromoPrice = async () => {
+    if (!promoProduct) return;
+    setIsProcessing("promo_save");
+    try {
+      let parsedPrice = parseInt(newPrice.replace(/\D/g, ""), 10);
+      let isCancelingPromo = false;
+
+      // Jika input kosong atau harga disamakan/lebih mahal dari harga asli, artinya PROMO DIBATALKAN
+      if (
+        isNaN(parsedPrice) ||
+        parsedPrice >= promoProduct.price ||
+        parsedPrice <= 0
+      ) {
+        parsedPrice = promoProduct.price;
+        isCancelingPromo = true;
+      }
+
+      // HANYA UPDATE final_price (Harga Jual), Biarkan price (Harga Asli) Tetap Utuh
+      const { error } = await supabase
+        .from("products")
+        .update({
+          final_price: parsedPrice,
+        })
+        .eq("id", promoProduct.id);
+
+      if (error) throw error;
+
+      if (isCancelingPromo) {
+        showToast("PROMO DIBATALKAN. HARGA KEMBALI NORMAL.", "success");
+      } else {
+        showToast("HARGA PROMO BERHASIL AKTIF! ✅", "success");
+      }
+
+      setPromoProduct(null);
+      setNewPrice("");
+      fetchData(true);
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setIsProcessing(null);
+    }
+  };
+
   const filteredProducts = products.filter((p) => {
     let matchTab = false;
     if (activeFilter === "ALL") matchTab = true;
@@ -163,7 +208,6 @@ export const MerchantProducts: React.FC<Props> = ({
     return matchTab && matchSearch;
   });
 
-  // MENGHITUNG ANGKA BADGE
   const counts = {
     ALL: products.length,
     ACTIVE: products.filter((p) => p.is_verified && p.is_active).length,
@@ -173,14 +217,32 @@ export const MerchantProducts: React.FC<Props> = ({
 
   if (view === "list") {
     return (
-      <div className="w-full animate-in fade-in duration-500 pb-24 text-left font-sans font-black uppercase tracking-tighter">
-        {/* 🟢 HEADER GAHAR */}
-        <div className="bg-white p-6 rounded-xl border-2 border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 border-b-8 border-[#008080] mb-6">
+      <div className="w-full animate-in fade-in duration-500 pb-24 text-left font-sans uppercase tracking-tighter">
+        {/* BANNER MODE PROMO */}
+        {isPromoMode && (
+          <div className="bg-[#FF6600] text-white p-4 rounded-xl mb-4 flex items-center justify-between shadow-md animate-in slide-in-from-top-4">
+            <div className="flex items-center gap-3">
+              <Megaphone size={24} className="animate-pulse" />
+              <div>
+                <h3 className="font-black text-[14px]">
+                  MODE ATUR PROMO (HARGA INSTAN)
+                </h3>
+                <p className="text-[10px] font-bold opacity-90 tracking-widest normal-case">
+                  Pilih produk dan ketuk ikon{" "}
+                  <Tag size={12} className="inline" /> untuk memberikan diskon
+                  harga tanpa persetujuan Admin.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white p-4 md:p-6 rounded-xl border-2 border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 border-b-8 border-[#008080] mb-6">
           <div>
-            <h2 className="text-2xl text-slate-900 leading-none flex items-center gap-2">
+            <h2 className="text-xl md:text-2xl font-black text-slate-900 leading-none flex items-center gap-2">
               <Package className="text-[#008080]" size={24} /> KATALOG PRODUK
             </h2>
-            <p className="text-[10px] text-slate-400 tracking-widest mt-1">
+            <p className="text-[9px] md:text-[10px] font-bold text-slate-400 tracking-widest mt-1">
               MENGELOLA {products.length} ITEM DI ETALASE ANDA
             </p>
           </div>
@@ -189,13 +251,12 @@ export const MerchantProducts: React.FC<Props> = ({
               setSelectedProduct(null);
               setView("form");
             }}
-            className="bg-slate-900 hover:bg-[#008080] text-white px-6 py-3.5 rounded-xl font-black text-[11px] uppercase shadow-md transition-all flex items-center justify-center gap-2 tracking-widest active:scale-95"
+            className="bg-slate-900 hover:bg-[#008080] text-white px-6 py-3 md:py-3.5 rounded-xl font-black text-[11px] uppercase shadow-md transition-all flex items-center justify-center gap-2 tracking-widest active:scale-95"
           >
             <Plus size={18} strokeWidth={3} /> TAMBAH PRODUK BARU
           </button>
         </div>
 
-        {/* 🔍 SEARCH & TAB FILTERS */}
         <div className="bg-white p-2 rounded-xl border-2 border-slate-100 shadow-sm flex flex-col lg:flex-row gap-2 mb-6">
           <div className="relative w-full lg:w-1/3 shrink-0">
             <Search
@@ -207,7 +268,7 @@ export const MerchantProducts: React.FC<Props> = ({
               placeholder="CARI NAMA BARANG..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 border-none rounded-lg pl-10 pr-4 py-3.5 text-[11px] font-black outline-none focus:ring-2 ring-[#008080] transition-all placeholder:text-slate-300"
+              className="w-full bg-slate-50 border-none rounded-lg pl-10 pr-4 py-3 md:py-3.5 text-[11px] font-black outline-none focus:ring-2 ring-[#008080] transition-all placeholder:text-slate-300"
             />
           </div>
           <div className="flex gap-2 overflow-x-auto no-scrollbar w-full">
@@ -233,7 +294,7 @@ export const MerchantProducts: React.FC<Props> = ({
               color="bg-[#FF6600]"
             />
             <TabButton
-              label="STOK HABIS"
+              label="HABIS"
               count={counts.EMPTY}
               isActive={activeFilter === "EMPTY"}
               onClick={() => setActiveFilter("EMPTY")}
@@ -242,11 +303,10 @@ export const MerchantProducts: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* 📦 PRODUCT GRID */}
         {loading ? (
           <div className="py-20 flex flex-col items-center gap-4 bg-white rounded-xl border-2 border-slate-100">
             <Loader2 className="animate-spin text-[#008080]" size={40} />
-            <span className="text-[10px] text-slate-400 uppercase tracking-widest">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
               SINKRONISASI ETALASE...
             </span>
           </div>
@@ -254,7 +314,7 @@ export const MerchantProducts: React.FC<Props> = ({
           <div className="py-24 flex flex-col items-center justify-center bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl">
             <AlertCircle className="text-slate-300 mb-4" size={48} />
             <p className="text-[12px] font-black text-slate-400 tracking-widest">
-              BELUM ADA BARANG DI KATEGORI INI
+              BELUM ADA BARANG
             </p>
           </div>
         ) : (
@@ -264,12 +324,21 @@ export const MerchantProducts: React.FC<Props> = ({
               const isLowStock = product.stock > 0 && product.stock <= 5;
               const isPending = !product.is_verified;
 
+              // 🚀 KALKULATOR DISKON PERSENTASE
+              const isPromoActive =
+                product.final_price && product.final_price < product.price;
+              const discountPercent = isPromoActive
+                ? Math.round(
+                    ((product.price - product.final_price) / product.price) *
+                      100,
+                  )
+                : 0;
+
               return (
                 <div
                   key={product.id}
-                  className="bg-white border-2 border-slate-100 rounded-xl overflow-hidden hover:border-[#008080] shadow-sm hover:shadow-md transition-all flex flex-col group relative"
+                  className={`bg-white border-2 rounded-xl overflow-hidden shadow-sm transition-all flex flex-col group relative ${isPromoMode ? "border-[#FF6600]" : "border-slate-100 hover:border-[#008080] hover:shadow-md"}`}
                 >
-                  {/* GAMBAR & BADGE PRO */}
                   <div className="aspect-square relative bg-slate-50 border-b-2 border-slate-100 shrink-0 overflow-hidden">
                     <img
                       src={product.image_url || "/placeholder-product.png"}
@@ -277,8 +346,17 @@ export const MerchantProducts: React.FC<Props> = ({
                       className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 ${!product.is_active || isEmpty || isPending ? "grayscale opacity-60" : ""}`}
                     />
 
-                    {/* Badge Kiri Atas (Status) */}
-                    <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
+                    {/* 🚀 BADGE MERAH PERSENTASE DISKON (SUDUT KIRI ATAS) */}
+                    {isPromoActive && (
+                      <div className="absolute top-0 left-0 bg-[#e1251b] text-white px-2.5 py-1 rounded-br-xl text-[11px] font-[1000] z-20 shadow-sm border-r border-b border-red-700/50">
+                        -{discountPercent}%
+                      </div>
+                    )}
+
+                    {/* Badge Kiri Atas (Status - Akan tergeser ke bawah jika ada promo agar tidak nabrak) */}
+                    <div
+                      className={`absolute ${isPromoActive ? "top-8" : "top-2"} left-2 flex flex-col gap-1 z-10 transition-all`}
+                    >
                       {isPending ? (
                         <div className="bg-[#FF6600] text-white px-2 py-1 rounded-md text-[8px] font-black tracking-widest shadow-sm flex items-center gap-1">
                           <Clock size={10} /> DITINJAU
@@ -294,87 +372,103 @@ export const MerchantProducts: React.FC<Props> = ({
                       )}
                     </div>
 
-                    {/* Badge Kanan Atas (Alarm Stok) */}
                     <div className="absolute top-2 right-2 z-10">
                       {isEmpty ? (
-                        <span className="bg-red-600 text-white text-[8px] px-2 py-1 rounded-md shadow-sm animate-pulse border border-red-400">
+                        <span className="bg-red-600 text-white text-[8px] px-2 py-1 rounded-md shadow-sm animate-pulse border border-red-400 font-black">
                           HABIS!
                         </span>
                       ) : isLowStock ? (
-                        <span className="bg-orange-500 text-white text-[8px] px-2 py-1 rounded-md shadow-sm">
+                        <span className="bg-orange-500 text-white text-[8px] px-2 py-1 rounded-md shadow-sm font-black">
                           SISA {product.stock}
                         </span>
                       ) : null}
                     </div>
 
-                    {/* Overlay Action (Edit/Delete) Tampil saat di Hover (Desktop) */}
-                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 z-20">
-                      <button
-                        onClick={() => {
-                          setSelectedProduct(product);
-                          setView("form");
-                        }}
-                        className="p-3 bg-white text-[#008080] rounded-xl hover:scale-110 transition-transform shadow-lg"
-                        title="Edit Produk"
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(product.id)}
-                        disabled={isProcessing === product.id}
-                        className="p-3 bg-red-500 text-white rounded-xl hover:scale-110 transition-transform shadow-lg disabled:opacity-50"
-                        title="Hapus Produk"
-                      >
-                        {isProcessing === product.id ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                          <Trash2 size={16} />
-                        )}
-                      </button>
+                    <div
+                      className={`absolute inset-0 bg-slate-900/50 flex items-center justify-center gap-3 z-20 transition-opacity ${isPromoMode ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                    >
+                      {isPromoMode ? (
+                        <button
+                          onClick={() => {
+                            setPromoProduct(product);
+                            setNewPrice(
+                              product.final_price?.toString() ||
+                                product.price?.toString(),
+                            );
+                          }}
+                          className="px-4 py-2 bg-[#FF6600] text-white font-black text-[10px] rounded-xl hover:scale-110 transition-transform shadow-xl border-2 border-white flex items-center gap-2"
+                        >
+                          <Tag size={16} /> ATUR HARGA PROMO
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => {
+                              setSelectedProduct(product);
+                              setView("form");
+                            }}
+                            className="p-3 bg-white text-[#008080] rounded-xl hover:scale-110 transition-transform shadow-lg"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(product.id)}
+                            disabled={isProcessing === product.id}
+                            className="p-3 bg-red-500 text-white rounded-xl hover:scale-110 transition-transform shadow-lg disabled:opacity-50"
+                          >
+                            {isProcessing === product.id ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={16} />
+                            )}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 
-                  {/* INFO PRODUK */}
                   <div className="p-3 flex flex-col flex-1">
-                    <div className="flex items-center gap-1 text-slate-400 text-[8px] tracking-widest mb-1.5">
+                    <div className="flex items-center gap-1 text-slate-400 text-[8px] tracking-widest font-bold mb-1.5">
                       <Layers size={10} /> {product.categories?.name || "UMUM"}
                     </div>
-                    <h4 className="text-slate-800 text-[11px] leading-tight line-clamp-2 mb-2 flex-1 group-hover:text-[#008080] transition-colors">
+                    <h4 className="text-slate-800 text-[11px] font-black leading-tight line-clamp-2 mb-2 flex-1 group-hover:text-[#008080] transition-colors">
                       {product.name}
                     </h4>
 
-                    <div className="flex justify-between items-end mt-auto pb-2 border-b-2 border-slate-50 mb-2">
-                      <p className="text-[#FF6600] text-[14px] leading-none tracking-tighter">
-                        RP{" "}
-                        {product.final_price?.toLocaleString("id-ID") ||
-                          product.price?.toLocaleString("id-ID")}
-                      </p>
-                      <div
-                        className={`flex items-center gap-1 text-[9px] ${isEmpty ? "text-red-500" : "text-slate-400"}`}
-                      >
-                        <Archive size={10} /> STOK: {product.stock}
-                      </div>
+                    {/* 🚀 TAMPILAN HARGA CORET (STRIKETHROUGH) */}
+                    <div className="flex flex-col items-start mt-auto pb-2 border-b-2 border-slate-50 mb-2">
+                      {isPromoActive ? (
+                        <>
+                          <span className="text-red-500 text-[10px] line-through font-bold mb-0.5">
+                            RP {product.price?.toLocaleString("id-ID")}
+                          </span>
+                          <span className="text-[#FF6600] font-black text-[14px] md:text-[16px] leading-none tracking-tighter">
+                            RP {product.final_price?.toLocaleString("id-ID")}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[#008080] font-black text-[14px] md:text-[16px] leading-none tracking-tighter mt-auto">
+                          RP {product.price?.toLocaleString("id-ID")}
+                        </span>
+                      )}
                     </div>
 
-                    {/* 🚀 SAKLAR ON/OFF CEPAT */}
-                    <button
-                      disabled={isPending || isProcessing === product.id}
-                      onClick={() => toggleProductStatus(product)}
-                      className={`w-full flex items-center justify-center gap-2 py-2 rounded-md text-[9px] transition-all border ${
-                        product.is_active
-                          ? "bg-teal-50 border-teal-200 text-[#008080] hover:bg-teal-100"
-                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
-                      } disabled:opacity-50`}
-                    >
-                      {isProcessing === product.id ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : product.is_active ? (
-                        <ToggleRight size={14} />
-                      ) : (
-                        <ToggleLeft size={14} />
-                      )}
-                      {product.is_active ? "ETALASE: ON" : "ETALASE: OFF"}
-                    </button>
+                    {!isPromoMode && (
+                      <button
+                        disabled={isPending || isProcessing === product.id}
+                        onClick={() => toggleProductStatus(product)}
+                        className={`w-full flex items-center justify-center gap-2 py-2 rounded-md font-black text-[9px] transition-all border ${product.is_active ? "bg-teal-50 border-teal-200 text-[#008080] hover:bg-teal-100" : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"} disabled:opacity-50`}
+                      >
+                        {isProcessing === product.id ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : product.is_active ? (
+                          <ToggleRight size={14} />
+                        ) : (
+                          <ToggleLeft size={14} />
+                        )}{" "}
+                        {product.is_active ? "ETALASE: ON" : "ETALASE: OFF"}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -382,16 +476,78 @@ export const MerchantProducts: React.FC<Props> = ({
           </div>
         )}
 
-        {/* FLOATING ACTION BUTTON (MOBILE ONLY) */}
-        <button
-          onClick={() => {
-            setSelectedProduct(null);
-            setView("form");
-          }}
-          className="md:hidden fixed bottom-28 right-6 w-14 h-14 bg-[#008080] text-white rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-all z-50 border-4 border-white"
-        >
-          <Plus size={28} strokeWidth={3} />
-        </button>
+        {/* 🚀 MODAL POPUP EDIT HARGA KILAT */}
+        {promoProduct && (
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in zoom-in-95 duration-200">
+            <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl relative">
+              <button
+                onClick={() => setPromoProduct(null)}
+                className="absolute top-4 right-4 p-2 bg-slate-100 text-slate-500 rounded-full hover:bg-slate-200"
+              >
+                <X size={16} />
+              </button>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-3 bg-orange-100 text-orange-600 rounded-xl">
+                  <Tag size={24} />
+                </div>
+                <div>
+                  <h3 className="text-[14px] font-black text-slate-800">
+                    ATUR HARGA DISKON
+                  </h3>
+                  <p className="text-[10px] font-bold text-slate-400 normal-case">
+                    Harga baru langsung tayang!
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <p className="text-[12px] font-black text-slate-800 truncate mb-1">
+                  {promoProduct.name}
+                </p>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                    Harga Normal:
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-black line-through decoration-red-500">
+                    Rp {promoProduct.price?.toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-[14px]">
+                    Rp
+                  </span>
+                  <input
+                    type="number"
+                    value={newPrice}
+                    onChange={(e) => setNewPrice(e.target.value)}
+                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl py-4 pl-12 pr-4 font-black text-2xl text-[#FF6600] outline-none focus:border-orange-500 transition-colors"
+                    placeholder="Ketik Harga Promo..."
+                    autoFocus
+                  />
+                </div>
+                <p className="text-[9px] text-orange-500 mt-2 font-bold italic normal-case">
+                  *Kosongkan isi kotak ini atau samakan dengan harga asli jika
+                  Anda ingin mencabut promo.
+                </p>
+              </div>
+
+              <button
+                onClick={handleSavePromoPrice}
+                disabled={isProcessing === "promo_save"}
+                className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black text-[12px] tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all"
+              >
+                {isProcessing === "promo_save" ? (
+                  <Loader2 className="animate-spin" size={18} />
+                ) : (
+                  <>
+                    <Save size={18} /> PASANG PROMO SEKARANG
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -414,15 +570,10 @@ export const MerchantProducts: React.FC<Props> = ({
   );
 };
 
-// --- SUB-COMPONENTS ---
 const TabButton = ({ label, count, isActive, onClick, color }: any) => (
   <button
     onClick={onClick}
-    className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 px-4 py-3.5 rounded-lg text-[10px] font-black transition-all border-2 ${
-      isActive
-        ? `${color} text-white border-transparent shadow-md`
-        : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50 hover:text-slate-700"
-    }`}
+    className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 px-4 py-3 md:py-3.5 rounded-lg text-[10px] font-black transition-all border-2 ${isActive ? `${color} text-white border-transparent shadow-md` : "bg-white text-slate-400 border-slate-100 hover:bg-slate-50 hover:text-slate-700"}`}
   >
     {label}
     {count !== undefined && (
@@ -434,5 +585,3 @@ const TabButton = ({ label, count, isActive, onClick, color }: any) => (
     )}
   </button>
 );
-
-export default MerchantProducts;

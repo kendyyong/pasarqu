@@ -31,7 +31,13 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const { user } = useAuth();
   const [isBump, setIsBump] = useState(false);
 
-  const finalDisplayName = user ? userName || "Pengguna" : "Tamu";
+  // 🚀 FIX: Langsung ambil nama dari user metadata jika userName kosong!
+  const finalDisplayName = user
+    ? userName ||
+      user?.user_metadata?.full_name ||
+      user?.email?.split("@")[0] ||
+      "MEMBER"
+    : "TAMU";
 
   useEffect(() => {
     if (cartCount > 0) {
@@ -63,7 +69,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           className="flex items-center cursor-pointer shrink-0 group active:scale-95 transition-all duration-200"
           onClick={handleMarketChange}
         >
-          {/* Logo Mobile (DIPERBESAR ke h-12) */}
+          {/* Logo Mobile */}
           <div className="relative h-12 w-12 flex items-center justify-center bg-white rounded-xl shadow-xl border border-white/20 overflow-hidden p-0 md:hidden">
             <img
               src="/logo-pasarqu.png"
@@ -76,12 +82,12 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             />
           </div>
 
-          {/* Logo Desktop (DIPERBESAR ke h-14) */}
+          {/* Logo Desktop */}
           <div className="hidden md:flex flex-col text-left">
             <img
               src="/logo-text.png"
               alt="PASARQU"
-              className="h-14 w-auto object-contain" // 🚀 Ukuran dinaikkan dari h-10 ke h-14
+              className="h-14 w-auto object-contain"
               style={{
                 filter: `drop-shadow(1.5px 0px 0px white) drop-shadow(-1.5px 0px 0px white) drop-shadow(0px 1.5px 0px white) drop-shadow(0px -1.5px 0px white)`,
               }}
@@ -95,7 +101,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           </div>
         </div>
 
-        {/* 🚀 SEARCH BAR PRO */}
+        {/* SEARCH BAR PRO */}
         <div className="flex-1">
           <SearchBar
             value={searchQuery}

@@ -27,7 +27,6 @@ import {
   Crosshair,
 } from "lucide-react";
 
-// 🚀 FIX: SERAGAMKAN LIBRARIES GOOGLE MAPS AGAR TIDAK CRASH (BLANK PUTIH)
 const GOOGLE_MAPS_LIBRARIES: ("places" | "routes" | "geometry" | "drawing")[] =
   ["places", "routes", "geometry", "drawing"];
 
@@ -38,7 +37,6 @@ export const MerchantPromoPage: React.FC = () => {
 
   const { selectedMarket } = useMarket() as any;
 
-  // 🚀 FIX: Gunakan variabel seragam GOOGLE_MAPS_LIBRARIES
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
@@ -164,19 +162,27 @@ export const MerchantPromoPage: React.FC = () => {
         );
       }
 
+      // 🚀 FIX: SUNTIK NAMA KE METADATA AUTH TOKO
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
+        options: {
+          data: {
+            full_name: formData.name,
+            shop_name: formData.shopName,
+          },
+        },
       });
 
       if (error) throw error;
       await new Promise((r) => setTimeout(r, 1500));
 
       if (data.user) {
+        // 🚀 FIX: Ganti 'name' jadi 'full_name' agar seragam di table profiles
         const { error: profileError } = await supabase.from("profiles").upsert({
           id: data.user.id,
           email: formData.email,
-          name: formData.name,
+          full_name: formData.name,
           phone_number: formData.phone,
           address: formData.address,
           role: "MERCHANT",
@@ -223,7 +229,6 @@ export const MerchantPromoPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#004d4d] via-[#003333] to-[#002222] flex flex-col font-sans text-left relative overflow-x-hidden">
-      {/* DEKORASI LATAR BELAKANG */}
       <div
         className="absolute inset-0 opacity-[0.05] pointer-events-none"
         style={{

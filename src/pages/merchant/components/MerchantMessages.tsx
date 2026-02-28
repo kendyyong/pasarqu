@@ -14,10 +14,10 @@ import {
   Hash,
   Clock,
   Zap,
+  ShieldCheck,
 } from "lucide-react";
 import { OrderChatRoom } from "../../../features/chat/OrderChatRoom";
 
-// 🚀 DATABASE TEMPLATE BALASAN CEPAT (PRO VERSION)
 const QUICK_REPLIES = {
   merchant_customer: [
     "Halo kak, pesanan sedang kami siapkan ya. Mohon ditunggu! 📦",
@@ -31,33 +31,59 @@ const QUICK_REPLIES = {
     "Mohon tunggu sebentar ya mas, masih proses packing. ⏳",
     "Titik lokasi toko sudah sesuai dengan map ya mas. 📍",
   ],
+  merchant_admin: [
+    // 🚀 Balasan Cepat untuk Admin
+    "Halo Admin, saya butuh bantuan terkait aplikasi. 🛠️",
+    "Admin, tolong bantu proses pencairan dana (withdraw). 💰",
+    "Admin, apakah ada promo terbaru dari PasarQu? 📢",
+  ],
 };
 
-export const MerchantMessages = () => {
-  const { user } = useAuth();
+interface Props {
+  autoSelectTarget?: string | null; // 🚀 Menerima sinyal 'admin'
+}
+
+export const MerchantMessages: React.FC<Props> = ({ autoSelectTarget }) => {
+  const { user, profile } = useAuth() as any;
   const { showToast } = useToast();
+
   const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChat, setSelectedChat] = useState<any>(null);
   const [isShopOpen, setIsShopOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState("ALL"); // ALL, CUSTOMER, COURIER
+  const [activeFilter, setActiveFilter] = useState("ALL");
 
-  // 1. MONITOR STATUS TOKO REALTIME (AGAR CHAT HANYA AKTIF SAAT BUKA)
+  // 🚀 STATE KHUSUS ADMIN LOKAL
+  const [localAdmin, setLocalAdmin] = useState<any>(null);
+
   useEffect(() => {
     if (!user?.id) return;
-
     const fetchStatus = async () => {
       const { data } = await supabase
         .from("merchants")
-        .select("is_shop_open")
+        .select("is_shop_open, market_id")
         .eq("id", user.id)
         .maybeSingle();
-      if (data) setIsShopOpen(data.is_shop_open);
+      if (data) {
+        setIsShopOpen(data.is_shop_open);
+
+        // 🚀 SEKALIAN CARI SIAPA ADMIN LOKAL DI PASAR INI
+        if (data.market_id) {
+          const { data: adminData } = await supabase
+            .from("profiles")
+            .select("id, full_name, name")
+            .eq("managed_market_id", data.market_id)
+            .eq("role", "SUPER_ADMIN") // Sesuaikan jika role admin lokal beda nama
+            .limit(1)
+            .maybeSingle();
+
+          if (adminData) setLocalAdmin(adminData);
+        }
+      }
     };
 
     fetchStatus();
-
     const shopSub = supabase
       .channel("chat_merchant_status_sync")
       .on(
@@ -71,29 +97,18 @@ export const MerchantMessages = () => {
         (payload) => setIsShopOpen(payload.new.is_shop_open),
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(shopSub);
     };
   }, [user]);
 
-  // 2. AMBIL DAFTAR PERCAKAPAN BERDASARKAN ORDER AKTIF
   const fetchConversations = useCallback(async () => {
     if (!user?.id) return;
     try {
-      // 🚀 AMBIL DATA PESANAN BESERTA PROFIL PEMBELI & KURIR
       const { data, error } = await supabase
         .from("orders")
         .select(
-          `
-            id, 
-            status, 
-            created_at, 
-            customer_id,
-            courier_id,
-            profiles:customer_id (id, full_name, name), 
-            couriers:courier_id (id, full_name, name)
-        `,
+          `id, status, created_at, customer_id, courier_id, profiles:customer_id (id, full_name, name), couriers:courier_id (id, full_name, name)`,
         )
         .eq("merchant_id", user.id)
         .order("created_at", { ascending: false });
@@ -110,7 +125,6 @@ export const MerchantMessages = () => {
   useEffect(() => {
     if (user && isShopOpen) {
       fetchConversations();
-      // Auto refresh list jika ada order baru atau perubahan status
       const chatListSub = supabase
         .channel(`chat_list_merchant_auto_${user.id}`)
         .on(
@@ -130,13 +144,26 @@ export const MerchantMessages = () => {
     }
   }, [user, isShopOpen, fetchConversations]);
 
-  // FUNGSI COPY QUICK REPLY
+  // 🚀 TANGKAP SINYAL "BANTUAN ADMIN" DARI OVERVIEW
+  useEffect(() => {
+    if (autoSelectTarget === "admin" && localAdmin && !loading) {
+      // Otomatis Buka Chatbox dengan Admin
+      setSelectedChat({
+        orderId: "ADMIN_SUPPORT", // ID Palsu khusus Support
+        name: `ADMIN ${localAdmin.full_name || "LOKAL"}`,
+        partnerId: localAdmin.id,
+        type: "merchant_admin",
+        status: "SUPPORT",
+        date: new Date().toISOString(),
+      });
+    }
+  }, [autoSelectTarget, localAdmin, loading]);
+
   const handleQuickReply = (text: string) => {
     navigator.clipboard.writeText(text);
     showToast("Teks disalin! Silakan Paste di kolom chat.", "success");
   };
 
-  // 3. LOGIKA FILTER & SEARCH (CARI BERDASARKAN NAMA ATAU NOMOR ORDER)
   const filteredConversations = conversations.filter((o) => {
     const nameCust = (
       o.profiles?.full_name ||
@@ -181,7 +208,7 @@ export const MerchantMessages = () => {
             SISTEM KOMUNIKASI NON-AKTIF
           </p>
         </div>
-        <div className="py-24 text-center bg-white border-2 border-dashed border-red-200 rounded-xl flex flex-col items-center">
+        <div className="py-24 text-center bg-white border-2 border-dashed border-red-200 rounded-xl flex flex-col items-center p-6">
           <ShieldAlert size={48} className="text-red-500 mb-4" />
           <h3 className="text-[14px] font-black text-slate-800 uppercase tracking-widest">
             TOKO ANDA SEDANG TUTUP
@@ -195,15 +222,14 @@ export const MerchantMessages = () => {
     );
 
   return (
-    <div className="w-full animate-in fade-in duration-500 text-left font-sans font-black uppercase tracking-tighter h-[calc(100vh-120px)] flex flex-col">
-      {/* 🟢 HEADER GAHAR DENGAN FILTER */}
-      <div className="bg-white p-6 rounded-t-xl border-2 border-b-0 border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm shrink-0">
+    <div className="w-full animate-in fade-in duration-500 text-left font-sans uppercase h-[calc(100vh-120px)] flex flex-col">
+      <div className="bg-white p-4 md:p-6 rounded-t-xl border-2 border-b-0 border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm shrink-0">
         <div>
-          <h1 className="text-2xl text-slate-800 leading-none flex items-center gap-2">
+          <h1 className="text-xl md:text-2xl font-black text-slate-800 leading-none flex items-center gap-2">
             <MessageSquare className="text-[#008080]" size={24} /> MESSAGE
             CENTER
           </h1>
-          <p className="text-[10px] text-slate-400 mt-1 tracking-widest">
+          <p className="text-[9px] md:text-[10px] font-black text-slate-400 mt-1 tracking-widest">
             KOMUNIKASI REAL-TIME PASARQU
           </p>
         </div>
@@ -212,7 +238,7 @@ export const MerchantMessages = () => {
             <button
               key={f}
               onClick={() => setActiveFilter(f)}
-              className={`flex-1 md:flex-none px-4 py-2 text-[10px] rounded-md transition-all ${activeFilter === f ? "bg-slate-900 text-white shadow-md" : "text-slate-400"}`}
+              className={`flex-1 md:flex-none px-4 py-2 font-black text-[10px] rounded-md transition-all ${activeFilter === f ? "bg-slate-900 text-white shadow-md" : "text-slate-400"}`}
             >
               {f === "ALL" ? "SEMUA" : f === "CUSTOMER" ? "PEMBELI" : "KURIR"}
             </button>
@@ -220,7 +246,6 @@ export const MerchantMessages = () => {
         </div>
       </div>
 
-      {/* 🔵 LAYOUT DUA KOLOM */}
       <div className="flex-1 flex flex-col lg:flex-row border-2 border-slate-200 rounded-b-xl overflow-hidden bg-white shadow-sm h-full">
         {/* KOLOM KIRI: DAFTAR KONTAK */}
         <div
@@ -235,7 +260,7 @@ export const MerchantMessages = () => {
               <input
                 type="text"
                 placeholder="CARI NAMA / ID..."
-                className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg pl-9 pr-4 py-2.5 text-[11px] outline-none focus:border-[#008080] transition-all"
+                className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg font-black pl-9 pr-4 py-2.5 text-[11px] outline-none focus:border-[#008080] transition-all"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -243,26 +268,53 @@ export const MerchantMessages = () => {
           </div>
 
           <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-2">
+            {/* 🚀 KOTAK KHUSUS ADMIN SELALU ADA DI ATAS JIKA ADA ADMIN LOKAL */}
+            {localAdmin && activeFilter === "ALL" && !searchQuery && (
+              <button
+                onClick={() =>
+                  setSelectedChat({
+                    orderId: "ADMIN_SUPPORT",
+                    name: `ADMIN ${localAdmin.full_name || "LOKAL"}`,
+                    partnerId: localAdmin.id,
+                    type: "merchant_admin",
+                    status: "SUPPORT",
+                    date: new Date().toISOString(),
+                  })
+                }
+                className={`w-full text-left p-3 rounded-xl border-2 transition-all flex items-center gap-3 bg-blue-50 border-blue-200 shadow-sm`}
+              >
+                <div className="w-10 h-10 rounded-lg bg-blue-500 text-white flex items-center justify-center shrink-0 border border-blue-400">
+                  <ShieldCheck size={20} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-[12px] font-black text-blue-900 truncate">
+                    BANTUAN ADMIN LOKAL
+                  </h4>
+                  <p className="text-[9px] font-bold text-blue-600 tracking-widest mt-1">
+                    HUBUNGI JIKA ADA KENDALA
+                  </p>
+                </div>
+                <ChevronRight size={14} className="text-blue-300" />
+              </button>
+            )}
+
+            {/* DAFTAR TRANSAKSI NORMAL */}
             {filteredConversations.length === 0 ? (
               <div className="py-10 text-center opacity-30">
                 <MessageSquare size={32} className="mx-auto mb-2" />
-                <p className="text-[10px]">TIDAK ADA PERCAKAPAN</p>
+                <p className="text-[10px] font-black">TIDAK ADA PERCAKAPAN</p>
               </div>
             ) : (
               filteredConversations.map((order) => (
                 <div key={order.id} className="space-y-1">
-                  {/* CHAT DENGAN PEMBELI */}
                   {(activeFilter === "ALL" || activeFilter === "CUSTOMER") &&
                     order.customer_id && (
                       <button
                         onClick={() =>
                           setSelectedChat({
                             orderId: order.id,
-                            name:
-                              order.profiles?.full_name ||
-                              order.profiles?.name ||
-                              "PEMBELI",
-                            partnerId: order.customer_id, // 🚀 UUID MANUSIA
+                            name: order.profiles?.full_name || "PEMBELI",
+                            partnerId: order.customer_id,
                             type: "merchant_customer",
                             status: order.status,
                             date: order.created_at,
@@ -274,29 +326,24 @@ export const MerchantMessages = () => {
                           <Headset size={18} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h4 className="text-[12px] text-slate-900 truncate">
+                          <h4 className="text-[12px] font-black text-slate-900 truncate">
                             {order.profiles?.full_name || "PEMBELI"}
                           </h4>
-                          <p className="text-[9px] text-slate-400 tracking-widest mt-1">
+                          <p className="text-[9px] font-black text-slate-400 tracking-widest mt-1">
                             ORD#{order.id.slice(0, 8)}
                           </p>
                         </div>
                         <ChevronRight size={14} className="text-slate-300" />
                       </button>
                     )}
-
-                  {/* CHAT DENGAN KURIR */}
                   {(activeFilter === "ALL" || activeFilter === "COURIER") &&
                     order.courier_id && (
                       <button
                         onClick={() =>
                           setSelectedChat({
                             orderId: order.id,
-                            name:
-                              order.couriers?.full_name ||
-                              order.couriers?.name ||
-                              "KURIR",
-                            partnerId: order.courier_id, // 🚀 UUID MANUSIA
+                            name: order.couriers?.full_name || "KURIR",
+                            partnerId: order.courier_id,
                             type: "courier_merchant",
                             status: order.status,
                             date: order.created_at,
@@ -308,10 +355,10 @@ export const MerchantMessages = () => {
                           <Bike size={18} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h4 className="text-[12px] text-slate-900 truncate">
+                          <h4 className="text-[12px] font-black text-slate-900 truncate">
                             {order.couriers?.full_name || "KURIR"}
                           </h4>
-                          <p className="text-[9px] text-orange-400 tracking-widest mt-1">
+                          <p className="text-[9px] font-black text-orange-400 tracking-widest mt-1">
                             KURIR • #{order.id.slice(0, 8)}
                           </p>
                         </div>
@@ -331,7 +378,7 @@ export const MerchantMessages = () => {
           {!selectedChat ? (
             <div className="text-center opacity-20">
               <MessageSquare size={64} className="mx-auto mb-4" />
-              <p className="text-[12px] tracking-widest">
+              <p className="text-[12px] font-black tracking-widest">
                 PILIH PESAN UNTUK MEMULAI
               </p>
             </div>
@@ -339,38 +386,44 @@ export const MerchantMessages = () => {
             <>
               {/* Header Ruang Chat */}
               <div className="bg-slate-900 text-white p-4 shrink-0 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <button
                     onClick={() => setSelectedChat(null)}
-                    className="lg:hidden p-2 bg-white/10 rounded-md hover:bg-white/20 transition-all"
+                    className="lg:hidden p-2 bg-white/10 rounded-md hover:bg-white/20 transition-all shrink-0"
                   >
                     <ArrowLeft size={16} />
                   </button>
-                  <div>
-                    <h3 className="text-[14px] leading-none flex items-center gap-2">
+                  <div className="truncate">
+                    <h3 className="text-[14px] font-black leading-none flex items-center gap-2 truncate">
                       {selectedChat.type === "merchant_customer" ? (
                         <Headset size={14} className="text-[#008080]" />
+                      ) : selectedChat.type === "merchant_admin" ? (
+                        <ShieldCheck size={14} className="text-blue-400" />
                       ) : (
                         <Bike size={14} className="text-[#FF6600]" />
                       )}
                       {selectedChat.name}
                     </h3>
-                    <p className="text-[9px] text-white/40 tracking-widest mt-1.5 uppercase flex items-center gap-2">
-                      <Hash size={10} /> ORD#{selectedChat.orderId.slice(0, 8)}
-                      <span className="text-white/10">|</span>
+                    <p className="text-[9px] font-bold text-white/40 tracking-widest mt-1.5 uppercase flex items-center gap-1.5 truncate">
+                      {selectedChat.type !== "merchant_admin" && (
+                        <>
+                          <Hash size={10} /> #{selectedChat.orderId.slice(0, 8)}{" "}
+                          <span className="text-white/10">|</span>
+                        </>
+                      )}
                       <Clock size={10} />{" "}
                       {new Date(selectedChat.date).toLocaleDateString()}
                     </p>
                   </div>
                 </div>
                 <div
-                  className={`px-3 py-1 rounded-md text-[9px] border font-black ${selectedChat.status === "COMPLETED" ? "bg-green-500/20 border-green-500 text-green-500" : "bg-[#FF6600]/20 border-[#FF6600] text-[#FF6600]"}`}
+                  className={`px-3 py-1 rounded-md text-[9px] border font-black shrink-0 ${selectedChat.status === "COMPLETED" ? "bg-green-500/20 border-green-500 text-green-500" : selectedChat.status === "SUPPORT" ? "bg-blue-500/20 border-blue-500 text-blue-400" : "bg-[#FF6600]/20 border-[#FF6600] text-[#FF6600]"}`}
                 >
                   {selectedChat.status}
                 </div>
               </div>
 
-              {/* 🚀 QUICK REPLIES BAR */}
+              {/* QUICK REPLIES BAR */}
               <div className="bg-slate-50 border-b-2 border-slate-100 p-2 overflow-x-auto no-scrollbar flex items-center gap-2 shrink-0">
                 <div className="flex items-center gap-1 text-[9px] text-[#008080] font-black shrink-0 px-2">
                   <Zap size={12} className="animate-pulse" /> QUICK REPLY:
@@ -381,7 +434,7 @@ export const MerchantMessages = () => {
                   <button
                     key={i}
                     onClick={() => handleQuickReply(reply)}
-                    className="shrink-0 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] text-slate-600 hover:border-[#008080] hover:text-[#008080] transition-all active:scale-95"
+                    className="shrink-0 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-600 hover:border-[#008080] hover:text-[#008080] transition-all active:scale-95"
                   >
                     {reply}
                   </button>
@@ -392,7 +445,7 @@ export const MerchantMessages = () => {
               <div className="flex-1 relative overflow-hidden bg-white">
                 <OrderChatRoom
                   orderId={selectedChat.orderId}
-                  receiverId={selectedChat.partnerId} // 🚀 PENGIRIMAN ID PASANGAN CHAT
+                  receiverId={selectedChat.partnerId}
                   receiverName={selectedChat.name}
                   chatType={selectedChat.type}
                 />

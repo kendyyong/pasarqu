@@ -25,18 +25,19 @@ export const ProductCard: React.FC<Props> = ({
 }) => {
   const [isWishlist, setIsWishlist] = useState(false);
   const isHabis = product.stock <= 0;
-  const isLowStock = product.stock > 0 && product.stock < 5;
+  const isLowStock = product.stock > 0 && product.stock <= 5;
 
-  // 🚀 LOGIKA PROMO
-  const hasPromo = product.promo_price && product.promo_price < product.price;
-  const displayPrice = hasPromo ? product.promo_price : product.price;
-  const discountPercent =
-    product.promo_percentage ||
-    (hasPromo
-      ? Math.round(
-          ((product.price - product.promo_price) / product.price) * 100,
-        )
-      : 0);
+  // 🚀 LOGIKA PROMO SINKRONISASI DATABASE (Membaca final_price)
+  const basePrice = product.price || 0;
+  const currentPrice = product.final_price || product.price || 0;
+
+  // Jika final_price LEBIH KECIL dari price, berarti ada promo aktif!
+  const hasPromo = currentPrice < basePrice;
+
+  // Hitung persentase diskon
+  const discountPercent = hasPromo
+    ? Math.round(((basePrice - currentPrice) / basePrice) * 100)
+    : 0;
 
   // 🚀 LOGIKA ANGKA TERJUAL STABIL (5-20)
   const getStableSold = (id: string) => {
@@ -88,11 +89,13 @@ export const ProductCard: React.FC<Props> = ({
           />
         </button>
 
-        {/* BADGE DISKON */}
+        {/* 🚀 BADGE DISKON MERAH (PERSENTASE) */}
         {hasPromo && !isHabis && (
           <div className="absolute top-0 left-0 z-20">
-            <div className="bg-red-600 text-white px-2.5 py-1 rounded-br-xl shadow-lg flex items-center gap-1 border-b border-r border-white/20">
-              <span className="text-[13px] font-bold">-{discountPercent}%</span>
+            <div className="bg-[#e1251b] text-white px-2.5 py-1 rounded-br-xl shadow-lg flex items-center gap-1 border-b border-r border-red-700/50">
+              <span className="text-[12px] font-[1000] tracking-tighter">
+                -{discountPercent}%
+              </span>
             </div>
           </div>
         )}
@@ -100,7 +103,7 @@ export const ProductCard: React.FC<Props> = ({
         {/* 🚀 PRO: BADGE GRATIS ONGKIR */}
         {!isHabis && (
           <div className="absolute bottom-2 right-2 z-20">
-            <div className="bg-teal-500 text-white p-1 rounded-md shadow-md flex items-center justify-center animate-pulse">
+            <div className="bg-[#008080] text-white p-1 rounded-md shadow-md flex items-center justify-center">
               <Truck size={14} fill="white" />
             </div>
           </div>
@@ -119,7 +122,7 @@ export const ProductCard: React.FC<Props> = ({
       <div className="p-3 flex flex-col flex-1 text-left">
         {/* MERCHANT DENGAN BADGE "PILIHAN" */}
         <div className="flex items-center gap-1 mb-1.5">
-          <div className="flex items-center gap-0.5 bg-teal-50 text-teal-600 px-1 rounded-[2px] border border-teal-100">
+          <div className="flex items-center gap-0.5 bg-teal-50 text-teal-600 px-1 rounded-[2px] border border-teal-100 shrink-0">
             <CheckCircle2 size={8} fill="currentColor" className="text-white" />
             <span className="text-[7px] font-bold uppercase tracking-tighter">
               Pilihan
@@ -132,12 +135,12 @@ export const ProductCard: React.FC<Props> = ({
 
         {/* JUDUL PRODUK */}
         <h4
-          className={`text-[12px] font-normal text-slate-700 line-clamp-1 leading-tight uppercase ${isHabis ? "line-through text-slate-400" : ""}`}
+          className={`text-[12px] font-normal text-slate-700 line-clamp-2 leading-tight uppercase ${isHabis ? "line-through text-slate-400" : ""}`}
         >
           {product.name}
         </h4>
 
-        {/* 🚀 BARU: INFO BERAT & SATUAN (PENTING!) */}
+        {/* 🚀 INFO BERAT & SATUAN */}
         <div className="flex items-center gap-1 mt-1 mb-1.5">
           <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 uppercase tracking-tighter">
             {product.weight} {product.unit || "Pcs"}
@@ -157,37 +160,55 @@ export const ProductCard: React.FC<Props> = ({
           </span>
         </div>
 
+        {/* 🚀 KOTAK HARGA (CORET & NORMAL) */}
         <div className="mt-auto">
           <div className="flex flex-col mb-2">
-            {/* HARGA CORET MERAH */}
-            {hasPromo && (
-              <span className="text-[11px] text-red-500 line-through font-medium mb-0.5">
-                Rp {product.price.toLocaleString()}
-              </span>
-            )}
-
-            <div className="flex items-center justify-between w-full">
-              {/* HARGA UTAMA (14PX BOLD) */}
-              <span className="text-[14px] font-bold text-[#FF6600] tracking-tighter leading-none">
-                Rp {displayPrice?.toLocaleString()}
-              </span>
-
-              {/* LABEL STOK */}
-              {!isHabis && (
-                <div
-                  className={`text-[8px] font-bold px-1 py-0.5 rounded border ${isLowStock ? "bg-red-50 text-red-600 border-red-100" : "bg-slate-50 text-slate-500 border-slate-100"}`}
-                >
-                  {isLowStock
-                    ? `SISA ${product.stock}`
-                    : `STOK ${product.stock}`}
+            {/* HARGA CORET MERAH (TAMPIL JIKA ADA PROMO) */}
+            {hasPromo ? (
+              <>
+                <span className="text-[10px] text-slate-400 line-through decoration-red-500 font-medium mb-0.5">
+                  Rp {basePrice.toLocaleString()}
+                </span>
+                <div className="flex items-center justify-between w-full">
+                  {/* HARGA DISKON (ORANYE BESAR) */}
+                  <span className="text-[14px] font-[1000] text-[#FF6600] tracking-tighter leading-none">
+                    Rp {currentPrice.toLocaleString()}
+                  </span>
+                  {/* LABEL STOK */}
+                  {!isHabis && (
+                    <div
+                      className={`text-[8px] font-bold px-1 py-0.5 rounded border shrink-0 ${isLowStock ? "bg-red-50 text-red-600 border-red-100" : "bg-slate-50 text-slate-500 border-slate-100"}`}
+                    >
+                      {isLowStock
+                        ? `SISA ${product.stock}`
+                        : `STOK ${product.stock}`}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            ) : (
+              // JIKA TIDAK ADA PROMO (TAMPILAN NORMAL)
+              <div className="flex items-center justify-between w-full mt-3">
+                <span className="text-[14px] font-bold text-slate-800 tracking-tighter leading-none">
+                  Rp {basePrice.toLocaleString()}
+                </span>
+                {/* LABEL STOK */}
+                {!isHabis && (
+                  <div
+                    className={`text-[8px] font-bold px-1 py-0.5 rounded border shrink-0 ${isLowStock ? "bg-red-50 text-red-600 border-red-100" : "bg-slate-50 text-slate-500 border-slate-100"}`}
+                  >
+                    {isLowStock
+                      ? `SISA ${product.stock}`
+                      : `STOK ${product.stock}`}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* LOKASI */}
           <div className="flex items-center gap-1 mb-3 text-slate-400">
-            <MapPin size={10} />
+            <MapPin size={10} className="shrink-0" />
             <span className="text-[9px] font-normal uppercase tracking-wider truncate">
               {location}
             </span>
@@ -203,8 +224,8 @@ export const ProductCard: React.FC<Props> = ({
           }}
           className={`w-full py-2 rounded-lg flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm ${
             isHabis
-              ? "bg-slate-50 text-slate-400 cursor-not-allowed"
-              : "bg-teal-600 text-white hover:bg-teal-700"
+              ? "bg-slate-50 text-slate-400 cursor-not-allowed border border-slate-200"
+              : "bg-[#008080] text-white hover:bg-teal-700"
           }`}
         >
           {isHabis ? (

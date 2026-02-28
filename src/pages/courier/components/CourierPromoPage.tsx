@@ -29,10 +29,8 @@ import {
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
-// 🔑 GOOGLE MAPS API KEY
 const GOOGLE_MAPS_API_KEY = "AIzaSyBQqWHps2WJ3YWfS16rir-uqeMCezb6lso";
 
-// Fix Icon Marker Leaflet
 const customMarker = new L.Icon({
   iconUrl:
     "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
@@ -49,10 +47,8 @@ export const CourierPromoPage: React.FC = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Menyimpan Market ID secara rahasia di background
   const savedMarketId = localStorage.getItem("selected_market_id") || "";
 
-  // Kordinat Default (Akan ditimpa GPS)
   const [coords, setCoords] = useState<{ lat: number; lng: number }>({
     lat: -0.5021,
     lng: 117.1536,
@@ -78,7 +74,6 @@ export const CourierPromoPage: React.FC = () => {
     selfie: null,
   });
 
-  // 🚀 FUNGSI REVERSE GEOCODING (Mengubah Titik Kordinat jadi Teks Alamat)
   const fetchAddressFromCoords = async (lat: number, lng: number) => {
     try {
       const res = await fetch(
@@ -96,14 +91,13 @@ export const CourierPromoPage: React.FC = () => {
     }
   };
 
-  // 🚀 AUTO-DETECT LOKASI GPS SAAT HALAMAN DIBUKA
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
           setCoords({ lat: latitude, lng: longitude });
-          fetchAddressFromCoords(latitude, longitude); // Auto-isi form alamat
+          fetchAddressFromCoords(latitude, longitude);
         },
         (error) => {
           console.warn("Akses GPS ditolak atau gagal:", error.message);
@@ -113,7 +107,6 @@ export const CourierPromoPage: React.FC = () => {
     }
   }, []);
 
-  // 🌍 GOOGLE GEOCODING SEARCH (Ketik Alamat)
   const handleAddressSearch = async (query: string) => {
     setFormData({ ...formData, address: query });
     if (query.length > 3) {
@@ -139,16 +132,15 @@ export const CourierPromoPage: React.FC = () => {
   const selectLocation = (result: any) => {
     const { lat, lng } = result.geometry.location;
     setCoords({ lat, lng });
-    setFormData({ ...formData, address: result.formatted_address }); // Teks normal
+    setFormData({ ...formData, address: result.formatted_address });
     setShowSuggestions(false);
   };
 
-  // 🗺️ MAP INTERACTION COMPONENTS
   const MapEvents = () => {
     useMapEvents({
       click(e) {
         setCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
-        fetchAddressFromCoords(e.latlng.lat, e.latlng.lng); // Auto-isi saat map di-klik
+        fetchAddressFromCoords(e.latlng.lat, e.latlng.lng);
       },
     });
     return null;
@@ -185,9 +177,15 @@ export const CourierPromoPage: React.FC = () => {
 
     setIsLoading(true);
     try {
+      // 🚀 FIX: SUNTIK NAMA KE METADATA AUTH KURIR
       const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
+        options: {
+          data: {
+            full_name: formData.name,
+          },
+        },
       });
       if (error) throw error;
       const userId = data.user!.id;
@@ -198,10 +196,11 @@ export const CourierPromoPage: React.FC = () => {
         uploadImage(userId, files.selfie!, "selfie"),
       ]);
 
+      // 🚀 FIX: Pastikan pakai full_name
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: userId,
         email: formData.email,
-        name: formData.name,
+        full_name: formData.name,
         phone_number: formData.phone,
         address: formData.address,
         latitude: coords.lat,
@@ -229,7 +228,6 @@ export const CourierPromoPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#8A3800] via-[#CC5200] to-[#4D1F00] flex flex-col font-sans text-left relative overflow-x-hidden">
-      {/* DEKORASI LATAR BELAKANG */}
       <div
         className="absolute inset-0 opacity-[0.05] pointer-events-none"
         style={{
@@ -240,7 +238,6 @@ export const CourierPromoPage: React.FC = () => {
       <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-[#FF6600]/20 rounded-full blur-[120px] pointer-events-none mix-blend-screen"></div>
       <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-yellow-500/10 rounded-full blur-[120px] pointer-events-none mix-blend-screen"></div>
 
-      {/* TOP BAR LOGO IMAGE */}
       <nav className="border-b border-white/10 sticky top-0 bg-[#4D1F00]/80 backdrop-blur-lg z-[1001] shadow-sm">
         <div className="max-w-[1200px] mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <div
@@ -269,7 +266,6 @@ export const CourierPromoPage: React.FC = () => {
       </nav>
 
       <main className="flex-1 flex flex-col lg:flex-row max-w-[1200px] mx-auto w-full p-0 md:p-12 gap-6 lg:gap-20 justify-center relative z-10 mt-6 md:mt-0">
-        {/* INFO KIRI (Desktop & Tablet Saja) */}
         <div className="hidden lg:block flex-1 space-y-10 text-left pt-4">
           <div className="space-y-6">
             <div className="inline-flex items-center gap-2 bg-white/10 text-white px-4 py-1.5 rounded-full border border-white/20 shadow-inner backdrop-blur-md">
@@ -310,7 +306,6 @@ export const CourierPromoPage: React.FC = () => {
           </div>
         </div>
 
-        {/* FORMULIR KANAN (Tampilan Bottom Sheet untuk HP) */}
         <div className="w-full lg:w-[500px] shrink-0 mt-4 md:mt-0">
           <div className="bg-white/95 backdrop-blur-xl rounded-t-[2.5rem] md:rounded-[2rem] shadow-[0_-10px_40px_rgba(204,82,0,0.15)] md:shadow-2xl md:shadow-orange-900/40 border-t md:border border-white/50 p-6 md:p-10 sticky top-24 min-h-[80vh] md:min-h-0">
             <div className="text-center mb-8 pt-2 md:pt-0">
@@ -346,7 +341,6 @@ export const CourierPromoPage: React.FC = () => {
                 />
               </div>
 
-              {/* AREA GOOGLE MAPS DENGAN AUTO DETEKSI */}
               <div className="space-y-2 relative pt-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase ml-1 tracking-widest">
                   Alamat Domisili (Geser Pin Peta)
@@ -406,7 +400,7 @@ export const CourierPromoPage: React.FC = () => {
                         dragend: (e) => {
                           const position = e.target.getLatLng();
                           setCoords({ lat: position.lat, lng: position.lng });
-                          fetchAddressFromCoords(position.lat, position.lng); // Auto-isi saat pin digeser
+                          fetchAddressFromCoords(position.lat, position.lng);
                         },
                       }}
                     />
@@ -414,7 +408,6 @@ export const CourierPromoPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* DOKUMEN UPLOAD */}
               <div className="space-y-2 pt-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase ml-1 tracking-widest">
                   Dokumen Pendukung
@@ -463,7 +456,7 @@ export const CourierPromoPage: React.FC = () => {
 
               <button
                 disabled={isLoading}
-                className="w-full py-4 bg-[#FF6600] text-white rounded-2xl font-[1000] text-[12px] uppercase tracking-[0.2em] shadow-lg shadow-orange-500/20 hover:bg-orange-600 mt-6 active:scale-95 transition-all flex justify-center items-center gap-2 border border-orange-400"
+                className="w-full py-4 bg-[#FF6600] text-white rounded-2xl font-[1000] text-[12px] uppercase tracking-[0.2em] shadow-lg shadow-orange-500/20 hover:bg-orange-600 mt-6 active:scale-95 transition-all flex justify-center items-center gap-2 border border-orange-400 disabled:opacity-50"
               >
                 {isLoading ? (
                   <Loader2 className="animate-spin" size={18} />
@@ -487,7 +480,6 @@ export const CourierPromoPage: React.FC = () => {
   );
 };
 
-// --- SUB-COMPONENTS ---
 const InputGroup = ({
   icon,
   type = "text",

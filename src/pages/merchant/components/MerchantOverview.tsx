@@ -7,7 +7,6 @@ import {
   Clock,
   LayoutDashboard,
   Star,
-  Wallet,
   PlusCircle,
   Megaphone,
   Headset,
@@ -15,6 +14,7 @@ import {
   MapPin,
   Truck,
   CheckCircle2,
+  Info,
 } from "lucide-react";
 
 interface Props {
@@ -37,7 +37,6 @@ export const MerchantOverview: React.FC<Props> = ({
 }) => {
   const [showTips, setShowTips] = useState(true);
 
-  // Format Tanggal Hari Ini
   const today = new Date().toLocaleDateString("id-ID", {
     weekday: "long",
     year: "numeric",
@@ -46,290 +45,281 @@ export const MerchantOverview: React.FC<Props> = ({
   });
 
   const omzetHariIni = stats.todayOmzet || 0;
-  const pesananTertunda = stats.pendingOrders || stats.orders || 0;
+  const pesananTertunda = stats.pendingOrders || 0;
+
+  // 🚀 LOGIKA HANDLING TOMBOL AKSI PRO
+  const handleQuickAction = (type: "katalog" | "promo" | "bantuan") => {
+    if (type === "katalog") {
+      // Buka tab produk normal
+      onNavigate?.("products");
+    } else if (type === "promo") {
+      // 🚀 Kirim kode "promo" agar sistem tahu kita mau edit harga instan
+      onNavigate?.("promo");
+    } else if (type === "bantuan") {
+      // 🚀 Kirim kode "help" agar sistem langsung membuka chat dengan Admin
+      onNavigate?.("help");
+    }
+  };
 
   return (
-    <div className="w-full space-y-6 animate-in fade-in duration-700 text-left font-sans pb-20 font-black uppercase tracking-tighter">
+    <div className="w-full space-y-4 md:space-y-6 animate-in fade-in duration-700 text-left font-sans pb-24 md:pb-10">
       {/* 1. HERO BANNER */}
-      <div className="bg-slate-900 rounded-xl p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden shadow-xl border-b-8 border-[#FF6600]">
+      <div className="bg-slate-900 rounded-[1.5rem] md:rounded-[2rem] p-5 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden shadow-xl border-b-4 border-[#FF6600]">
         <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-2">
-            <LayoutDashboard size={14} className="text-[#008080]" />
-            <p className="text-[10px] text-slate-400 tracking-[0.2em]">
-              RINGKASAN TOKO • {today}
+          <div className="flex items-center gap-2 mb-2 opacity-60">
+            <LayoutDashboard size={12} className="text-[#008080]" />
+            <p className="text-[9px] text-white font-bold tracking-[0.15em] uppercase">
+              {today}
             </p>
           </div>
-          <h1 className="text-3xl md:text-4xl text-white leading-none mb-1">
-            {merchantProfile?.shop_name || "JURAGAN PASAR"}
+          <h1 className="text-2xl md:text-4xl text-white font-[1000] leading-tight uppercase tracking-tighter">
+            {merchantProfile?.shop_name || "TOKO SAYA"}
           </h1>
-          <div className="flex items-center gap-2 mt-4">
+          <div className="flex items-center gap-2 mt-3">
             <div
-              className={`px-4 py-1.5 rounded-md text-[10px] tracking-widest flex items-center gap-2 shadow-sm ${merchantProfile?.is_shop_open ? "bg-[#008080] text-white" : "bg-red-500 text-white"}`}
+              className={`px-3 py-1 rounded-lg text-[9px] font-black tracking-widest flex items-center gap-1.5 shadow-sm ${merchantProfile?.is_shop_open ? "bg-teal-500/20 text-teal-400 border border-teal-500/30" : "bg-red-500/20 text-red-400 border border-red-500/30"}`}
             >
               <div
-                className={`w-2 h-2 rounded-full animate-pulse ${merchantProfile?.is_shop_open ? "bg-white" : "bg-red-200"}`}
+                className={`w-1.5 h-1.5 rounded-full ${merchantProfile?.is_shop_open ? "bg-teal-400 animate-pulse" : "bg-red-400"}`}
               ></div>
-              {merchantProfile?.is_shop_open ? "TOKO BUKA" : "TOKO TUTUP"}
+              {merchantProfile?.is_shop_open ? "OPEN" : "CLOSED"}
             </div>
             {merchantProfile?.is_verified && (
-              <span className="px-3 py-1.5 bg-blue-500 text-white rounded-md text-[9px] tracking-widest flex items-center gap-1 shadow-sm">
-                <CheckCircle2 size={12} /> MITRA RESMI
+              <span className="px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg text-[9px] font-black tracking-widest flex items-center gap-1">
+                <CheckCircle2 size={10} /> MITRA VERIFIED
               </span>
             )}
           </div>
         </div>
 
-        <div className="relative z-10 bg-white/10 backdrop-blur-md p-5 rounded-md border border-white/10 w-full md:w-auto text-right">
-          <p className="text-[10px] text-slate-300 tracking-[0.2em] mb-1">
+        <div className="relative z-10 bg-white/5 backdrop-blur-md p-4 md:p-6 rounded-2xl border border-white/10 w-full md:w-auto text-left md:text-right">
+          <p className="text-[9px] text-slate-400 font-bold tracking-widest uppercase mb-1">
             OMSET HARI INI
           </p>
-          <div className="flex items-center justify-end gap-2">
-            <span className="text-[#FF6600]">RP</span>
-            <h2 className="text-4xl text-white leading-none">
+          <div className="flex items-center md:justify-end gap-1">
+            <span className="text-[#FF6600] font-black text-sm">RP</span>
+            <h2 className="text-2xl md:text-3xl text-white font-[1000] tracking-tighter">
               {omzetHariIni.toLocaleString()}
             </h2>
           </div>
         </div>
-
-        <Wallet
-          size={200}
-          className="absolute -right-10 -bottom-10 text-white opacity-5"
+        <TrendingUp
+          size={120}
+          className="absolute -right-5 -bottom-5 text-white opacity-[0.03] rotate-12"
         />
       </div>
 
       {/* 2. QUICK ACTIONS */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2 md:gap-4">
         <QuickActionBtn
-          icon={<PlusCircle size={20} />}
-          label="TAMBAH PRODUK"
-          color="bg-[#008080] text-white hover:bg-teal-700"
-          onClick={() => onNavigate?.("products")}
+          icon={<Package size={22} />} // 🚀 Ikon diganti jadi Package
+          label="Katalog Produk" // 🚀 Teks diganti
+          color="bg-[#008080] text-white"
+          onClick={() => handleQuickAction("katalog")}
         />
         <QuickActionBtn
-          icon={<Megaphone size={20} />}
-          label="ATUR PROMO"
-          color="bg-white border-2 border-slate-200 text-slate-700 hover:border-[#FF6600] hover:text-[#FF6600]"
-          onClick={() => onNavigate?.("products")}
+          icon={<Megaphone size={22} />}
+          label="Promo"
+          color="bg-white border border-slate-200 text-slate-700 hover:text-[#FF6600]"
+          onClick={() => handleQuickAction("promo")}
+          note="Instan"
         />
         <QuickActionBtn
-          icon={<Headset size={20} />}
-          label="BANTUAN ADMIN"
-          color="bg-white border-2 border-slate-200 text-slate-700 hover:border-[#008080] hover:text-[#008080]"
-          onClick={() => window.open("https://wa.me/628123456789", "_blank")}
+          icon={<Headset size={22} />}
+          label="Bantuan"
+          color="bg-white border border-slate-200 text-slate-700 hover:text-[#008080]"
+          onClick={() => handleQuickAction("bantuan")}
         />
       </div>
 
       {/* 3. METRIK UTAMA */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <StatCard
-          icon={<ShoppingBag size={20} />}
-          label="PERLU DIKIRIM"
+          icon={<ShoppingBag size={18} />}
+          label="Order Aktif"
           value={pesananTertunda}
           color={pesananTertunda > 0 ? "text-red-600" : "text-slate-700"}
           bgColor={
             pesananTertunda > 0
-              ? "bg-red-50 border-red-200"
-              : "bg-slate-50 border-slate-200"
+              ? "bg-red-50 border-red-100"
+              : "bg-white border-slate-100"
           }
           alert={pesananTertunda > 0}
         />
         <StatCard
-          icon={<Package size={20} />}
-          label="TOTAL PRODUK"
+          icon={<Package size={18} />}
+          label="Katalog Aktif" // 🚀 Teks disesuaikan
           value={stats.products}
           color="text-[#008080]"
-          bgColor="bg-teal-50 border-teal-100"
+          bgColor="bg-white border-slate-100"
         />
         <StatCard
-          icon={<Star size={20} />}
-          label="RATING TOKO"
+          icon={<Star size={18} />}
+          label="Rating Toko"
           value="4.9"
-          color="text-orange-600"
-          bgColor="bg-orange-50 border-orange-100"
+          color="text-orange-500"
+          bgColor="bg-white border-slate-100"
         />
         <StatCard
-          icon={<TrendingUp size={20} />}
-          label="PERFORMA"
+          icon={<TrendingUp size={18} />}
+          label="Performa"
           value="100%"
-          color="text-blue-600"
-          bgColor="bg-blue-50 border-blue-100"
+          color="text-blue-500"
+          bgColor="bg-white border-slate-100"
         />
       </div>
 
-      {/* 4. AREA TENGAH: GRAFIK & LIVE TRACKER */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 bg-white border-2 border-slate-100 p-6 rounded-xl shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-[12px] text-slate-800 tracking-widest flex items-center gap-2">
-              <TrendingUp size={16} className="text-[#008080]" /> ANALISA
-              PENJUALAN
+      {/* 4. AREA TENGAH: LIVE ORDERS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        <div className="md:col-span-2 bg-white border border-slate-100 p-5 md:p-6 rounded-[1.5rem] shadow-sm">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-[11px] font-[1000] text-slate-800 tracking-wider flex items-center gap-2 uppercase">
+              <TrendingUp size={14} className="text-[#008080]" /> Penjualan
+              Mingguan
             </h3>
-            <span className="text-[9px] bg-slate-100 text-slate-500 px-3 py-1 rounded-md">
-              7 HARI TERAKHIR
-            </span>
           </div>
-          <div className="h-52 bg-slate-50 border-2 border-dashed border-slate-200 rounded-md flex flex-col items-center justify-center text-center">
-            <div className="w-12 h-12 bg-white rounded-md flex items-center justify-center shadow-sm mb-3">
-              <TrendingUp size={20} className="text-slate-300" />
-            </div>
-            <p className="text-[10px] text-slate-400 tracking-widest leading-relaxed max-w-[200px]">
-              DATA GRAFIK AKAN TERISI SETELAH TRANSAKSI PERDANA
+          <div className="h-40 bg-slate-50/50 border border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-center p-4">
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed max-w-[200px]">
+              Grafik otomatis terisi setelah transaksi perdana
             </p>
           </div>
         </div>
 
-        <div className="bg-white border-2 border-slate-100 p-6 rounded-xl shadow-sm flex flex-col h-full">
-          <div className="flex justify-between items-center mb-6 border-b-2 border-slate-50 pb-4">
-            <h3 className="text-[12px] text-slate-800 tracking-widest flex items-center gap-2">
-              <Clock size={16} className="text-[#FF6600]" /> LIVE ORDERS
+        <div className="bg-white border border-slate-100 p-5 md:p-6 rounded-[1.5rem] shadow-sm flex flex-col">
+          <div className="flex justify-between items-center mb-5 border-b border-slate-50 pb-3">
+            <h3 className="text-[11px] font-[1000] text-slate-800 tracking-wider flex items-center gap-2 uppercase">
+              <Clock size={14} className="text-[#FF6600]" /> Live Orders
             </h3>
             {recentOrders.length > 0 && (
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-              </span>
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto pr-2 no-scrollbar space-y-4">
+          <div className="flex-1 overflow-y-auto pr-1 no-scrollbar space-y-3">
             {recentOrders.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full opacity-50">
-                <ShoppingBag size={40} className="text-slate-300 mb-3" />
-                <p className="text-[10px] text-slate-400 tracking-widest text-center">
-                  BELUM ADA
-                  <br />
-                  PESANAN BARU
+              <div className="flex flex-col items-center justify-center py-6 opacity-30">
+                <ShoppingBag size={32} className="text-slate-300 mb-2" />
+                <p className="text-[9px] font-black tracking-widest text-center uppercase">
+                  Belum ada pesanan
                 </p>
               </div>
             ) : (
-              recentOrders.slice(0, 4).map((order, idx) => (
+              recentOrders.slice(0, 3).map((order, idx) => (
                 <div
                   key={idx}
-                  className="flex gap-3 items-start border-l-2 border-slate-100 pl-3"
+                  className="flex gap-3 items-center p-2 hover:bg-slate-50 rounded-xl transition-all border-l-4 border-[#FF6600]"
                 >
-                  <div
-                    className={`mt-0.5 w-6 h-6 rounded-md flex items-center justify-center shrink-0 shadow-sm ${order.status === "UNPAID" ? "bg-orange-100 text-orange-600" : "bg-teal-100 text-[#008080]"}`}
-                  >
-                    {order.status === "UNPAID" ? (
-                      <Wallet size={10} />
-                    ) : (
-                      <Truck size={10} />
-                    )}
+                  <div className="w-8 h-8 rounded-lg bg-teal-50 text-[#008080] flex items-center justify-center shrink-0">
+                    <Truck size={14} />
                   </div>
-                  <div>
-                    <h4 className="text-[11px] text-slate-800 leading-tight">
-                      {order.customer?.full_name ||
-                        order.customer?.name ||
-                        "PEMBELI"}
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-[11px] font-black text-slate-800 truncate uppercase tracking-tight">
+                      {order.customer?.full_name || "PEMBELI"}
                     </h4>
-                    <p className="text-[9px] text-slate-400 tracking-widest mt-0.5 flex items-center gap-1">
-                      <MapPin size={8} className="text-[#FF6600]" />{" "}
-                      {order.address?.split(",")[0] || "LOKASI"}
-                    </p>
-                    <p className="text-[10px] text-[#008080] mt-1">
+                    <p className="text-[10px] font-black text-[#008080]">
                       RP {order.total_price?.toLocaleString()}
                     </p>
                   </div>
+                  <ArrowRight size={12} className="text-slate-300" />
                 </div>
               ))
             )}
           </div>
-
-          <button
-            onClick={() => onNavigate?.("orders")}
-            className="w-full mt-4 py-3 bg-slate-50 text-slate-500 rounded-md border border-slate-200 text-[10px] tracking-widest hover:bg-slate-100 hover:text-slate-800 transition-colors"
-          >
-            LIHAT SEMUA PESANAN
-          </button>
         </div>
       </div>
 
-      {/* 5. TIPS SECTION */}
+      {/* 5. PROMO INFO BOX */}
+      <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl flex items-start gap-3">
+        <div className="bg-orange-500 text-white p-2 rounded-lg shrink-0">
+          <Info size={16} />
+        </div>
+        <div className="text-left">
+          <h4 className="text-[11px] font-black text-orange-800 uppercase tracking-wide">
+            Info Atur Promo
+          </h4>
+          <p className="text-[10px] font-bold text-orange-700/80 normal-case leading-snug">
+            Anda dapat mengubah harga produk sewaktu-waktu untuk membuat promo
+            kilat. Perubahan harga akan{" "}
+            <span className="underline">langsung aktif</span> tanpa perlu
+            verifikasi Admin.
+          </p>
+        </div>
+      </div>
+
+      {/* 6. TIPS SECTION */}
       {showTips && (
-        <div className="bg-[#008080] p-8 rounded-xl text-white relative overflow-hidden shadow-xl border-b-8 border-teal-900 mt-8">
+        <div className="bg-[#008080] p-6 md:p-8 rounded-[2rem] text-white relative overflow-hidden shadow-xl mt-4">
           <button
             onClick={() => setShowTips(false)}
-            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-md transition-colors z-20"
+            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all z-20"
           >
-            <X size={16} />
+            <X size={14} />
           </button>
-
-          <div className="absolute -top-10 -left-10 opacity-10 blur-sm pointer-events-none">
-            <TrendingUp size={250} />
-          </div>
-
-          <div className="relative z-10 flex flex-col md:flex-row gap-8 items-center">
-            <div className="flex-1">
-              <h3 className="text-2xl leading-none mb-2">
-                TIPS SUKSES PASARQU
-              </h3>
-              <p className="text-[10px] text-teal-200 tracking-[0.2em] mb-6">
-                RAHASIA OMSET MEROKET SETIAP HARI
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 bg-white/10 backdrop-blur-md rounded-md border border-white/20 hover:bg-white/20 transition-all">
-                  <p className="text-[11px] text-teal-100 mb-1 flex items-center gap-2">
-                    <CheckCircle2 size={14} className="text-[#FF6600]" /> RESPON
-                    CEPAT
-                  </p>
-                  <p className="text-[10px] leading-relaxed text-white">
-                    MEMBALAS CHAT DI BAWAH 5 MENIT MENINGKATKAN POTENSI DEAL
-                    HINGGA 80%.
-                  </p>
-                </div>
-                <div className="p-4 bg-white/10 backdrop-blur-md rounded-md border border-white/20 hover:bg-white/20 transition-all">
-                  <p className="text-[11px] text-teal-100 mb-1 flex items-center gap-2">
-                    <CheckCircle2 size={14} className="text-[#FF6600]" /> UPDATE
-                    STOK
-                  </p>
-                  <p className="text-[10px] leading-relaxed text-white">
-                    PASTIKAN STOK SELALU UPDATE UNTUK MENGHINDARI PEMBATALAN
-                    PESANAN YANG MERUSAK RATING.
-                  </p>
-                </div>
-              </div>
+          <div className="relative z-10">
+            <h3 className="text-lg md:text-xl font-[1000] uppercase tracking-tighter mb-1">
+              Tips Sukses PasarQu
+            </h3>
+            <p className="text-[9px] text-teal-200 font-bold tracking-[0.2em] mb-4 uppercase opacity-80">
+              Rahasia Omset Meroket
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <TipItem text="RESPON CHAT DI BAWAH 5 MENIT MENINGKATKAN PENJUALAN HINGGA 80%." />
+              <TipItem text="PASTIKAN STOK PRODUK SELALU UPDATE UNTUK MENJAGA RATING TOKO." />
             </div>
           </div>
+          <TrendingUp
+            size={120}
+            className="absolute -left-10 -bottom-10 text-white opacity-5 rotate-12"
+          />
         </div>
       )}
     </div>
   );
 };
 
-// --- SUB-COMPONENTS ---
-const QuickActionBtn = ({ icon, label, color, onClick }: any) => (
+const TipItem = ({ text }: { text: string }) => (
+  <div className="p-3 bg-white/10 backdrop-blur-md rounded-xl border border-white/10 flex items-start gap-2">
+    <CheckCircle2 size={12} className="text-[#FF6600] shrink-0 mt-0.5" />
+    <p className="text-[9px] font-bold leading-relaxed text-white uppercase tracking-tight">
+      {text}
+    </p>
+  </div>
+);
+
+const QuickActionBtn = ({ icon, label, color, onClick, note }: any) => (
   <button
     onClick={onClick}
-    className={`p-4 rounded-md flex flex-col items-center justify-center gap-2 transition-all active:scale-95 shadow-sm ${color}`}
+    className={`${color} flex flex-col items-center justify-center gap-1.5 p-3 md:p-5 rounded-2xl shadow-sm active:scale-90 transition-all relative overflow-hidden group`}
   >
-    {icon}
-    <span className="text-[9px] tracking-[0.2em] text-center leading-tight">
+    <div className="relative z-10">{icon}</div>
+    <span className="relative z-10 text-[9px] md:text-[11px] font-black uppercase tracking-widest">
       {label}
     </span>
+    {note && (
+      <span className="absolute top-1 right-1 bg-orange-500 text-white text-[7px] px-1 rounded-sm font-black uppercase tracking-tighter">
+        {note}
+      </span>
+    )}
   </button>
 );
 
 const StatCard = ({ icon, label, value, color, bgColor, alert }: any) => (
   <div
-    className={`border-2 p-5 rounded-md flex flex-col gap-4 shadow-sm relative overflow-hidden transition-all hover:scale-[1.02] ${bgColor}`}
+    className={`${bgColor} p-4 rounded-2xl border flex flex-col gap-3 shadow-sm transition-all hover:translate-y-[-2px]`}
   >
     <div className="flex justify-between items-start">
-      <div
-        className={`w-12 h-12 bg-white rounded-md flex items-center justify-center shadow-inner ${color}`}
-      >
-        {icon}
-      </div>
+      <div className={`${color} opacity-80`}>{icon}</div>
       {alert && (
-        <span className="flex h-3 w-3 relative">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-md bg-red-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-md h-3 w-3 bg-red-500"></span>
-        </span>
+        <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></span>
       )}
     </div>
     <div>
-      <p className="text-[9px] text-slate-500 tracking-[0.2em] mb-1">{label}</p>
-      <p className={`text-2xl leading-none ${color}`}>{value}</p>
+      <p className="text-[18px] md:text-2xl font-[1000] text-slate-800 leading-none tracking-tighter">
+        {value}
+      </p>
+      <p className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">
+        {label}
+      </p>
     </div>
   </div>
 );

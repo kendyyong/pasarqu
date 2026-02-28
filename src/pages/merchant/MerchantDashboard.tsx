@@ -15,7 +15,6 @@ import { MerchantMessages } from "./components/MerchantMessages";
 import { LocationPickerModal } from "./components/LocationPickerModal";
 import { MerchantSettings } from "./components/MerchantSettings";
 
-// --- ICONS ---
 import {
   Moon,
   Sun,
@@ -23,6 +22,7 @@ import {
   Settings,
   ShoppingBag,
   MessageSquare,
+  LogOut,
 } from "lucide-react";
 
 type TabType =
@@ -39,96 +39,106 @@ export const MerchantDashboard: React.FC = () => {
   const { logout, profile } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>("overview");
+
+  // 🚀 STATE KHUSUS UNTUK PROMO DAN CHAT ADMIN
   const [triggerAddProduct, setTriggerAddProduct] = useState(0);
+  const [isPromoMode, setIsPromoMode] = useState(false);
+  const [chatTarget, setChatTarget] = useState<string | null>(null);
 
   const [visitedTabs, setVisitedTabs] = useState<Record<string, boolean>>({
     overview: true,
   });
 
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    return localStorage.getItem("merchant-theme") === "dark";
-  });
+  const [isDarkMode, setIsDarkMode] = useState(
+    () => localStorage.getItem("merchant-theme") === "dark",
+  );
 
-  // 🚀 AMBIL UNREAD CHAT DARI HOOK YANG SUDAH KITA PERBAIKI
   const {
     merchantProfile,
     products,
     orders,
     incomingOrder,
-    unreadChat, // 🔔 Telinga baru untuk chat
-    setUnreadChat, // 🔔 Tangan untuk mematikan notif
+    unreadChat,
+    setUnreadChat,
     fetchBaseData,
     toggleShopStatus,
     stopAlarm,
   } = useMerchantDashboard();
 
-  // 🛡️ PENJAGA PINTU BELAKANG
   useEffect(() => {
-    if (profile) {
-      if (profile.role === "MERCHANT" && profile.is_verified === false) {
-        navigate("/waiting-approval", { replace: true });
-      }
+    if (
+      profile &&
+      profile.role === "MERCHANT" &&
+      profile.is_verified === false
+    ) {
+      navigate("/waiting-approval", { replace: true });
     }
   }, [profile, navigate]);
 
   useEffect(() => {
     if (!visitedTabs[activeTab])
       setVisitedTabs((prev) => ({ ...prev, [activeTab]: true }));
-
-    // 🚀 AUTO-OFF NOTIF: Jika tab pesan dibuka, matikan tanda merah
-    if (activeTab === "messages") {
-      setUnreadChat(false);
-    }
+    if (activeTab === "messages") setUnreadChat(false);
   }, [activeTab, visitedTabs, setUnreadChat]);
 
   useEffect(() => {
     const root = window.document.documentElement;
-    if (isDarkMode) {
-      root.classList.add("dark");
-      localStorage.setItem("merchant-theme", "dark");
-    } else {
-      root.classList.remove("dark");
-      localStorage.setItem("merchant-theme", "light");
-    }
+    isDarkMode ? root.classList.add("dark") : root.classList.remove("dark");
+    localStorage.setItem("merchant-theme", isDarkMode ? "dark" : "light");
   }, [isDarkMode]);
 
-  const validProductsCount = products
-    ? products.filter((p: any) => p && p.id).length
-    : 0;
-  const validOrdersCount = orders
-    ? orders.filter((o: any) => o && o.id).length
-    : 0;
+  const validProductsCount =
+    products?.filter((p: any) => p && p.id).length || 0;
+  const validOrdersCount =
+    orders?.filter(
+      (o: any) =>
+        ["PROCESSING", "READY"].includes(o.status) ||
+        ["PACKING", "READY_TO_PICKUP", "SHIPPED"].includes(o.shipping_status),
+    ).length || 0;
 
-  const handleAddProductShortcut = () => {
-    setTriggerAddProduct((prev) => prev + 1);
-    setActiveTab("products");
+  // 🚀 FUNGSI ROUTING PINTAR DARI OVERVIEW
+  const handleSmartNavigation = (tab: string) => {
+    if (tab === "products") {
+      setIsPromoMode(false); // Mode Katalog Normal
+      setActiveTab("products");
+    } else if (tab === "promo") {
+      setIsPromoMode(true); // Mode Promo (Edit Harga Saja)
+      setActiveTab("products");
+    } else if (tab === "help") {
+      setChatTarget("admin"); // Buka chat dan targetkan Admin
+      setActiveTab("messages");
+    } else {
+      setActiveTab(tab as TabType);
+      setIsPromoMode(false); // Reset
+      setChatTarget(null); // Reset
+    }
   };
 
   const calculateTodayOmzet = () => {
     if (!orders) return 0;
     const today = new Date().toDateString();
     return orders
-      .filter((o: any) => {
-        const orderDate = new Date(o.created_at).toDateString();
-        return orderDate === today && o.status !== "UNPAID";
-      })
+      .filter(
+        (o: any) =>
+          new Date(o.created_at).toDateString() === today &&
+          o.status !== "UNPAID",
+      )
       .reduce((sum: number, o: any) => sum + (o.total_price || 0), 0);
   };
 
   const calculatePendingOrders = () => {
     if (!orders) return 0;
     return orders.filter(
-      (o: any) => o.shipping_status === "PACKING" || o.status === "UNPAID",
+      (o: any) => o.shipping_status === "PACKING" || o.status === "PROCESSING",
     ).length;
   };
 
   if (!merchantProfile) {
     return (
       <div
-        className={`min-h-screen flex flex-col items-center justify-center font-bold text-[12px] uppercase tracking-[0.3em] transition-colors duration-300 ${isDarkMode ? "bg-slate-950 text-slate-700" : "bg-slate-50 text-slate-300"}`}
+        className={`min-h-screen flex flex-col items-center justify-center font-bold text-[12px] uppercase tracking-[0.2em] transition-colors duration-300 ${isDarkMode ? "bg-slate-950 text-slate-700" : "bg-slate-50 text-slate-400"}`}
       >
-        <Loader2 className="animate-spin mb-4" size={32} />
-        MENYIAPKAN DASHBOARD...
+        <Loader2 className="animate-spin mb-4" size={28} /> MEMUAT DASHBOARD...
       </div>
     );
   }
@@ -137,91 +147,103 @@ export const MerchantDashboard: React.FC = () => {
     <div
       className={`min-h-screen flex flex-col md:flex-row font-sans text-left overflow-hidden transition-colors duration-500 ${isDarkMode ? "bg-slate-950" : "bg-slate-50"}`}
     >
-      {/* SIDEBAR DESKTOP */}
       <aside
         className={`hidden md:flex w-64 h-screen fixed left-0 top-0 z-50 border-r transition-colors duration-300 ${isDarkMode ? "bg-slate-900 border-slate-800 shadow-2xl" : "bg-white border-slate-200 shadow-sm"}`}
       >
         <MerchantSidebar
           activeTab={activeTab}
-          setActiveTab={(tab: any) => {
-            setActiveTab(tab as TabType);
-            setTriggerAddProduct(0);
-          }}
+          setActiveTab={handleSmartNavigation}
           merchantProfile={merchantProfile}
           onLocationClick={() => setActiveTab("location")}
           onLogout={logout}
           onToggleStatus={toggleShopStatus}
-          onAddProduct={handleAddProductShortcut}
+          onAddProduct={() => {
+            setIsPromoMode(false);
+            setActiveTab("products");
+          }}
           orderCount={validOrdersCount}
           productCount={validProductsCount}
           isDarkMode={isDarkMode}
-          hasUnreadChat={unreadChat} // 🚀 Oper notif ke sidebar
+          hasUnreadChat={unreadChat}
         />
       </aside>
 
-      {/* MAIN CONTENT AREA */}
       <div className="flex-1 flex flex-col min-w-0 md:ml-64 w-full h-screen overflow-hidden">
-        {/* HEADER / TOP BAR */}
         <div
-          className={`border-b sticky top-0 z-[100] shadow-sm flex items-center h-[70px] px-4 md:px-8 transition-colors duration-300 ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}
+          className={`border-b sticky top-0 z-[100] shadow-sm flex items-center justify-between h-[60px] md:h-[70px] px-3 md:px-8 transition-colors duration-300 ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}
         >
           <div className="flex-1 min-w-0 pr-2">
             <MerchantHeader
               shopName={merchantProfile.shop_name}
               marketName={merchantProfile.market_name}
               isOpen={merchantProfile.is_shop_open}
+              avatarUrl={profile?.avatar_url}
             />
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {/* 🚀 TOMBOL CHAT CEPAT (Hanya Desktop) */}
-            <div className="hidden md:block relative mr-2">
+          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+            <div className="hidden md:block relative">
               <button
-                onClick={() => setActiveTab("messages")}
-                className={`p-2.5 rounded-xl transition-all active:scale-90 shadow-sm border ${unreadChat ? "bg-red-50 border-red-200 text-red-600 animate-bounce" : isDarkMode ? "bg-slate-800 border-slate-700 text-slate-400" : "bg-slate-50 border-slate-100 text-slate-500"}`}
+                onClick={() => handleSmartNavigation("messages")}
+                className={`w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-lg md:rounded-xl transition-all active:scale-90 border ${unreadChat ? "bg-red-50 border-red-200 text-red-600 animate-bounce" : isDarkMode ? "bg-slate-800 border-slate-700 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-200 text-slate-500 hover:text-slate-800"}`}
               >
-                <MessageSquare size={18} strokeWidth={2.5} />
+                <MessageSquare
+                  size={16}
+                  strokeWidth={2.5}
+                  className="md:w-[18px] md:h-[18px]"
+                />
               </button>
               {unreadChat && (
-                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-600 rounded-full border-2 border-white shadow-sm"></span>
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 md:w-3 md:h-3 bg-red-600 rounded-full border-2 border-white shadow-sm"></span>
               )}
             </div>
 
-            {/* TOMBOL BELANJA */}
             <button
-              onClick={() => {
-                navigate("/?mode=belanja");
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-black text-[10px] md:text-[11px] uppercase tracking-tighter transition-all active:scale-90 border shadow-md bg-[#FF6600] text-white border-orange-400 hover:bg-orange-600"
+              onClick={() => navigate("/?mode=belanja")}
+              className="flex items-center gap-1.5 h-8 px-2.5 md:h-10 md:px-3 rounded-lg md:rounded-xl font-black text-[10px] md:text-[11px] uppercase tracking-wide transition-all active:scale-90 border shadow-sm bg-[#FF6600] text-white border-orange-400 hover:bg-orange-600"
             >
-              <ShoppingBag size={15} strokeWidth={3} />
-              <span className="inline-block">BELANJA</span>
+              <ShoppingBag
+                size={14}
+                strokeWidth={2.5}
+                className="md:w-[15px] md:h-[15px]"
+              />
+              <span className="hidden sm:inline-block">BELANJA</span>
             </button>
 
-            {/* DARK MODE TOGGLE */}
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className={`p-2.5 rounded-xl transition-all active:scale-90 shadow-sm border ${isDarkMode ? "bg-slate-800 border-slate-700 text-yellow-400" : "bg-slate-50 border-slate-100 text-slate-500"}`}
+              className={`w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-lg md:rounded-xl transition-all active:scale-90 border ${isDarkMode ? "bg-slate-800 border-slate-700 text-yellow-400" : "bg-slate-50 border-slate-200 text-slate-500 hover:text-slate-800"}`}
             >
               {isDarkMode ? (
-                <Sun size={18} strokeWidth={2.5} />
+                <Sun
+                  size={16}
+                  strokeWidth={2.5}
+                  className="md:w-[18px] md:h-[18px]"
+                />
               ) : (
-                <Moon size={18} strokeWidth={2.5} />
+                <Moon
+                  size={16}
+                  strokeWidth={2.5}
+                  className="md:w-[18px] md:h-[18px]"
+                />
               )}
             </button>
 
-            {/* TOMBOL SETTING (MOBILE) */}
             <button
-              onClick={() => setActiveTab("settings")}
-              className={`md:hidden p-2.5 rounded-xl transition-all active:scale-90 border ${activeTab === "settings" ? "bg-[#008080] text-white border-[#008080]" : isDarkMode ? "bg-slate-800 border-slate-700 text-slate-400" : "bg-slate-50 border-slate-100 text-slate-500"}`}
+              onClick={() => handleSmartNavigation("settings")}
+              className={`w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-lg md:rounded-xl transition-all active:scale-90 border ${activeTab === "settings" ? "bg-[#008080] text-white border-[#008080]" : isDarkMode ? "bg-slate-800 border-slate-700 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-200 text-slate-500 hover:text-slate-800"}`}
             >
-              <Settings size={18} strokeWidth={2.5} />
+              <Settings
+                size={16}
+                strokeWidth={2.5}
+                className="md:w-[18px] md:h-[18px]"
+              />
             </button>
           </div>
         </div>
 
         <main
-          className={`flex-1 overflow-y-auto no-scrollbar pb-24 md:pb-10 transition-colors duration-300 ${isDarkMode ? "bg-slate-950" : "bg-slate-50/50"} p-4 md:p-8`}
+          className={`flex-1 overflow-y-auto no-scrollbar pb-[70px] md:pb-10 transition-colors duration-300 ${isDarkMode ? "bg-slate-950" : "bg-slate-50/50"} p-3 md:p-8`}
         >
           <div className="w-full max-w-[1400px] mx-auto relative text-left">
             <div
@@ -240,14 +262,11 @@ export const MerchantDashboard: React.FC = () => {
                   pendingOrders: calculatePendingOrders(),
                 }}
                 recentOrders={orders || []}
-                onNavigate={(tab) => {
-                  setActiveTab(tab as TabType);
-                  if (tab === "products")
-                    setTriggerAddProduct((prev) => prev + 1);
-                }}
+                onNavigate={handleSmartNavigation}
               />
             </div>
 
+            {/* 🚀 KIRIM PROP isPromoMode ke MerchantProducts */}
             {visitedTabs["products"] && (
               <div
                 className={
@@ -259,6 +278,7 @@ export const MerchantDashboard: React.FC = () => {
                 <MerchantProducts
                   merchantProfile={merchantProfile}
                   autoOpenTrigger={triggerAddProduct}
+                  isPromoMode={isPromoMode}
                 />
               </div>
             )}
@@ -275,6 +295,7 @@ export const MerchantDashboard: React.FC = () => {
               </div>
             )}
 
+            {/* 🚀 KIRIM PROP autoSelectTarget ke MerchantMessages */}
             {visitedTabs["messages"] && (
               <div
                 className={
@@ -283,7 +304,7 @@ export const MerchantDashboard: React.FC = () => {
                     : "hidden"
                 }
               >
-                <MerchantMessages />
+                <MerchantMessages autoSelectTarget={chatTarget} />
               </div>
             )}
 
@@ -298,7 +319,6 @@ export const MerchantDashboard: React.FC = () => {
                 <MerchantFinanceDashboard />
               </div>
             )}
-
             {visitedTabs["settings"] && (
               <div
                 className={
@@ -310,12 +330,12 @@ export const MerchantDashboard: React.FC = () => {
                 <MerchantSettings
                   merchantProfile={merchantProfile}
                   onUpdate={fetchBaseData}
+                  onLogout={logout}
                 />
               </div>
             )}
-
             {activeTab === "location" && (
-              <div className="border rounded-[2rem] shadow-xl p-4 md:p-8 transition-colors bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+              <div className="border rounded-[2rem] shadow-xl md:p-8 transition-colors bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 overflow-hidden">
                 <LocationPickerModal
                   merchantProfile={merchantProfile}
                   onClose={() => setActiveTab("overview")}
@@ -326,25 +346,24 @@ export const MerchantDashboard: React.FC = () => {
           </div>
         </main>
 
-        {/* BOTTOM NAV MOBILE DENGAN NOTIF CHAT */}
         <div
-          className={`md:hidden fixed bottom-0 left-0 right-0 z-50 border-t transition-colors duration-300 ${isDarkMode ? "bg-slate-900 border-slate-800 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]" : "bg-white border-slate-200 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]"}`}
+          className={`md:hidden fixed bottom-0 left-0 right-0 z-50 border-t transition-colors duration-300 ${isDarkMode ? "bg-slate-900 border-slate-800 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]" : "bg-white border-slate-200 shadow-[0_-10px_20px_rgba(0,0,0,0.03)]"}`}
         >
           <MerchantSidebar
             activeTab={activeTab}
-            setActiveTab={(tab: any) => {
-              setActiveTab(tab as TabType);
-              setTriggerAddProduct(0);
-            }}
+            setActiveTab={handleSmartNavigation}
             merchantProfile={merchantProfile}
             onLocationClick={() => setActiveTab("location")}
             onLogout={logout}
             onToggleStatus={toggleShopStatus}
-            onAddProduct={handleAddProductShortcut}
+            onAddProduct={() => {
+              setIsPromoMode(false);
+              setActiveTab("products");
+            }}
             orderCount={validOrdersCount}
             productCount={validProductsCount}
             isDarkMode={isDarkMode}
-            hasUnreadChat={unreadChat} // 🚀 Oper notif ke mobile sidebar
+            hasUnreadChat={unreadChat}
           />
         </div>
       </div>
@@ -358,15 +377,6 @@ export const MerchantDashboard: React.FC = () => {
         }}
         onMute={stopAlarm}
       />
-
-      <style>{`
-        .dark .bg-white { background-color: #0f172a !important; color: #f1f5f9 !important; }
-        .dark .text-slate-800, .dark .text-slate-900 { color: #f8fafc !important; }
-        .dark .border-slate-200, .dark .border-slate-100 { border-color: #1e293b !important; }
-        .dark .bg-slate-50, .dark .bg-slate-100 { background-color: #020617 !important; }
-        .dark input, .dark select, .dark textarea { background-color: #1e293b !important; border-color: #334155 !important; color: white !important; }
-        h1, h2, h3, h4, h5, button, label, span, p, input { font-weight: 800 !important; text-transform: uppercase !important; }
-      `}</style>
     </div>
   );
 };

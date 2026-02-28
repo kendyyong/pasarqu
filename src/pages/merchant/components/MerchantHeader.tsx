@@ -1,51 +1,60 @@
 import React from "react";
-import { MapPin } from "lucide-react";
+import { Store, User, ShieldCheck } from "lucide-react";
 
 interface Props {
   shopName: string;
   marketName: string;
   isOpen: boolean;
+  avatarUrl?: string; // 🚀 Menerima foto profil dari database
 }
 
 export const MerchantHeader: React.FC<Props> = ({
   shopName,
   marketName,
   isOpen,
+  avatarUrl,
 }) => {
   return (
-    <header className="h-14 md:h-16 bg-white border-b border-slate-200 px-4 md:px-8 flex items-center justify-between sticky top-0 z-40 shrink-0">
-      <div className="flex flex-col text-left truncate flex-1 mr-4">
-        <h1 className="text-[11px] md:text-sm font-black uppercase tracking-tight text-slate-900 truncate leading-none">
-          {shopName}
-        </h1>
-        <div className="flex items-center gap-1 mt-1 text-slate-400">
-          <MapPin size={8} />
-          <span className="text-[7px] md:text-[8px] font-bold uppercase tracking-wider truncate">
-            {marketName}
-          </span>
-        </div>
+    <div className="flex items-center gap-3 md:gap-4 overflow-hidden w-full">
+      {/* 🚀 AVATAR PRO: Foto Profil Toko */}
+      <div className="shrink-0 relative">
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt={shopName}
+            className="w-10 h-10 md:w-12 md:h-12 rounded-xl object-cover border border-slate-200 shadow-sm"
+          />
+        ) : (
+          <div className="w-10 h-10 md:w-12 md:h-12 bg-slate-900 text-white rounded-xl flex items-center justify-center shadow-sm border border-slate-800">
+            <span className="font-black text-lg md:text-xl">
+              {shopName ? (
+                shopName.charAt(0).toUpperCase()
+              ) : (
+                <Store size={20} />
+              )}
+            </span>
+          </div>
+        )}
+
+        {/* Indikator Status (Kecil & Rapih) */}
+        <span
+          className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${isOpen ? "bg-teal-500" : "bg-red-500"}`}
+        ></span>
       </div>
 
-      <div className="flex items-center gap-3 shrink-0">
-        <div className="flex flex-col items-end mr-1">
-          <p className="text-[6px] md:text-[7px] font-black text-slate-400 uppercase leading-none">
-            Status Toko
-          </p>
-          <p
-            className={`text-[8px] md:text-[9px] font-black uppercase mt-0.5 flex items-center gap-0.5 ${isOpen ? "text-green-600" : "text-red-500"}`}
-          >
-            <span
-              className={`w-1 h-1 ${isOpen ? "bg-green-500 animate-pulse" : "bg-red-500"}`}
-            ></span>
-            {isOpen ? "BUKA" : "TUTUP"}
-          </p>
+      <div className="flex flex-col min-w-0 flex-1 text-left">
+        <div className="flex items-center gap-1.5">
+          <h1 className="text-[13px] md:text-base font-[1000] text-slate-800 dark:text-white uppercase truncate tracking-tighter leading-none">
+            {shopName || "MEMUAT..."}
+          </h1>
+          {isOpen && (
+            <ShieldCheck size={12} className="text-[#008080] shrink-0" />
+          )}
         </div>
-        <div
-          className={`w-8 h-8 md:w-9 md:h-9 bg-slate-900 text-white rounded-none flex items-center justify-center font-black text-xs uppercase border-b-2 ${isOpen ? "border-green-500" : "border-red-500"}`}
-        >
-          {shopName.charAt(0)}
-        </div>
+        <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate mt-0.5">
+          {marketName || "CABANG LOKAL"}
+        </p>
       </div>
-    </header>
+    </div>
   );
 };
