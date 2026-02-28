@@ -85,13 +85,14 @@ export const CheckoutPaymentPage = () => {
           marketLng,
         );
 
-        // 2. Ambil Aturan Tarif
+        // 2. Ambil Aturan Tarif dari DB
         let { data: r } = await supabase
           .from("shipping_rates")
           .select("*")
           .eq("district_name", selectedMarket.district || "")
           .maybeSingle();
 
+        // Fallback jika tidak ada data di DB
         if (!r) {
           const { data: firstRate } = await supabase
             .from("shipping_rates")
@@ -134,9 +135,10 @@ export const CheckoutPaymentPage = () => {
         const surgeFeeTotal = isPickup
           ? 0
           : extraCount * Number(r.surge_fee || 0);
+
         const realShippingCost = tripCost + multiStopFee + surgeFeeTotal;
 
-        // 5. Cek Subsidi
+        // 5. Cek Subsidi Gratis Ongkir
         let userPayShipping = realShippingCost;
         let appSubsidy = 0;
         const minOrderFS = Number(r.free_shipping_min_order || 0);
@@ -145,20 +147,22 @@ export const CheckoutPaymentPage = () => {
           appSubsidy = realShippingCost;
         }
 
-        // 6. Biaya Layanan
+        // 6. Biaya Layanan & Penanganan
         const totalLayanan = Math.round(
           Number(r.buyer_service_fee || 0) +
             Number(r.handling_fee || 0) +
             (isPickup ? 0 : extraCount * Number(r.surge_fee || 0)),
         );
 
-        // 7. Bagi Hasil
+        // 7. Pembagian Hasil (Revenue Share untuk Admin & Kurir)
         const appCutOngkir = tripCost * (Number(r.app_fee_percent || 0) / 100);
         const appShareExtra = isPickup
           ? 0
           : extraCount * Number(r.multi_stop_app_share || 0);
+
         const courierNet =
           tripCost - appCutOngkir + (multiStopFee - appShareExtra);
+
         const systemFee =
           appCutOngkir +
           appShareExtra +
@@ -183,7 +187,7 @@ export const CheckoutPaymentPage = () => {
     [selectedMarket, cart, shippingMethod, subtotalCart],
   );
 
-  // 🔥 EFEK 1: Inisialisasi Kordinat
+  // 🔥 EFEK 1: Inisialisasi Kordinat Pertama Kali
   useEffect(() => {
     if (selectedMarket && profile && deliveryCoords.lat === 0) {
       const initialLat =
@@ -196,15 +200,18 @@ export const CheckoutPaymentPage = () => {
         (profile.address_street || profile.address || "").toUpperCase(),
       );
 
-      // Langsung panggil hitung agar tidak 0.0KM saat pertama muncul
+      // Hitung logistik segera setelah kordinat siap
       updateLogistics(initialLat, initialLng);
     }
   }, [selectedMarket, profile?.id, updateLogistics]);
 
-  // 🔥 EFEK 2: Pantau perubahan deliveryCoords (untuk sinkronisasi manual jika perlu)
+  // 🔥 EFEK 2: Pantau Perubahan Kordinat (Debounce 500ms agar hemat API)
   useEffect(() => {
     if (deliveryCoords.lat !== 0 && deliveryCoords.lng !== 0) {
-      updateLogistics(deliveryCoords.lat, deliveryCoords.lng);
+      const timer = setTimeout(() => {
+        updateLogistics(deliveryCoords.lat, deliveryCoords.lng);
+      }, 500);
+      return () => clearTimeout(timer);
     }
   }, [deliveryCoords.lat, deliveryCoords.lng, updateLogistics]);
 
@@ -219,19 +226,24 @@ export const CheckoutPaymentPage = () => {
 
   const handlePayment = async () => {
     if (!user || !selectedMarket || !shippingDetails) {
-      showToast("Sedang menghitung jarak...", "error");
+      showToast("Sedang menghitung ongkir...", "error");
       return;
     }
 
     setLoading(true);
+
+    // Mystery Bonus khusus Pickup
     const mysteryBonus =
       shippingMethod === "pickup" ? Math.round(subtotalCart * 0.05) : 0;
+
+    // Kode PIN untuk ambil pesanan sendiri
     const pickupPIN =
       shippingMethod === "pickup"
         ? Math.floor(1000 + Math.random() * 9000).toString()
         : null;
 
     try {
+      // 1. Insert ke tabel Orders
       const { data: newOrder, error: orderErr } = await supabase
         .from("orders")
         .insert({
@@ -266,6 +278,7 @@ export const CheckoutPaymentPage = () => {
 
       if (orderErr) throw orderErr;
 
+      // 2. Insert Item Pesanan
       await supabase.from("order_items").insert(
         cart.map((i) => ({
           order_id: newOrder.id,
@@ -276,6 +289,7 @@ export const CheckoutPaymentPage = () => {
         })),
       );
 
+      // 3. Potong Saldo jika digunakan
       if (usedBalanceAmount > 0) {
         await supabase.rpc("deduct_user_balance", {
           u_id: user.id,
@@ -283,21 +297,30 @@ export const CheckoutPaymentPage = () => {
         });
       }
 
+      // 4. Logika Pembayaran (COD vs Midtrans)
       if (paymentMethod === "cod") {
         clearCart();
-        showToast("PESANAN BERHASIL!", "success");
-        navigate(`/track-order/${newOrder.id}`);
+        setCreatedOrderId(newOrder.id);
+
+        if (mysteryBonus > 0) {
+          setCashbackAmount(mysteryBonus);
+          setShowSurprise(true);
+        } else {
+          showToast("PESANAN BERHASIL DIBUAT!", "success");
+          navigate(`/track-order/${newOrder.id}`);
+        }
       } else {
-        const { data: payData } = await supabase.functions.invoke(
-          "create-midtrans-token",
-          {
+        // Panggil Edge Function Midtrans
+        const { data: payData, error: payErr } =
+          await supabase.functions.invoke("create-midtrans-token", {
             body: {
               order_id: newOrder.id,
               amount: grandTotalAkhir,
               customer_name: profile?.full_name || user.email,
             },
-          },
-        );
+          });
+
+        if (payErr) throw payErr;
 
         if (payData?.token && (window as any).snap) {
           (window as any).snap.pay(payData.token, {
@@ -309,12 +332,16 @@ export const CheckoutPaymentPage = () => {
               clearCart();
               navigate(`/track-order/${newOrder.id}`);
             },
-            onClose: () => setLoading(false),
+            onClose: () => {
+              setLoading(false);
+              showToast("Selesaikan pembayaran Anda segera!", "info");
+              navigate(`/track-order/${newOrder.id}`);
+            },
           });
         }
       }
     } catch (err: any) {
-      showToast(err.message, "error");
+      showToast(err.message || "Gagal memproses pesanan", "error");
       setLoading(false);
     }
   };
@@ -327,12 +354,12 @@ export const CheckoutPaymentPage = () => {
       onCartClick={() => {}}
       cartCount={0}
     >
-      <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-black uppercase tracking-tighter pb-32">
+      <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-black uppercase tracking-tighter pb-32 text-left not-italic">
         <header className="bg-[#008080] h-16 flex items-center px-4 justify-between sticky top-0 z-[100] shadow-md">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 text-white bg-white/10 rounded-md"
+              className="p-2 text-white bg-white/10 rounded-md active:scale-90 transition-all"
             >
               <ArrowLeft size={24} strokeWidth={3} />
             </button>
@@ -340,19 +367,22 @@ export const CheckoutPaymentPage = () => {
               RINCIAN PEMBAYARAN
             </div>
           </div>
-          <div className="bg-[#FF6600] text-white px-3 py-1.5 rounded-md text-[12px] font-black">
+          <div className="bg-[#FF6600] text-white px-3 py-1.5 rounded-md text-[12px] font-black shadow-sm">
             {selectedMarket?.name}
           </div>
         </header>
 
         <main className="max-w-[1200px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-5 p-4 mt-2">
           <div className="md:col-span-2 space-y-5">
+            {/* Pilih Kurir vs Ambil Sendiri & Midtrans vs COD */}
             <CheckoutMethods
               shippingMethod={shippingMethod}
               setShippingMethod={setShippingMethod}
               paymentMethod={paymentMethod}
               setPaymentMethod={setPaymentMethod}
             />
+
+            {/* Peta & Alamat (Hanya muncul jika pakai kurir) */}
             {shippingMethod === "courier" && (
               <CheckoutAddress
                 isLoaded={isLoaded}
@@ -364,7 +394,9 @@ export const CheckoutPaymentPage = () => {
               />
             )}
           </div>
+
           <div className="md:col-span-1">
+            {/* Kartu Ringkasan Harga & Tombol Proses */}
             <CheckoutSummary
               profile={profile}
               useBalance={useBalance}
@@ -380,6 +412,7 @@ export const CheckoutPaymentPage = () => {
           </div>
         </main>
 
+        {/* Modal Surprise jika dapat Cashback */}
         <CashbackModal
           show={showSurprise}
           amount={cashbackAmount}

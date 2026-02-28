@@ -12,7 +12,6 @@ interface Props {
   updateLogistics: (lat: number, lng: number) => void;
 }
 
-// MENGGUNAKAN FILE LOKAL DARI FOLDER PUBLIC
 const BUYER_ICON = "/buyer.png";
 
 export const CheckoutAddress: React.FC<Props> = ({
@@ -31,69 +30,64 @@ export const CheckoutAddress: React.FC<Props> = ({
     mapRef.current = map;
   }, []);
 
-  // Fungsi internal untuk sinkronisasi kordinat dan ongkir secara real-time
-  const handlePositionChange = (lat: number, lng: number) => {
+  // FUNGSI SAKTI: Update kordinat DAN pemicu hitung ongkir
+  const syncLocation = (lat: number, lng: number) => {
     setDeliveryCoords({ lat, lng });
-    updateLogistics(lat, lng); // 🚀 Langsung panggil hitung ongkir
+    updateLogistics(lat, lng);
   };
 
   const handleMapClick = (e: google.maps.MapMouseEvent) => {
     if (e.latLng) {
-      handlePositionChange(e.latLng.lat(), e.latLng.lng());
+      syncLocation(e.latLng.lat(), e.latLng.lng());
     }
   };
 
   const handleMarkerDragEnd = (e: google.maps.MapMouseEvent) => {
     if (e.latLng) {
-      handlePositionChange(e.latLng.lat(), e.latLng.lng());
+      syncLocation(e.latLng.lat(), e.latLng.lng());
     }
   };
 
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
-      showToast("GPS TIDAK DIDUKUNG DI PERANGKAT INI.", "error");
+      showToast("GPS TIDAK DIDUKUNG.", "error");
       return;
     }
-
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
-
-        handlePositionChange(lat, lng);
-
+        syncLocation(lat, lng);
         if (mapRef.current) {
           mapRef.current.panTo({ lat, lng });
           mapRef.current.setZoom(17);
         }
-
         setIsLocating(false);
-        showToast("LOKASI AKURAT DITEMUKAN!", "success");
+        showToast("LOKASI DITEMUKAN!", "success");
       },
-      (error) => {
+      () => {
         setIsLocating(false);
-        showToast("GAGAL MENGAMBIL GPS. PASTIKAN IZIN LOKASI AKTIF.", "error");
+        showToast("GAGAL GPS. AKTIFKAN IZIN LOKASI.", "error");
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+      { enableHighAccuracy: true },
     );
   };
 
   return (
-    <section className="bg-white p-5 rounded-md border border-slate-200 shadow-sm space-y-4 animate-in fade-in slide-in-from-bottom-4">
+    <section className="bg-white p-5 rounded-md border border-slate-200 shadow-sm space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <MapPin size={20} className="text-[#008080]" />
-          <h2 className="text-[12px] text-slate-800 tracking-widest font-black uppercase">
+          <h2 className="text-[12px] text-slate-800 font-black uppercase tracking-widest">
             ALAMAT PENGIRIMAN
           </h2>
         </div>
-
         <button
           type="button"
           onClick={handleUseCurrentLocation}
           disabled={isLocating}
-          className="flex items-center gap-2 bg-teal-50 text-[#008080] border border-teal-200 px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest hover:bg-[#008080] hover:text-white transition-all active:scale-95 disabled:opacity-50"
+          className="flex items-center gap-2 bg-teal-50 text-[#008080] border border-teal-200 px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest active:scale-95 disabled:opacity-50"
         >
           {isLocating ? (
             <Loader2 size={12} className="animate-spin" />
@@ -107,8 +101,8 @@ export const CheckoutAddress: React.FC<Props> = ({
       <div className="bg-orange-50 p-3 rounded-md border border-orange-200 flex items-start gap-3">
         <Info size={16} className="text-[#FF6600] shrink-0 mt-0.5" />
         <p className="text-[9px] font-black text-slate-600 uppercase leading-relaxed">
-          Geser Pin di peta atau klik area peta untuk menentukan titik akurat
-          rumah Anda. Ongkir akan otomatis menyesuaikan.
+          Geser Pin atau klik peta untuk menentukan titik akurat. Ongkir akan
+          otomatis menyesuaikan jarak.
         </p>
       </div>
 
@@ -150,14 +144,14 @@ export const CheckoutAddress: React.FC<Props> = ({
       </div>
 
       <div>
-        <label className="text-[9px] text-slate-400 font-black mb-2 block tracking-widest">
-          DETAIL ALAMAT LENGKAP & PATOKAN (WAJIB)
+        <label className="text-[9px] text-slate-400 font-black mb-2 block tracking-widest uppercase">
+          DETAIL ALAMAT LENGKAP & PATOKAN
         </label>
         <textarea
           value={manualAddress}
           onChange={(e) => setManualAddress(e.target.value)}
-          placeholder="CTH: JL. SUDIRMAN NO 10, PAGAR BIRU, DEKAT MASJID..."
-          className="w-full p-4 border-2 border-slate-200 rounded-md focus:border-[#008080] outline-none text-[12px] font-black uppercase text-slate-800 h-24 shadow-sm"
+          placeholder="CTH: JL. SUDIRMAN NO 10, PAGAR BIRU..."
+          className="w-full p-4 border-2 border-slate-200 rounded-md focus:border-[#008080] outline-none text-[12px] font-black uppercase text-slate-800 h-24"
         />
       </div>
     </section>
